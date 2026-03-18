@@ -70,8 +70,11 @@ def trip_to_dict(trip: Trip) -> dict:
 
 
 @app.get("/trips")
-def list_trips(db: Session = Depends(get_db)):
-    return [trip_to_dict(trip) for trip in db.query(Trip).order_by(Trip.id.desc()).all()]
+def list_trips(userId: str | None = None, db: Session = Depends(get_db)):
+    query = db.query(Trip)
+    if userId:
+        query = query.filter(Trip.user_id == userId)
+    return [trip_to_dict(trip) for trip in query.order_by(Trip.id.desc()).all()]
 
 
 @app.get("/trips/{trip_id}")

@@ -16,5 +16,6 @@ docs/generated/
 tmp/
 minio-data/
 mysql-data/
+.playwright-cli/
+output/
 .DS_Store
-

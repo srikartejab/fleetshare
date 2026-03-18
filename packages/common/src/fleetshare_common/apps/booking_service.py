@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String, func
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
@@ -55,6 +55,7 @@ class BookingCreatePayload(BaseModel):
     crossCycleBooking: bool = False
     refundPendingOnRenewal: bool = False
     bookingNote: str | None = None
+    pricingSnapshot: dict = Field(default_factory=dict)
 
 
 class BookingStatusPayload(BaseModel):
@@ -66,6 +67,10 @@ class BookingStatusPayload(BaseModel):
 class ReconciliationPayload(BaseModel):
     refund_pending_on_renewal: bool
     reconciliationStatus: str
+
+
+class BookingFinancialsPayload(BaseModel):
+    finalPrice: float
 
 
 class CancelAffectedPayload(BaseModel):
@@ -96,12 +101,24 @@ def booking_to_dict(booking: Booking) -> dict:
         "tripId": booking.trip_id,
         "bookingNote": booking.booking_note,
         "cancellationReason": booking.cancellation_reason,
+        "pricingSnapshot": booking.metadata_json or {},
     }
 
 
 @app.get("/bookings")
-def list_bookings(db: Session = Depends(get_db)):
-    return [booking_to_dict(booking) for booking in db.query(Booking).order_by(Booking.id.desc()).all()]
+def list_bookings(userId: str | None = None, db: Session = Depends(get_db)):
+    query = db.query(Booking)
+    if userId:
+        query = query.filter(Booking.user_id == userId)
+    return [booking_to_dict(booking) for booking in query.order_by(Booking.id.desc()).all()]
+
+
+@app.get("/booking/{booking_id}")
+def get_booking(booking_id: int, db: Session = Depends(get_db)):
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    return booking_to_dict(booking)
 
 
 @app.get("/bookings/availability")
@@ -181,6 +198,7 @@ def create_booking(payload: BookingCreatePayload, db: Session = Depends(get_db))
         cross_cycle_booking=payload.crossCycleBooking,
         refund_pending_on_renewal=payload.refundPendingOnRenewal,
         booking_note=payload.bookingNote,
+        metadata_json=payload.pricingSnapshot,
         status=BookingStatus.PAYMENT_PENDING.value,
     )
     db.add(booking)
@@ -201,6 +219,16 @@ def patch_booking_status(booking_id: int, payload: BookingStatusPayload, db: Ses
         booking.cancellation_reason = payload.cancellationReason
     db.commit()
     return {"bookingId": booking.id, "status": booking.status}
+
+
+@app.patch("/booking/{booking_id}/financials")
+def patch_booking_financials(booking_id: int, payload: BookingFinancialsPayload, db: Session = Depends(get_db)):
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    booking.final_price = payload.finalPrice
+    db.commit()
+    return {"bookingId": booking.id, "finalPrice": booking.final_price}
 
 
 @app.patch("/booking/{booking_id}/reconciliation-status")
@@ -233,4 +261,3 @@ def cancel_affected(payload: CancelAffectedPayload, db: Session = Depends(get_db
         affected_ids.append(booking.id)
     db.commit()
     return {"affectedBookingIds": affected_ids, "cancelledCount": len(affected_ids)}
-

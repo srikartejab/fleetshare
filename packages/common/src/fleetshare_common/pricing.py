@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-from math import ceil
+from datetime import date, datetime, time, timedelta
 
 
-BASE_HOURLY_RATE = 18.0
-SUBSCRIPTION_INCLUDED_HOURS = 6
+BASE_HOURLY_RATE = 20.0
+SUBSCRIPTION_INCLUDED_HOURS = 6.0
 APOLOGY_CREDIT = 8.0
 
 
@@ -16,6 +15,14 @@ class QuoteResult:
     allowance_status: str
     cross_cycle_booking: bool
     provisional_post_midnight_hours: float
+    hourly_rate: float
+    total_hours: float
+    current_cycle_hours: float
+    included_hours_remaining_before: float
+    included_hours_applied: float
+    included_hours_remaining_after: float
+    billable_hours: float
+    provisional_charge: float
 
 
 def hours_between(start: datetime, end: datetime) -> float:
@@ -23,7 +30,7 @@ def hours_between(start: datetime, end: datetime) -> float:
 
 
 def post_midnight_hours(start: datetime, end: datetime) -> float:
-    midnight = datetime.combine(end.date(), datetime.min.time(), tzinfo=end.tzinfo)
+    midnight = datetime.combine(end.date(), time.min, tzinfo=end.tzinfo)
     if start >= midnight:
         return hours_between(start, end)
     if end <= midnight:
@@ -31,49 +38,95 @@ def post_midnight_hours(start: datetime, end: datetime) -> float:
     return hours_between(midnight, end)
 
 
-def booking_quote(start: datetime, end: datetime) -> QuoteResult:
+def hours_after_renewal_boundary(start: datetime, end: datetime, renewal_date: date | None = None) -> float:
+    if renewal_date is None:
+        return post_midnight_hours(start, end)
+
+    boundary = datetime.combine(renewal_date + timedelta(days=1), time.min, tzinfo=end.tzinfo)
+    if end <= boundary:
+        return 0.0
+    if start >= boundary:
+        return hours_between(start, end)
+    return hours_between(boundary, end)
+
+
+def booking_quote(
+    start: datetime,
+    end: datetime,
+    monthly_included_hours: float = SUBSCRIPTION_INCLUDED_HOURS,
+    hours_used_this_cycle: float = 0.0,
+    renewal_date: date | None = None,
+) -> QuoteResult:
     total_hours = hours_between(start, end)
-    post_midnight = post_midnight_hours(start, end)
-    cross_cycle = start.date() != end.date()
-    billable_hours = max(total_hours - SUBSCRIPTION_INCLUDED_HOURS, 0.0)
-    provisional_post_midnight = post_midnight if cross_cycle else 0.0
-    estimated = max(billable_hours, provisional_post_midnight) * BASE_HOURLY_RATE
-    allowance_status = "WITHIN_ALLOWANCE" if billable_hours == 0 else "EXCESS_USAGE_ESTIMATED"
+    provisional_post_midnight = hours_after_renewal_boundary(start, end, renewal_date)
+    current_cycle_hours = max(total_hours - provisional_post_midnight, 0.0)
+    included_remaining_before = max(monthly_included_hours - hours_used_this_cycle, 0.0)
+    included_hours_applied = min(current_cycle_hours, included_remaining_before)
+    included_remaining_after = max(included_remaining_before - included_hours_applied, 0.0)
+    billable_hours = max(current_cycle_hours - included_hours_applied, 0.0)
+    provisional_charge = provisional_post_midnight * BASE_HOURLY_RATE
+    estimated = (billable_hours * BASE_HOURLY_RATE) + provisional_charge
+    cross_cycle = provisional_post_midnight > 0
+
+    if provisional_post_midnight > 0 and billable_hours > 0:
+        allowance_status = "EXCESS_USAGE_AND_RENEWAL_PENDING"
+    elif provisional_post_midnight > 0:
+        allowance_status = "RENEWAL_PENDING"
+    elif billable_hours > 0:
+        allowance_status = "EXCESS_USAGE_ESTIMATED"
+    else:
+        allowance_status = "WITHIN_ALLOWANCE"
+
     return QuoteResult(
         estimated_price=round(estimated, 2),
         allowance_status=allowance_status,
         cross_cycle_booking=cross_cycle,
         provisional_post_midnight_hours=round(provisional_post_midnight, 2),
+        hourly_rate=BASE_HOURLY_RATE,
+        total_hours=round(total_hours, 2),
+        current_cycle_hours=round(current_cycle_hours, 2),
+        included_hours_remaining_before=round(included_remaining_before, 2),
+        included_hours_applied=round(included_hours_applied, 2),
+        included_hours_remaining_after=round(included_remaining_after, 2),
+        billable_hours=round(billable_hours, 2),
+        provisional_charge=round(provisional_charge, 2),
     )
 
 
-def trip_adjustment(disrupted: bool, duration_hours: float) -> dict[str, float | bool]:
+def trip_adjustment(disrupted: bool, duration_hours: float, base_fare: float | None = None) -> dict[str, float | bool]:
     if not disrupted:
-        adjusted_fare = round(max(duration_hours - SUBSCRIPTION_INCLUDED_HOURS, 0) * BASE_HOURLY_RATE, 2)
+        adjusted_fare = round(base_fare if base_fare is not None else max(duration_hours - SUBSCRIPTION_INCLUDED_HOURS, 0) * BASE_HOURLY_RATE, 2)
         return {
             "compensationRequired": False,
             "adjustedFare": adjusted_fare,
             "refundAmount": 0.0,
             "discountAmount": 0.0,
         }
-    refund = round(min(duration_hours, 2.0) * BASE_HOURLY_RATE, 2)
+
+    baseline = base_fare if base_fare is not None else max(duration_hours, 0) * BASE_HOURLY_RATE
+    refund = round(min(baseline, min(duration_hours, 2.0) * BASE_HOURLY_RATE), 2)
     return {
         "compensationRequired": True,
-        "adjustedFare": round(max(duration_hours - 2.0, 0) * BASE_HOURLY_RATE, 2),
+        "adjustedFare": round(max(baseline - refund, 0.0), 2),
         "refundAmount": refund,
         "discountAmount": APOLOGY_CREDIT,
     }
 
 
-def rerate_after_renewal(actual_post_midnight_hours: float) -> dict[str, float | int]:
-    eligible_hours = min(actual_post_midnight_hours, SUBSCRIPTION_INCLUDED_HOURS)
-    revised_charge = round(max(actual_post_midnight_hours - eligible_hours, 0) * BASE_HOURLY_RATE, 2)
+def rerate_after_renewal(
+    actual_post_midnight_hours: float,
+    monthly_included_hours: float = SUBSCRIPTION_INCLUDED_HOURS,
+    hours_used_this_cycle: float = 0.0,
+) -> dict[str, float]:
+    remaining_hours = max(monthly_included_hours - hours_used_this_cycle, 0.0)
+    eligible_hours = min(actual_post_midnight_hours, remaining_hours)
+    revised_charge = round(max(actual_post_midnight_hours - eligible_hours, 0.0) * BASE_HOURLY_RATE, 2)
     provisional_charge = round(actual_post_midnight_hours * BASE_HOURLY_RATE, 2)
-    refund = round(max(provisional_charge - revised_charge, 0), 2)
+    refund = round(max(provisional_charge - revised_charge, 0.0), 2)
+    updated_usage = round(hours_used_this_cycle + eligible_hours, 2)
     return {
         "revisedCharge": revised_charge,
-        "eligibleIncludedHours": int(ceil(eligible_hours)),
+        "eligibleIncludedHours": round(eligible_hours, 2),
         "refundAmount": refund,
-        "updatedEntitlementUsage": int(ceil(eligible_hours)),
+        "updatedEntitlementUsage": updated_usage,
     }
-

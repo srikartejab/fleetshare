@@ -56,16 +56,21 @@ class TelemetryPayload(BaseModel):
 
 def seed_data():
     with SessionLocal() as db:
-        if db.query(Vehicle).count():
-            return
+        existing_vehicle_ids = {vehicle_id for (vehicle_id,) in db.query(Vehicle.id).all()}
         vehicles = [
             Vehicle(id=1, plate_number="SFA1001A", model="Tesla Model 3", zone="SMU", vehicle_type="SEDAN"),
             Vehicle(id=2, plate_number="SFA1002B", model="BYD Atto 3", zone="SMU", vehicle_type="SUV"),
             Vehicle(id=3, plate_number="SFA1003C", model="Hyundai Kona", zone="TAMPINES", vehicle_type="SUV"),
             Vehicle(id=4, plate_number="SFA1004D", model="BMW i3", zone="SMU", vehicle_type="COMPACT"),
+            Vehicle(id=5, plate_number="SFA2005E", model="Volvo XC40", zone="CHANGI", vehicle_type="SUV"),
+            Vehicle(id=6, plate_number="SFA2006F", model="Mercedes EQE", zone="ORCHARD", vehicle_type="LUXURY"),
+            Vehicle(id=7, plate_number="SFA2007G", model="Kia EV6", zone="TAMPINES", vehicle_type="SEDAN"),
+            Vehicle(id=8, plate_number="SFA2008H", model="Hyundai Staria", zone="WOODLANDS", vehicle_type="MPV"),
         ]
-        db.add_all(vehicles)
         for vehicle in vehicles:
+            if vehicle.id in existing_vehicle_ids:
+                continue
+            db.add(vehicle)
             db.add(
                 TelemetrySnapshot(
                     vehicle_id=vehicle.id,
@@ -105,6 +110,14 @@ def list_vehicles(db: Session = Depends(get_db)):
         }
         for vehicle in db.query(Vehicle).order_by(Vehicle.id).all()
     ]
+
+
+@app.get("/vehicles/filters")
+def list_vehicle_filters(db: Session = Depends(get_db)):
+    vehicles = db.query(Vehicle).order_by(Vehicle.zone.asc(), Vehicle.vehicle_type.asc(), Vehicle.id.asc()).all()
+    locations = sorted({vehicle.zone for vehicle in vehicles})
+    vehicle_types = sorted({vehicle.vehicle_type for vehicle in vehicles})
+    return {"locations": locations, "vehicleTypes": vehicle_types}
 
 
 @app.get("/vehicles/availability")

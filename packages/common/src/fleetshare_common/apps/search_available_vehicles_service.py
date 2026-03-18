@@ -14,6 +14,7 @@ app = create_app("Search Available Vehicles Service", "Composite vehicle search 
 
 @app.get("/search-vehicles/search")
 def search_available_vehicles(
+    userId: str = Query(...),
     startTime: datetime = Query(...),
     endTime: datetime = Query(...),
     pickupLocation: str = Query(...),
@@ -42,16 +43,30 @@ def search_available_vehicles(
         quote = get_json(
             f"{settings.pricing_service_url}/pricing/quote",
             {
+                "userId": userId,
                 "vehicleId": vehicle["vehicleId"],
                 "startTime": startTime.isoformat(),
                 "endTime": endTime.isoformat(),
                 "subscriptionPlanId": subscriptionPlanId,
             },
         )
-        filtered.append({**vehicle, "estimatedPrice": quote["estimatedPrice"], "allowanceStatus": quote["allowanceStatus"]})
+        filtered.append(
+            {
+                **vehicle,
+                "estimatedPrice": quote["estimatedPrice"],
+                "allowanceStatus": quote["allowanceStatus"],
+                "hourlyRate": quote["hourlyRate"],
+                "includedHoursApplied": quote["includedHoursApplied"],
+                "includedHoursRemainingBefore": quote["includedHoursRemainingBefore"],
+                "includedHoursRemainingAfter": quote["includedHoursRemainingAfter"],
+                "billableHours": quote["billableHours"],
+                "provisionalPostMidnightHours": quote["provisionalPostMidnightHours"],
+                "provisionalCharge": quote["provisionalCharge"],
+                "renewalDate": quote["renewalDate"],
+            }
+        )
     return {
         "vehicleList": filtered,
         "estimatedPrice": filtered[0]["estimatedPrice"] if filtered else 0.0,
         "availabilitySummary": f"{len(filtered)} vehicle(s) available",
     }
-

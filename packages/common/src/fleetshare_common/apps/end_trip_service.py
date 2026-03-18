@@ -39,23 +39,30 @@ def process_end_trip(payload: EndTripPayload):
     )
     updated_trip = get_json(f"{settings.trip_service_url}/trips/{payload.tripId}")
     disrupted = "FAULT" in payload.endReason or "DISRUPTION" in payload.endReason
-    adjustment = get_json(
-        f"{settings.pricing_service_url}/pricing/trip-adjustment",
+    pricing_result = post_json(
+        f"{settings.pricing_service_url}/pricing/finalize-trip",
         {
+            "bookingId": payload.bookingId,
             "tripId": payload.tripId,
-            "durationHours": updated_trip["durationHours"],
-            "disrupted": str(disrupted).lower(),
+            "userId": payload.userId,
+            "startedAt": updated_trip["startedAt"],
+            "endedAt": updated_trip["endedAt"],
+            "disrupted": disrupted,
         },
     )
-    if adjustment["compensationRequired"]:
+    patch_json(
+        f"{settings.booking_service_url}/booking/{payload.bookingId}/financials",
+        {"finalPrice": pricing_result["finalPrice"]},
+    )
+    if pricing_result["refundAmount"] > 0 or pricing_result["discountAmount"] > 0:
         publish_event(
             "payment.adjustment_required",
             {
                 "bookingId": payload.bookingId,
                 "tripId": payload.tripId,
                 "userId": payload.userId,
-                "refundAmount": adjustment["refundAmount"],
-                "discountAmount": adjustment["discountAmount"],
+                "refundAmount": pricing_result["refundAmount"],
+                "discountAmount": pricing_result["discountAmount"],
                 "reason": payload.endReason,
             },
         )
@@ -72,9 +79,11 @@ def process_end_trip(payload: EndTripPayload):
     return {
         "tripStatus": trip_result["status"],
         "vehicleLocked": lock["success"],
-        "adjustedFare": adjustment["adjustedFare"],
-        "refundPending": adjustment["refundAmount"] > 0,
-        "discountAmount": adjustment["discountAmount"],
+        "adjustedFare": pricing_result["finalPrice"],
+        "refundPending": pricing_result["renewalPending"] or pricing_result["refundAmount"] > 0,
+        "discountAmount": pricing_result["discountAmount"],
+        "allowanceHoursApplied": pricing_result["allowanceHoursApplied"],
+        "customerSummary": pricing_result["customerSummary"],
     }
 
 
@@ -86,4 +95,3 @@ def end_trip_request(payload: EndTripPayload):
 @app.post("/end-trip/process")
 def end_trip_process(payload: EndTripPayload):
     return process_end_trip(payload)
-

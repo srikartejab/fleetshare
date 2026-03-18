@@ -60,6 +60,10 @@ def handle_renewal_event(event: dict):
             return
         db.add(ProcessedRenewal(event_id=event["event_id"], user_id=payload["userId"]))
 
+    post_json(
+        f"{settings.pricing_service_url}/pricing/customers/{payload['userId']}/renewal",
+        {"newBillingCycleId": payload.get("newBillingCycleId", "next")},
+    )
     pending = get_json(
         f"{settings.booking_service_url}/bookings/reconciliation-pending",
         {"userId": payload["userId"], "billingCycleId": payload.get("newBillingCycleId", "next")},

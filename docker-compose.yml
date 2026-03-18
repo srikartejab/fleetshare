@@ -3,11 +3,15 @@ services:
     image: mysql:8.4
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-fleetshare_root}
-    command: --default-authentication-plugin=mysql_native_password
     ports:
       - "3306:3306"
     volumes:
       - ./infrastructure/mysql/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   rabbitmq:
     image: rabbitmq:3.13-management
@@ -104,9 +108,12 @@ services:
       SERVICE_NAME: vehicle-service
       DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/vehicle_db
     depends_on:
-      - mysql
-      - rabbitmq
-      - minio
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      minio:
+        condition: service_started
 
   booking-service:
     build:
@@ -117,7 +124,9 @@ services:
       <<: *backend-env
       SERVICE_NAME: booking-service
       DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/booking_db
-    depends_on: [mysql]
+    depends_on:
+      mysql:
+        condition: service_healthy
 
   trip-service:
     build:
@@ -128,7 +137,11 @@ services:
       <<: *backend-env
       SERVICE_NAME: trip-service
       DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/trip_db
-    depends_on: [mysql, rabbitmq]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
 
   record-service:
     build:
@@ -139,7 +152,9 @@ services:
       <<: *backend-env
       SERVICE_NAME: record-service
       DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/record_db
-    depends_on: [mysql]
+    depends_on:
+      mysql:
+        condition: service_healthy
 
   maintenance-service:
     build:
@@ -150,7 +165,9 @@ services:
       <<: *backend-env
       SERVICE_NAME: maintenance-service
       DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/maintenance_db
-    depends_on: [mysql]
+    depends_on:
+      mysql:
+        condition: service_healthy
 
   pricing-service:
     build:
@@ -161,6 +178,9 @@ services:
       <<: *backend-env
       SERVICE_NAME: pricing-service
       DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/pricing_db
+    depends_on:
+      mysql:
+        condition: service_healthy
 
   payment-service:
     build:
@@ -171,7 +191,11 @@ services:
       <<: *backend-env
       SERVICE_NAME: payment-service
       DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/payment_db
-    depends_on: [mysql, rabbitmq]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
 
   notification-service:
     build:
@@ -182,7 +206,11 @@ services:
       <<: *backend-env
       SERVICE_NAME: notification-service
       DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/notification_db
-    depends_on: [mysql, rabbitmq]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
 
   search-available-vehicles-service:
     build:
@@ -259,7 +287,15 @@ services:
       <<: *backend-env
       SERVICE_NAME: handle-damage-service
       DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/handle_damage_db
-    depends_on: [mysql, rabbitmq, maintenance-service, booking-service]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      maintenance-service:
+        condition: service_started
+      booking-service:
+        condition: service_started
 
   renewal-reconciliation-service:
     build:
@@ -270,4 +306,14 @@ services:
       <<: *backend-env
       SERVICE_NAME: renewal-reconciliation-service
       DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/renewal_reconciliation_db
-    depends_on: [mysql, rabbitmq, booking-service, trip-service, pricing-service]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      booking-service:
+        condition: service_started
+      trip-service:
+        condition: service_started
+      pricing-service:
+        condition: service_started

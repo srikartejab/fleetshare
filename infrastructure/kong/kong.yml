@@ -5,7 +5,7 @@ services:
     url: http://vehicle-service:8000
     routes:
       - name: vehicle-routes
-        paths: ["/vehicles"]
+        paths: ["/vehicles", "/vehicles/filters", "/vehicles/availability", "/vehicles/telemetry"]
         strip_path: false
   - name: booking-service
     url: http://booking-service:8000

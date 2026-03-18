@@ -1,14 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Spectral:wght@600&display=swap');
-
 :root {
-  font-family: 'Space Grotesk', sans-serif;
+  color: #f2f5fb;
+  background: #08111f;
+  font-family: "Avenir Next", "Trebuchet MS", sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color: #f3f6ff;
-  background:
-    radial-gradient(circle at top left, rgba(255, 167, 84, 0.16), transparent 20%),
-    radial-gradient(circle at bottom right, rgba(65, 165, 255, 0.14), transparent 24%),
-    #071123;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -19,71 +14,87 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
   min-width: 320px;
+  background:
+    radial-gradient(circle at top, rgba(228, 161, 70, 0.12), transparent 24%),
+    radial-gradient(circle at bottom right, rgba(62, 117, 173, 0.14), transparent 22%),
+    #08111f;
 }
 
 h1,
 h2,
 h3 {
-  font-family: 'Spectral', serif;
+  font-family: "Iowan Old Style", "Palatino Linotype", serif;
+  letter-spacing: -0.02em;
 }
 
 p {
-  color: #d2dbef;
+  color: #cad5e7;
+}
+
+a {
+  color: inherit;
 }
 
 button,
 input,
-textarea,
-select {
+select,
+textarea {
   font: inherit;
 }
 
-button {
+button,
+.link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   padding: 0.8rem 1rem;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.04);
-  color: #f8fbff;
+  color: #f7fbff;
   cursor: pointer;
-  transition: transform 140ms ease, background 140ms ease;
+  transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
 }
 
-button:hover {
+button:hover,
+.link-button:hover {
   transform: translateY(-1px);
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.08);
 }
 
-button.primary {
-  background: linear-gradient(135deg, #ffc259, #ec7342);
-  color: #1b120a;
+button.primary,
+.link-button.primary {
+  background: linear-gradient(145deg, #f6c264, #da7743);
+  color: #1d1410;
   border-color: transparent;
 }
 
 label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  color: #afbddb;
+  display: grid;
+  gap: 0.45rem;
+  color: #b7c5da;
 }
 
 input,
-textarea,
-select {
+select,
+textarea {
   width: 100%;
-  border-radius: 14px;
+  padding: 0.85rem 0.95rem;
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.04);
-  color: #f5f7ff;
-  padding: 0.85rem 0.95rem;
+  color: #f2f6fd;
 }
 
 textarea {
   resize: vertical;
-}
-
-#root {
-  min-height: 100vh;
 }

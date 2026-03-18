@@ -50,6 +50,7 @@ def process_booking(payload: ReservePayload):
     quote = get_json(
         f"{settings.pricing_service_url}/pricing/quote",
         {
+            "userId": payload.userId,
             "vehicleId": payload.vehicleId,
             "startTime": payload.startTime.isoformat(),
             "endTime": payload.endTime.isoformat(),
@@ -63,6 +64,7 @@ def process_booking(payload: ReservePayload):
             "displayedPrice": quote["estimatedPrice"] or payload.displayedPrice,
             "crossCycleBooking": quote["crossCycleBooking"],
             "refundPendingOnRenewal": quote["crossCycleBooking"],
+            "pricingSnapshot": quote,
         },
     )
     payment = post_json(
@@ -84,8 +86,8 @@ def process_booking(payload: ReservePayload):
         "status": "CONFIRMED",
         "paymentStatus": "SUCCESS",
         "paymentId": payment["paymentId"],
-        "finalQuote": quote["estimatedPrice"],
-        "allowanceStatus": quote["allowanceStatus"],
+        "pricing": quote,
+        "customerSummary": quote["customerSummary"],
     }
 
 
@@ -101,4 +103,3 @@ def payment_result(payload: PaymentResultPayload):
         f"{settings.booking_service_url}/booking/{payload.bookingId}/status",
         {"status": "CANCELLED", "cancellationReason": "PAYMENT_FAILED"},
     )
-
