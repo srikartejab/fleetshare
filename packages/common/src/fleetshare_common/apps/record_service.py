@@ -73,8 +73,26 @@ def record_to_dict(record: Record) -> dict:
 
 
 @app.get("/records")
-def list_records(db: Session = Depends(get_db)):
-    return [record_to_dict(record) for record in db.query(Record).order_by(Record.id.desc()).all()]
+def list_records(
+    bookingId: int | None = None,
+    tripId: int | None = None,
+    vehicleId: int | None = None,
+    recordType: str | None = None,
+    reviewState: str | None = None,
+    db: Session = Depends(get_db),
+):
+    query = db.query(Record)
+    if bookingId is not None:
+        query = query.filter(Record.booking_id == bookingId)
+    if tripId is not None:
+        query = query.filter(Record.trip_id == tripId)
+    if vehicleId is not None:
+        query = query.filter(Record.vehicle_id == vehicleId)
+    if recordType is not None:
+        query = query.filter(Record.record_type == recordType)
+    if reviewState is not None:
+        query = query.filter(Record.review_state == reviewState)
+    return [record_to_dict(record) for record in query.order_by(Record.id.desc()).all()]
 
 
 @app.post("/records")
@@ -118,4 +136,3 @@ def patch_record(record_id: int, payload: RecordPatchPayload, db: Session = Depe
 def manual_review_queue(db: Session = Depends(get_db)):
     records = db.query(Record).filter(Record.review_state == "MANUAL_REVIEW").order_by(Record.id.desc()).all()
     return [record_to_dict(record) for record in records]
-

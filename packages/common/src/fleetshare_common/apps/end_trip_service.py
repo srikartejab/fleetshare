@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 from pydantic import BaseModel
 
 from fleetshare_common.app import create_app
-from fleetshare_common.http import get_json, patch_json
+from fleetshare_common.http import get_json, patch_json, post_json
 from fleetshare_common.messaging import publish_event
 from fleetshare_common.settings import get_settings
+from fleetshare_common.timeutils import iso, utcnow
 from fleetshare_common.vehicle_grpc import lock_vehicle
 
 app = create_app("End Trip Service", "Composite trip end workflow.")
@@ -25,19 +24,22 @@ def process_end_trip(payload: EndTripPayload):
     settings = get_settings()
     trip = get_json(f"{settings.trip_service_url}/trips/{payload.tripId}")
     if trip["status"] == "ENDED":
-        return {"tripStatus": "ENDED", "vehicleLocked": True, "idempotent": True}
-
-    lock = lock_vehicle(payload.vehicleId, str(payload.bookingId), payload.userId)
-    trip_result = patch_json(
-        f"{settings.trip_service_url}/trips/{payload.tripId}/status",
-        {
-            "status": "ENDED",
-            "endedAt": datetime.utcnow().isoformat(),
-            "endReason": payload.endReason,
-            "disruptionReason": payload.endReason if "FAULT" in payload.endReason else None,
-        },
-    )
-    updated_trip = get_json(f"{settings.trip_service_url}/trips/{payload.tripId}")
+        lock_success = True
+        trip_result = {"status": "ENDED", "idempotent": True}
+        updated_trip = trip
+    else:
+        lock = lock_vehicle(payload.vehicleId, str(payload.bookingId), payload.userId)
+        lock_success = lock["success"]
+        trip_result = patch_json(
+            f"{settings.trip_service_url}/trips/{payload.tripId}/status",
+            {
+                "status": "ENDED",
+                "endedAt": iso(utcnow()),
+                "endReason": payload.endReason,
+                "disruptionReason": payload.endReason if "FAULT" in payload.endReason else None,
+            },
+        )
+        updated_trip = get_json(f"{settings.trip_service_url}/trips/{payload.tripId}")
     disrupted = "FAULT" in payload.endReason or "DISRUPTION" in payload.endReason
     pricing_result = post_json(
         f"{settings.pricing_service_url}/pricing/finalize-trip",
@@ -78,7 +80,7 @@ def process_end_trip(payload: EndTripPayload):
         )
     return {
         "tripStatus": trip_result["status"],
-        "vehicleLocked": lock["success"],
+        "vehicleLocked": lock_success,
         "adjustedFare": pricing_result["finalPrice"],
         "refundPending": pricing_result["renewalPending"] or pricing_result["refundAmount"] > 0,
         "discountAmount": pricing_result["discountAmount"],

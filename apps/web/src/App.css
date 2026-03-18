@@ -15,6 +15,7 @@
 .customer-hero,
 .booking-hero,
 .discover-hero,
+.processing-shell,
 .ops-header {
   display: grid;
   gap: 1.5rem;
@@ -29,6 +30,20 @@
 .customer-hero,
 .booking-hero {
   grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+}
+
+.processing-shell {
+  place-items: center;
+  min-height: 60vh;
+}
+
+.processing-card {
+  width: min(100%, 52rem);
+  padding: 2rem;
+  border-radius: 28px;
+  background: linear-gradient(145deg, rgba(12, 25, 46, 0.96), rgba(9, 16, 31, 0.94));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.22);
 }
 
 .eyebrow,
@@ -285,6 +300,44 @@
   margin-top: 1rem;
 }
 
+.processing-steps {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1.5rem;
+}
+
+.processing-step {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 21, 41, 0.78);
+  color: #c9d7ea;
+}
+
+.processing-step--active {
+  border-color: rgba(255, 194, 89, 0.4);
+  background: rgba(255, 194, 89, 0.12);
+}
+
+.processing-step--done {
+  border-color: rgba(113, 207, 142, 0.3);
+  background: rgba(113, 207, 142, 0.12);
+}
+
+.processing-spinner {
+  width: 3rem;
+  height: 3rem;
+  margin: 1.5rem auto 0;
+  border-radius: 999px;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #f8bd5b;
+  animation: spin 0.9s linear infinite;
+}
+
 .history-card {
   justify-content: space-between;
   gap: 1rem;
@@ -311,6 +364,12 @@
 .ops-list {
   display: grid;
   gap: 0.45rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 1080px) {

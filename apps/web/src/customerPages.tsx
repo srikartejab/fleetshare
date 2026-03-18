@@ -1,4 +1,4 @@
-import { type Dispatch, type ReactNode, type SetStateAction, useState } from 'react'
+import { type Dispatch, type ReactNode, type SetStateAction, useEffect, useState } from 'react'
 import { Link, NavLink, useNavigate, useParams } from 'react-router-dom'
 
 import {
@@ -7,7 +7,7 @@ import {
   formatHours,
   formatMoney,
 } from './appTypes'
-import type { Booking, CustomerSummary, Notification, Trip, Vehicle, VehicleFilters } from './appTypes'
+import type { Booking, CustomerSummary, Notification, RecordItem, Trip, Vehicle, VehicleFilters } from './appTypes'
 
 export function LandingPage({
   customers,
@@ -239,7 +239,7 @@ export function DiscoverPage({
   searchForm: { pickupLocation: string; vehicleType: string; startTime: string; endTime: string }
   searchSummary: string
   vehicleFilters: VehicleFilters
-  onReserve: (vehicleId: number) => Promise<number>
+  onReserve: (vehicleId: number) => void
   onSearch: () => Promise<void>
   setSearchForm: Dispatch<SetStateAction<{ pickupLocation: string; vehicleType: string; startTime: string; endTime: string }>>
 }) {
@@ -350,7 +350,8 @@ export function DiscoverPage({
                 <button
                   className="primary"
                   onClick={() => {
-                    void onReserve(vehicle.vehicleId ?? vehicle.id).then((bookingId) => navigate(`/app/bookings/${bookingId}`))
+                    onReserve(vehicle.vehicleId ?? vehicle.id)
+                    navigate('/app/bookings/processing')
                   }}
                   type="button"
                 >
@@ -367,6 +368,99 @@ export function DiscoverPage({
         </div>
       </section>
     </div>
+  )
+}
+
+export function BookingProcessingPage({
+  pendingBooking,
+  vehicles,
+}: {
+  pendingBooking: {
+    status: 'processing' | 'success' | 'error'
+    vehicleId: number
+    bookingId?: number
+    error?: string
+  } | null
+  vehicles: Vehicle[]
+}) {
+  const navigate = useNavigate()
+  const vehicle = vehicles.find((item) => item.id === pendingBooking?.vehicleId) ?? null
+
+  useEffect(() => {
+    if (pendingBooking?.status !== 'success' || !pendingBooking.bookingId) {
+      return
+    }
+    const timer = window.setTimeout(() => {
+      navigate(`/app/bookings/${pendingBooking.bookingId}`, { replace: true })
+    }, 1200)
+    return () => window.clearTimeout(timer)
+  }, [navigate, pendingBooking])
+
+  if (!pendingBooking) {
+    return (
+      <section className="panel-card">
+        <h2>No booking in progress</h2>
+        <p>Start from Discover to reserve a vehicle.</p>
+        <Link className="primary link-button" to="/app/discover">
+          Back to discover
+        </Link>
+      </section>
+    )
+  }
+
+  return (
+    <section className="processing-shell">
+      <div className="processing-card">
+        <p className="eyebrow">Reservation in progress</p>
+        <h1>
+          {pendingBooking.status === 'processing'
+            ? 'Confirming your booking...'
+            : pendingBooking.status === 'success'
+              ? `Booking #${pendingBooking.bookingId} confirmed.`
+              : 'We could not confirm this booking.'}
+        </h1>
+        <p className="hero-copy">
+          {pendingBooking.status === 'processing'
+            ? `We are reserving ${vehicle?.model ?? `vehicle #${pendingBooking.vehicleId}`}, checking payment, and saving the booking record.`
+            : pendingBooking.status === 'success'
+              ? 'Your reservation is secured. Redirecting to the booking confirmation screen now.'
+              : pendingBooking.error ?? 'Please return to discover and try again.'}
+        </p>
+        <div className="processing-steps">
+          <div className={`processing-step ${pendingBooking.status !== 'error' ? 'processing-step--done' : ''}`}>
+            <strong>1. Reserve vehicle slot</strong>
+            <span>{pendingBooking.status === 'error' ? 'Attempted' : 'Completed'}</span>
+          </div>
+          <div className={`processing-step ${pendingBooking.status === 'processing' ? 'processing-step--active' : pendingBooking.status === 'success' ? 'processing-step--done' : ''}`}>
+            <strong>2. Price and confirm booking</strong>
+            <span>
+              {pendingBooking.status === 'processing'
+                ? 'In progress'
+                : pendingBooking.status === 'success'
+                  ? 'Completed'
+                  : 'Failed'}
+            </span>
+          </div>
+          <div className={`processing-step ${pendingBooking.status === 'success' ? 'processing-step--done' : ''}`}>
+            <strong>3. Open confirmation details</strong>
+            <span>{pendingBooking.status === 'success' ? 'Next' : 'Waiting'}</span>
+          </div>
+        </div>
+        {pendingBooking.status === 'processing' ? <div className="processing-spinner" aria-hidden="true" /> : null}
+        <div className="button-strip">
+          {pendingBooking.status === 'success' && pendingBooking.bookingId ? (
+            <Link className="primary link-button" to={`/app/bookings/${pendingBooking.bookingId}`}>
+              Open booking details
+            </Link>
+          ) : null}
+          {pendingBooking.status === 'error' ? (
+            <Link className="primary link-button" to="/app/discover">
+              Back to discover
+            </Link>
+          ) : null}
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -481,6 +575,7 @@ export function TripsPage({
   onSubmitInspection,
   upcomingBookings,
   vehicles,
+  records,
 }: {
   activeTrip: Trip | null
   bookings: Booking[]
@@ -490,9 +585,14 @@ export function TripsPage({
   onSubmitInspection: (bookingId: number, vehicleId: number, notes: string, photo: File | null) => Promise<void>
   upcomingBookings: Booking[]
   vehicles: Vehicle[]
+  records: RecordItem[]
 }) {
   const nextBooking = upcomingBookings[0] ?? null
   const nextVehicle = vehicles.find((vehicle) => vehicle.id === nextBooking?.vehicleId) ?? null
+  const inspectionRecord = nextBooking
+    ? records.find((record) => record.bookingId === nextBooking.bookingId && record.recordType === 'EXTERNAL_DAMAGE') ?? null
+    : null
+  const inspectionCleared = Boolean(inspectionRecord && inspectionRecord.reviewState === 'EXTERNAL_ASSESSED' && inspectionRecord.severity !== 'SEVERE')
   const [inspectionNotes, setInspectionNotes] = useState('Vehicle exterior looks clean.')
   const [inspectionPhoto, setInspectionPhoto] = useState<File | null>(null)
   const [startNotes, setStartNotes] = useState('')
@@ -521,11 +621,21 @@ export function TripsPage({
                 Optional photo
                 <input type="file" accept="image/*" onChange={(event) => setInspectionPhoto(event.target.files?.[0] ?? null)} />
               </label>
+              <div className="notice-card">
+                <strong>Inspection gate</strong>
+                <p>
+                  {inspectionCleared
+                    ? 'Inspection cleared. You can now start the trip.'
+                    : inspectionRecord
+                      ? `Inspection status: ${inspectionRecord.reviewState}. Start trip stays locked until the external inspection is cleared.`
+                      : 'Submit the external inspection first. Start trip stays locked until that record is created and cleared.'}
+                </p>
+              </div>
               <div className="button-strip">
                 <button className="primary" onClick={() => void onSubmitInspection(nextBooking.bookingId, nextBooking.vehicleId, inspectionNotes, inspectionPhoto)} type="button">
                   Submit inspection
                 </button>
-                <button onClick={() => void onStartTrip(nextBooking.bookingId, nextBooking.vehicleId, startNotes)} type="button">
+                <button disabled={!inspectionCleared} onClick={() => void onStartTrip(nextBooking.bookingId, nextBooking.vehicleId, startNotes)} type="button">
                   Start trip
                 </button>
               </div>

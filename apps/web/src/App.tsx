@@ -8,16 +8,24 @@ import {
   fetchJson,
   localDateTime,
 } from './appTypes'
-import type { Booking, CustomerSummary, Notification, Payment, PricingSnapshot, SearchResponse, Trip, Vehicle, VehicleFilters } from './appTypes'
+import type { Booking, CustomerSummary, Notification, Payment, PricingSnapshot, RecordItem, SearchResponse, Trip, Vehicle, VehicleFilters } from './appTypes'
 import {
   AccountPage,
   BookingDetailsPage,
+  BookingProcessingPage,
   CustomerShell,
   DiscoverPage,
   HomePage,
   LandingPage,
   TripsPage,
 } from './customerPages'
+
+type PendingBooking = {
+  status: 'processing' | 'success' | 'error'
+  vehicleId: number
+  bookingId?: number
+  error?: string
+}
 
 function App() {
   const [customers, setCustomers] = useState<CustomerSummary[]>([])
@@ -29,10 +37,12 @@ function App() {
   const [trips, setTrips] = useState<Trip[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
   const [notifications, setNotifications] = useState<Notification[]>([])
+  const [records, setRecords] = useState<RecordItem[]>([])
   const [status, setStatus] = useState('Loading FleetShare customer experience.')
   const [busy, setBusy] = useState(false)
   const [searchResults, setSearchResults] = useState<Vehicle[]>([])
   const [searchSummary, setSearchSummary] = useState('')
+  const [pendingBooking, setPendingBooking] = useState<PendingBooking | null>(null)
   const deferredSearchResults = useDeferredValue(searchResults)
   const [searchForm, setSearchForm] = useState({
     pickupLocation: '',
@@ -72,6 +82,7 @@ function App() {
         setTrips([])
         setPayments([])
         setNotifications([])
+        setRecords([])
         setSearchResults([])
         setSearchSummary('')
       })
@@ -79,12 +90,13 @@ function App() {
     }
 
     const query = encodeURIComponent(userId)
-    const [summary, bookingData, tripData, paymentData, notificationData, allVehicles] = await Promise.all([
+    const [summary, bookingData, tripData, paymentData, notificationData, recordData, allVehicles] = await Promise.all([
       fetchJson<CustomerSummary>(`/pricing/customers/${query}/summary`),
       fetchJson<Booking[]>(`/bookings?userId=${query}`),
       fetchJson<Trip[]>(`/trips?userId=${query}`),
       fetchJson<Payment[]>(`/payments?userId=${query}`),
       fetchJson<Notification[]>(`/notifications?userId=${query}`),
+      fetchJson<RecordItem[]>('/records'),
       fetchJson<Vehicle[]>('/vehicles'),
     ])
 
@@ -94,6 +106,7 @@ function App() {
       setTrips(tripData)
       setPayments(paymentData)
       setNotifications(notificationData)
+      setRecords(recordData)
       setVehicles(allVehicles)
     })
   }
@@ -160,6 +173,7 @@ function App() {
   function clearActiveCustomer() {
     localStorage.removeItem(customerStorageKey)
     setActiveUserId('')
+    setPendingBooking(null)
     setStatus('Choose a customer profile to enter the app.')
   }
 
@@ -174,6 +188,49 @@ function App() {
     } finally {
       setBusy(false)
     }
+  }
+
+  function startReservation(vehicleId: number) {
+    setPendingBooking({ status: 'processing', vehicleId })
+    setBusy(true)
+    setStatus('Confirming your reservation...')
+    void (async () => {
+      let bookingId: number | null = null
+      try {
+        const response = await fetchJson<{ bookingId: number; pricing: PricingSnapshot }>(`/process-booking/reserve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: activeUserId,
+            vehicleId,
+            pickupLocation: searchForm.pickupLocation,
+            startTime: new Date(searchForm.startTime).toISOString(),
+            endTime: new Date(searchForm.endTime).toISOString(),
+            displayedPrice: 0,
+            subscriptionPlanId: customerSummary?.planName ?? 'STANDARD_MONTHLY',
+          }),
+        })
+        bookingId = response.bookingId
+        setPendingBooking({ status: 'success', vehicleId, bookingId })
+        setStatus(`Booking ${bookingId} confirmed.`)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unable to confirm booking.'
+        setPendingBooking({ status: 'error', vehicleId, error: message })
+        setStatus(message)
+        setBusy(false)
+        return
+      }
+
+      try {
+        await Promise.all([loadCustomers(), refreshCustomerData(activeUserId)])
+      } catch {
+        if (bookingId) {
+          setStatus(`Booking ${bookingId} confirmed. Account data is still refreshing.`)
+        }
+      } finally {
+        setBusy(false)
+      }
+    })()
   }
 
   const customerProfiles = customers.filter((customer) => customer.role === 'CUSTOMER')
@@ -217,24 +274,7 @@ function App() {
                   searchForm={searchForm}
                   searchSummary={searchSummary}
                   vehicleFilters={vehicleFilters}
-                  onReserve={async (vehicleId) => {
-                    const response = await fetchJson<{ bookingId: number; pricing: PricingSnapshot }>(`/process-booking/reserve`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        userId: activeUserId,
-                        vehicleId,
-                        pickupLocation: searchForm.pickupLocation,
-                        startTime: new Date(searchForm.startTime).toISOString(),
-                        endTime: new Date(searchForm.endTime).toISOString(),
-                        displayedPrice: 0,
-                        subscriptionPlanId: customerSummary?.planName ?? 'STANDARD_MONTHLY',
-                      }),
-                    })
-                    setStatus(`Booking ${response.bookingId} confirmed.`)
-                    await Promise.all([loadCustomers(), refreshCustomerData(activeUserId)])
-                    return response.bookingId
-                  }}
+                  onReserve={startReservation}
                   onSearch={async () => {
                     const params = new URLSearchParams({
                       userId: activeUserId,
@@ -252,6 +292,18 @@ function App() {
                   }}
                   setSearchForm={setSearchForm}
                 />
+              </CustomerShell>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/app/bookings/processing"
+          element={
+            activeUserId ? (
+              <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
+                <BookingProcessingPage pendingBooking={pendingBooking} vehicles={vehicles} />
               </CustomerShell>
             ) : (
               <Navigate to="/" replace />
@@ -326,6 +378,7 @@ function App() {
                   }
                   upcomingBookings={upcomingBookings}
                   vehicles={vehicles}
+                  records={records}
                 />
               </CustomerShell>
             ) : (

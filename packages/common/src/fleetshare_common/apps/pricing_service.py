@@ -11,6 +11,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 from fleetshare_common.app import create_app
 from fleetshare_common.database import Base, engine, get_db
 from fleetshare_common.pricing import BASE_HOURLY_RATE, booking_quote, rerate_after_renewal, trip_adjustment
+from fleetshare_common.timeutils import as_utc_naive, utcnow
 
 app = create_app("Pricing Service", "Atomic pricing and re-rating service.")
 
@@ -78,7 +79,7 @@ class FinalizeTripPayload(BaseModel):
 
 
 def seed_customers():
-    today = datetime.utcnow().date()
+    today = utcnow().date()
     with Session(engine) as db:
         if db.query(CustomerProfile).count():
             return
@@ -250,9 +251,11 @@ def finalize_trip_pricing(payload: FinalizeTripPayload, db: Session = Depends(ge
     if existing and existing.trip_id == payload.tripId:
         return response_from_ledger(existing, profile, idempotent=True)
 
+    normalized_start = as_utc_naive(payload.startedAt)
+    normalized_end = as_utc_naive(payload.endedAt)
     quote = booking_quote(
-        payload.startedAt,
-        payload.endedAt,
+        normalized_start,
+        normalized_end,
         monthly_included_hours=profile.monthly_included_hours,
         hours_used_this_cycle=profile.hours_used_this_cycle,
         renewal_date=profile.renewal_date,
@@ -265,15 +268,15 @@ def finalize_trip_pricing(payload: FinalizeTripPayload, db: Session = Depends(ge
             booking_id=payload.bookingId,
             trip_id=payload.tripId,
             user_id=payload.userId,
-            start_time=payload.startedAt,
-            end_time=payload.endedAt,
+            start_time=normalized_start,
+            end_time=normalized_end,
         )
         db.add(existing)
 
     existing.trip_id = payload.tripId
     existing.user_id = payload.userId
-    existing.start_time = payload.startedAt
-    existing.end_time = payload.endedAt
+    existing.start_time = normalized_start
+    existing.end_time = normalized_end
     existing.total_hours = quote.total_hours
     existing.current_cycle_hours = quote.current_cycle_hours
     existing.included_hours_applied = quote.included_hours_applied
@@ -312,8 +315,8 @@ def rerate(payload: ReRatePayload, db: Session = Depends(get_db)):
             booking_id=payload.bookingId,
             trip_id=payload.tripId,
             user_id=payload.userId,
-            start_time=datetime.utcnow(),
-            end_time=datetime.utcnow(),
+            start_time=as_utc_naive(utcnow()),
+            end_time=as_utc_naive(utcnow()),
         )
         db.add(ledger)
 

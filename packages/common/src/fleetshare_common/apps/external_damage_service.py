@@ -61,6 +61,7 @@ async def assess_external_damage(
         blocked = True
         warning = "Low confidence evidence requires manual review."
     elif assessment["severity"] == "SEVERE":
+        review_state = "EXTERNAL_BLOCKED"
         blocked = True
         warning = "Severe damage detected. Vehicle blocked."
         update_vehicle_status(vehicleId, "UNDER_INSPECTION")

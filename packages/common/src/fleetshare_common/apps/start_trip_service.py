@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 from fastapi import HTTPException
 from pydantic import BaseModel
 
 from fleetshare_common.app import create_app
-from fleetshare_common.http import patch_json, post_json
+from fleetshare_common.http import get_json, patch_json, post_json
 from fleetshare_common.settings import get_settings
+from fleetshare_common.timeutils import iso, utcnow
 from fleetshare_common.vehicle_grpc import unlock_vehicle
 
 app = create_app("Start Trip Service", "Composite trip start workflow.")
@@ -23,6 +22,18 @@ class StartTripPayload(BaseModel):
 @app.post("/trips/start")
 def start_trip(payload: StartTripPayload):
     settings = get_settings()
+    records = get_json(
+        f"{settings.record_service_url}/records",
+        {"bookingId": payload.bookingId, "recordType": "EXTERNAL_DAMAGE"},
+    )
+    latest_inspection = records[0] if isinstance(records, list) and records else None
+    if not latest_inspection:
+        raise HTTPException(status_code=409, detail="Complete the pre-trip inspection before starting the trip.")
+    if latest_inspection["reviewState"] in {"PENDING_EXTERNAL", "MANUAL_REVIEW", "EXTERNAL_BLOCKED"}:
+        raise HTTPException(status_code=409, detail="Pre-trip inspection has not been cleared yet.")
+    if latest_inspection["severity"] == "SEVERE":
+        raise HTTPException(status_code=409, detail="Vehicle inspection found severe damage. Trip start is blocked.")
+
     validation = post_json(
         f"{settings.internal_damage_service_url}/internal-damage/validate",
         {
@@ -45,7 +56,7 @@ def start_trip(payload: StartTripPayload):
             "bookingId": payload.bookingId,
             "vehicleId": payload.vehicleId,
             "userId": payload.userId,
-            "startedAt": datetime.utcnow().isoformat(),
+            "startedAt": iso(utcnow()),
             "subscriptionSnapshot": {"renewalStatus": "PENDING", "billingCycleId": "2026-03"},
         },
     )
@@ -54,4 +65,3 @@ def start_trip(payload: StartTripPayload):
         {"status": "CONFIRMED", "tripId": trip["tripId"]},
     )
     return {"tripId": trip["tripId"], "status": "STARTED", "unlockCommandSent": True}
-

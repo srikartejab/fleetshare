@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 from fleetshare_common.app import create_app
 from fleetshare_common.contracts import BookingStatus
 from fleetshare_common.database import Base, engine, get_db
+from fleetshare_common.timeutils import as_utc_naive, iso
 
 app = create_app("Booking Service", "Atomic booking reservation service.")
 
@@ -90,8 +91,8 @@ def booking_to_dict(booking: Booking) -> dict:
         "userId": booking.user_id,
         "vehicleId": booking.vehicle_id,
         "pickupLocation": booking.pickup_location,
-        "startTime": booking.start_time.isoformat(),
-        "endTime": booking.end_time.isoformat(),
+        "startTime": iso(booking.start_time),
+        "endTime": iso(booking.end_time),
         "status": booking.status,
         "displayedPrice": booking.displayed_price,
         "finalPrice": booking.final_price,
@@ -129,6 +130,8 @@ def booking_availability(
     endTime: datetime = Query(...),
     db: Session = Depends(get_db),
 ):
+    normalized_start = as_utc_naive(startTime)
+    normalized_end = as_utc_naive(endTime)
     requested_ids = []
     if vehicleId:
         requested_ids = [vehicleId]
@@ -144,8 +147,8 @@ def booking_availability(
             .filter(
                 Booking.vehicle_id == requested_id,
                 Booking.status.in_([BookingStatus.PAYMENT_PENDING.value, BookingStatus.CONFIRMED.value]),
-                Booking.start_time < endTime,
-                Booking.end_time > startTime,
+                Booking.start_time < normalized_end,
+                Booking.end_time > normalized_start,
             )
             .count()
         )
@@ -167,6 +170,8 @@ def reconciliation_pending(userId: str, billingCycleId: str | None = None, db: S
 
 @app.post("/booking")
 def create_booking(payload: BookingCreatePayload, db: Session = Depends(get_db)):
+    normalized_start = as_utc_naive(payload.startTime)
+    normalized_end = as_utc_naive(payload.endTime)
     lock = db.get(VehicleReservationLock, payload.vehicleId)
     if not lock:
         db.add(VehicleReservationLock(vehicle_id=payload.vehicleId))
@@ -178,8 +183,8 @@ def create_booking(payload: BookingCreatePayload, db: Session = Depends(get_db))
         .filter(
             Booking.vehicle_id == payload.vehicleId,
             Booking.status.in_([BookingStatus.PAYMENT_PENDING.value, BookingStatus.CONFIRMED.value]),
-            Booking.start_time < payload.endTime,
-            Booking.end_time > payload.startTime,
+            Booking.start_time < normalized_end,
+            Booking.end_time > normalized_start,
         )
         .first()
     )
@@ -190,8 +195,8 @@ def create_booking(payload: BookingCreatePayload, db: Session = Depends(get_db))
         user_id=payload.userId,
         vehicle_id=payload.vehicleId,
         pickup_location=payload.pickupLocation,
-        start_time=payload.startTime,
-        end_time=payload.endTime,
+        start_time=normalized_start,
+        end_time=normalized_end,
         displayed_price=payload.displayedPrice,
         final_price=payload.displayedPrice,
         subscription_plan_id=payload.subscriptionPlanId,

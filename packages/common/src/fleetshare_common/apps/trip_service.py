@@ -12,6 +12,7 @@ from fleetshare_common.contracts import TripStatus
 from fleetshare_common.database import Base, engine, get_db
 from fleetshare_common.messaging import publish_event
 from fleetshare_common.pricing import post_midnight_hours
+from fleetshare_common.timeutils import as_utc_naive, iso, utcnow
 
 app = create_app("Trip Service", "Atomic trip lifecycle service.")
 
@@ -60,8 +61,8 @@ def trip_to_dict(trip: Trip) -> dict:
         "vehicleId": trip.vehicle_id,
         "userId": trip.user_id,
         "status": trip.status,
-        "startedAt": trip.started_at.isoformat(),
-        "endedAt": trip.ended_at.isoformat() if trip.ended_at else None,
+        "startedAt": iso(trip.started_at),
+        "endedAt": iso(trip.ended_at),
         "endReason": trip.end_reason,
         "disruptionReason": trip.disruption_reason,
         "durationHours": round(trip.duration_hours, 2),
@@ -87,11 +88,12 @@ def get_trip(trip_id: int, db: Session = Depends(get_db)):
 
 @app.post("/trips/start")
 def create_trip(payload: TripStartPayload, db: Session = Depends(get_db)):
+    started_at = as_utc_naive(payload.startedAt or utcnow())
     trip = Trip(
         booking_id=payload.bookingId,
         vehicle_id=payload.vehicleId,
         user_id=payload.userId,
-        started_at=payload.startedAt or datetime.utcnow(),
+        started_at=started_at,
         status=TripStatus.STARTED.value,
         subscription_snapshot=payload.subscriptionSnapshot,
     )
@@ -110,7 +112,7 @@ def patch_trip_status(trip_id: int, payload: TripStatusPayload, db: Session = De
         return {"tripId": trip.id, "status": trip.status, "idempotent": True}
     trip.status = payload.status
     if payload.status == TripStatus.ENDED.value:
-        trip.ended_at = payload.endedAt or datetime.utcnow()
+        trip.ended_at = as_utc_naive(payload.endedAt or utcnow())
         trip.end_reason = payload.endReason
         trip.disruption_reason = payload.disruptionReason
         trip.duration_hours = max((trip.ended_at - trip.started_at).total_seconds() / 3600.0, 0.0)
@@ -122,8 +124,8 @@ def patch_trip_status(trip_id: int, payload: TripStatusPayload, db: Session = De
                 "bookingId": trip.booking_id,
                 "vehicleId": trip.vehicle_id,
                 "userId": trip.user_id,
-                "tripStartTime": trip.started_at.isoformat(),
-                "tripEndTime": trip.ended_at.isoformat(),
+                "tripStartTime": iso(trip.started_at),
+                "tripEndTime": iso(trip.ended_at),
                 "durationHours": round(trip.duration_hours, 2),
             },
         )
@@ -141,7 +143,7 @@ def get_post_midnight_usage(trip_id: int, db: Session = Depends(get_db)):
     return {
         "tripId": trip.id,
         "actualPostMidnightHours": round(usage, 2),
-        "tripStartTime": trip.started_at.isoformat(),
-        "tripEndTime": trip.ended_at.isoformat(),
+        "tripStartTime": iso(trip.started_at),
+        "tripEndTime": iso(trip.ended_at),
         "tripUsageSummary": f"{round(usage, 2)} hours after midnight",
     }
