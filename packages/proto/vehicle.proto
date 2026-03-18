@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package fleetshare.vehicle;
+
+service VehicleService {
+  rpc CheckAvailability (VehicleAvailabilityRequest) returns (VehicleAvailabilityResponse);
+  rpc UnlockVehicle (VehicleCommandRequest) returns (VehicleCommandResponse);
+  rpc LockVehicle (VehicleCommandRequest) returns (VehicleCommandResponse);
+  rpc UpdateVehicleStatus (VehicleStatusUpdateRequest) returns (VehicleStatusUpdateResponse);
+}
+
+message VehicleAvailabilityRequest {
+  int32 vehicle_id = 1;
+}
+
+message VehicleAvailabilityResponse {
+  bool available = 1;
+  string status = 2;
+  string message = 3;
+}
+
+message VehicleCommandRequest {
+  int32 vehicle_id = 1;
+  string booking_id = 2;
+  string user_id = 3;
+}
+
+message VehicleCommandResponse {
+  bool success = 1;
+  string status = 2;
+  string message = 3;
+}
+
+message VehicleStatusUpdateRequest {
+  int32 vehicle_id = 1;
+  string status = 2;
+}
+
+message VehicleStatusUpdateResponse {
+  bool success = 1;
+  string status = 2;
+}
+
