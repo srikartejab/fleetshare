@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from fleetshare_common.app import create_app
 from fleetshare_common.contracts import TripStatus
-from fleetshare_common.database import Base, engine, get_db
+from fleetshare_common.database import Base, get_db, initialize_schema_with_retry
 from fleetshare_common.messaging import publish_event
 from fleetshare_common.pricing import post_midnight_hours
 from fleetshare_common.timeutils import as_utc_naive, iso, utcnow
@@ -51,7 +51,7 @@ class TripStatusPayload(BaseModel):
 
 @app.on_event("startup")
 def startup_event():
-    Base.metadata.create_all(bind=engine)
+    initialize_schema_with_retry(Base.metadata)
 
 
 def trip_to_dict(trip: Trip) -> dict:

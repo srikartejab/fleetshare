@@ -54,6 +54,7 @@ def process_end_trip(payload: EndTripPayload):
             "startedAt": updated_trip["startedAt"],
             "endedAt": updated_trip["endedAt"],
             "disrupted": disrupted,
+            "endReason": payload.endReason,
         },
     )
     patch_json(

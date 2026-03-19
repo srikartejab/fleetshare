@@ -106,6 +106,89 @@ async def assess_external_damage(
     }
 
 
+@app.post("/damage-assessment/post-trip")
+async def assess_post_trip_damage(
+    bookingId: int = Form(...),
+    tripId: int = Form(...),
+    vehicleId: int = Form(...),
+    userId: str = Form(...),
+    notes: str = Form(""),
+    photos: list[UploadFile] = File(default_factory=list),
+):
+    settings = get_settings()
+    uploaded_keys = []
+    filenames = []
+    for photo in photos:
+        data = await photo.read()
+        key = upload_bytes(
+            f"damage/post-trip/{bookingId}/{uuid4()}-{photo.filename}",
+            data,
+            photo.content_type or "image/jpeg",
+        )
+        uploaded_keys.append(key)
+        filenames.append(photo.filename)
+
+    record = post_json(
+        f"{settings.record_service_url}/records",
+        {
+            "bookingId": bookingId,
+            "tripId": tripId,
+            "vehicleId": vehicleId,
+            "recordType": "POST_TRIP_EXTERNAL_DAMAGE",
+            "notes": notes,
+            "reviewState": "PENDING_EXTERNAL",
+            "evidenceUrls": uploaded_keys,
+        },
+    )
+    assessment = assess_damage(notes, filenames, mode=settings.azure_vision_mode)
+    review_state = "EXTERNAL_ASSESSED"
+    follow_up_required = False
+    warning = "Post-trip inspection recorded. You can now review and lock the car."
+    if assessment["severity"] == "SEVERE":
+        review_state = "EXTERNAL_BLOCKED"
+        follow_up_required = True
+        warning = "Severe post-trip damage recorded. Ops review and downstream recovery have been triggered."
+        update_vehicle_status(vehicleId, "UNDER_INSPECTION")
+        publish_event(
+            "incident.external_damage_detected",
+            {
+                "recordId": record["recordId"],
+                "bookingId": bookingId,
+                "tripId": tripId,
+                "vehicleId": vehicleId,
+                "userId": userId,
+                "severity": assessment["severity"],
+                "damageType": ",".join(assessment["detectedDamage"]),
+                "recommendedAction": "Inspect vehicle before next rental and compensate affected bookings if needed",
+            },
+        )
+    elif assessment["confidence"] < 0.55:
+        review_state = "MANUAL_REVIEW"
+        follow_up_required = True
+        warning = "Post-trip inspection needs manual review. The report is saved and ops will follow up."
+    elif assessment["severity"] == "MODERATE":
+        warning = "Moderate post-trip issue noted. The report is saved for ops follow-up."
+    patch_json(
+        f"{settings.record_service_url}/records/{record['recordId']}",
+        {
+            "severity": assessment["severity"],
+            "reviewState": review_state,
+            "confidence": assessment["confidence"],
+            "detectedDamage": assessment["detectedDamage"],
+        },
+    )
+    return {
+        "recordId": record["recordId"],
+        "bookingId": bookingId,
+        "tripId": tripId,
+        "vehicleId": vehicleId,
+        "assessmentResult": assessment,
+        "followUpRequired": follow_up_required,
+        "warningMessage": warning,
+        "manualReview": review_state == "MANUAL_REVIEW",
+    }
+
+
 @app.post("/damage-assessment/external/customer-cancel")
 def cancel_booking_for_external_damage(payload: ExternalDamageCancellationPayload):
     settings = get_settings()

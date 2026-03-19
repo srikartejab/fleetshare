@@ -93,7 +93,12 @@ def booking_quote(
     )
 
 
-def trip_adjustment(disrupted: bool, duration_hours: float, base_fare: float | None = None) -> dict[str, float | bool]:
+def trip_adjustment(
+    disrupted: bool,
+    duration_hours: float,
+    base_fare: float | None = None,
+    end_reason: str | None = None,
+) -> dict[str, float | bool]:
     if not disrupted:
         adjusted_fare = round(base_fare if base_fare is not None else max(duration_hours - SUBSCRIPTION_INCLUDED_HOURS, 0) * BASE_HOURLY_RATE, 2)
         return {
@@ -103,7 +108,16 @@ def trip_adjustment(disrupted: bool, duration_hours: float, base_fare: float | N
             "discountAmount": 0.0,
         }
 
-    baseline = base_fare if base_fare is not None else max(duration_hours, 0) * BASE_HOURLY_RATE
+    baseline = round(base_fare if base_fare is not None else max(duration_hours, 0) * BASE_HOURLY_RATE, 2)
+    normalized_reason = (end_reason or "").upper()
+    if "INTERNAL" in normalized_reason and "FAULT" in normalized_reason:
+        return {
+            "compensationRequired": True,
+            "adjustedFare": 0.0,
+            "refundAmount": baseline,
+            "discountAmount": APOLOGY_CREDIT,
+        }
+
     refund = round(min(baseline, min(duration_hours, 2.0) * BASE_HOURLY_RATE), 2)
     return {
         "compensationRequired": True,
@@ -111,6 +125,23 @@ def trip_adjustment(disrupted: bool, duration_hours: float, base_fare: float | N
         "refundAmount": refund,
         "discountAmount": APOLOGY_CREDIT,
     }
+
+
+def refunded_included_hours(
+    disrupted: bool,
+    duration_hours: float,
+    included_hours_applied: float,
+    end_reason: str | None = None,
+) -> float:
+    if not disrupted or included_hours_applied <= 0:
+        return 0.0
+
+    normalized_reason = (end_reason or "").upper()
+    if "INTERNAL" in normalized_reason and "FAULT" in normalized_reason:
+        return round(included_hours_applied, 2)
+
+    compensated_hours = min(max(duration_hours, 0.0), 2.0)
+    return round(min(included_hours_applied, compensated_hours), 2)
 
 
 def rerate_after_renewal(

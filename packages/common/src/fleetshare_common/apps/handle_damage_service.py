@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import Depends
 from sqlalchemy import DateTime, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from fleetshare_common.app import create_app
-from fleetshare_common.database import Base, engine, get_db, session_scope
+from fleetshare_common.database import Base, get_db, initialize_schema_with_retry, session_scope
 from fleetshare_common.http import post_json, put_json
 from fleetshare_common.messaging import publish_event, start_consumer
 from fleetshare_common.settings import get_settings
+from fleetshare_common.timeutils import iso, utcnow
 
 app = create_app("Handle Damage Service", "Event-driven recovery orchestration for damage and faults.")
 OPS_USER_ID = "ops-maint-1"
@@ -29,7 +30,7 @@ class ProcessedIncident(Base):
 
 @app.on_event("startup")
 def startup_event():
-    Base.metadata.create_all(bind=engine)
+    initialize_schema_with_retry(Base.metadata)
     start_consumer(
         "handle-damage-service",
         ["incident.external_damage_detected", "incident.internal_fault_detected"],
@@ -86,6 +87,9 @@ def handle_incident(event: dict):
         return
 
     try:
+        estimated_duration_hours = 24 if payload.get("severity") == "MODERATE" else 48
+        maintenance_start = utcnow()
+        maintenance_end = maintenance_start + timedelta(hours=estimated_duration_hours)
         ticket = post_json(
             f"{settings.maintenance_service_url}/maintenance/tickets",
             {
@@ -93,14 +97,15 @@ def handle_incident(event: dict):
                 "damageSeverity": payload.get("severity", "SEVERE"),
                 "damageType": payload.get("damageType", "unknown"),
                 "recommendedAction": payload.get("recommendedAction", "Inspect vehicle"),
-                "estimatedDurationHours": 48,
+                "estimatedDurationHours": estimated_duration_hours,
             },
         )
         affected = put_json(
             f"{settings.booking_service_url}/bookings/cancel-affected",
             {
                 "vehicleId": payload["vehicleId"],
-                "estimatedDurationHours": 48,
+                "maintenanceStart": iso(maintenance_start),
+                "maintenanceEnd": iso(maintenance_end),
                 "reason": event["event_type"],
             },
         )

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from fleetshare_common.app import create_app
 from fleetshare_common.contracts import BookingStatus
-from fleetshare_common.database import Base, engine, get_db
+from fleetshare_common.database import Base, get_db, initialize_schema_with_retry
 from fleetshare_common.timeutils import as_utc_naive, iso
 
 app = create_app("Booking Service", "Atomic booking reservation service.")
@@ -76,13 +76,14 @@ class BookingFinancialsPayload(BaseModel):
 
 class CancelAffectedPayload(BaseModel):
     vehicleId: int
-    estimatedDurationHours: int
+    maintenanceStart: datetime
+    maintenanceEnd: datetime
     reason: str = "VEHICLE_UNAVAILABLE"
 
 
 @app.on_event("startup")
 def startup_event():
-    Base.metadata.create_all(bind=engine)
+    initialize_schema_with_retry(Base.metadata)
 
 
 def booking_to_dict(booking: Booking) -> dict:
@@ -107,10 +108,19 @@ def booking_to_dict(booking: Booking) -> dict:
 
 
 @app.get("/bookings")
-def list_bookings(userId: str | None = None, db: Session = Depends(get_db)):
+def list_bookings(
+    userId: str | None = None,
+    vehicleId: int | None = None,
+    status: str | None = None,
+    db: Session = Depends(get_db),
+):
     query = db.query(Booking)
     if userId:
         query = query.filter(Booking.user_id == userId)
+    if vehicleId is not None:
+        query = query.filter(Booking.vehicle_id == vehicleId)
+    if status:
+        query = query.filter(Booking.status == status)
     return [booking_to_dict(booking) for booking in query.order_by(Booking.id.desc()).all()]
 
 
@@ -119,6 +129,19 @@ def get_booking(booking_id: int, db: Session = Depends(get_db)):
     booking = db.get(Booking, booking_id)
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
+    return booking_to_dict(booking)
+
+
+@app.get("/bookings/vehicle/{vehicle_id}/active")
+def get_active_booking_for_vehicle(vehicle_id: int, db: Session = Depends(get_db)):
+    booking = (
+        db.query(Booking)
+        .filter(Booking.vehicle_id == vehicle_id, Booking.status == BookingStatus.IN_PROGRESS.value)
+        .order_by(Booking.updated_at.desc(), Booking.id.desc())
+        .first()
+    )
+    if not booking:
+        raise HTTPException(status_code=404, detail="Active booking not found for vehicle")
     return booking_to_dict(booking)
 
 
@@ -257,17 +280,15 @@ def patch_reconciliation_status(booking_id: int, payload: ReconciliationPayload,
 
 @app.put("/bookings/cancel-affected")
 def cancel_affected(payload: CancelAffectedPayload, db: Session = Depends(get_db)):
+    maintenance_start = as_utc_naive(payload.maintenanceStart)
+    maintenance_end = as_utc_naive(payload.maintenanceEnd)
     bookings = (
         db.query(Booking)
         .filter(
             Booking.vehicle_id == payload.vehicleId,
-            Booking.status.in_(
-                [
-                    BookingStatus.CONFIRMED.value,
-                    BookingStatus.PAYMENT_PENDING.value,
-                    BookingStatus.IN_PROGRESS.value,
-                ]
-            ),
+            Booking.status.in_([BookingStatus.CONFIRMED.value, BookingStatus.PAYMENT_PENDING.value]),
+            Booking.start_time < maintenance_end,
+            Booking.end_time > maintenance_start,
         )
         .all()
     )
@@ -296,4 +317,6 @@ def cancel_affected(payload: CancelAffectedPayload, db: Session = Depends(get_db
         "affectedBookingIds": affected_ids,
         "affectedBookings": affected_bookings,
         "cancelledCount": len(affected_ids),
+        "maintenanceStart": iso(maintenance_start),
+        "maintenanceEnd": iso(maintenance_end),
     }

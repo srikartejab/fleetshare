@@ -40,6 +40,13 @@ export type Vehicle = {
   zone: string
   vehicleType: string
   status: string
+  stationId?: string
+  stationName?: string
+  stationAddress?: string
+  area?: string
+  latitude?: number
+  longitude?: number
+  distanceKm?: number
   estimatedPrice?: number
   allowanceStatus?: string
   hourlyRate?: number
@@ -52,9 +59,42 @@ export type Vehicle = {
   renewalDate?: string
 }
 
+export type LocationOption = {
+  id: string
+  label: string
+  address: string
+  area: string
+  latitude: number
+  longitude: number
+}
+
 export type VehicleFilters = {
   locations: string[]
   vehicleTypes: string[]
+  locationOptions?: LocationOption[]
+}
+
+export type SearchStation = {
+  stationId: string
+  stationName: string
+  stationAddress: string
+  area: string
+  latitude: number
+  longitude: number
+  distanceKm: number
+  totalVehicleCount: number
+  operationalAvailableCount: number
+  availableVehicleCount: number
+  availableVehicleTypes: string[]
+  minEstimatedPrice?: number | null
+  nextAvailableTiming?: string | null
+  featuredVehicle?: Vehicle | null
+  vehicleList: Vehicle[]
+}
+
+export type MapCenter = {
+  latitude: number
+  longitude: number
 }
 
 export type Booking = {
@@ -134,6 +174,9 @@ export type SearchResponse = {
   vehicleList: Vehicle[]
   estimatedPrice: number
   availabilitySummary: string
+  selectedStationId?: string
+  mapCenter?: MapCenter
+  stationList: SearchStation[]
 }
 
 export type InspectionSubmissionResult = {
@@ -158,13 +201,73 @@ export type InspectionCancellationResult = {
   message: string
 }
 
-export async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${apiBase}${path}`, options)
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(text || `Request failed with ${response.status}`)
+export type InternalDamageResult = {
+  recordId: number
+  assessmentResult: {
+    severity: string
+    faultType: string
   }
-  return response.json() as Promise<T>
+  severity: string
+  recommendedAction: string
+  blocked: boolean
+  duplicateSuppressed: boolean
+  incidentPublished: boolean
+  bookingId?: number | null
+  tripId?: number | null
+  userId?: string | null
+}
+
+export type PostTripInspectionResult = {
+  recordId: number
+  bookingId: number
+  tripId: number
+  vehicleId: number
+  assessmentResult: {
+    severity: string
+    confidence: number
+    detectedDamage: string[]
+  }
+  followUpRequired: boolean
+  warningMessage: string
+  manualReview: boolean
+}
+
+export type EndTripResult = {
+  tripStatus: string
+  vehicleLocked: boolean
+  adjustedFare: number
+  refundPending: boolean
+  discountAmount: number
+  allowanceHoursApplied: number
+  customerSummary: CustomerSummary
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+export async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
+  const method = (options?.method ?? 'GET').toUpperCase()
+  const retryableStatuses = new Set([404, 408, 429, 502, 503, 504])
+  const maxAttempts = method === 'GET' ? 4 : 1
+  let lastError: Error | null = null
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const response = await fetch(`${apiBase}${path}`, options)
+    if (response.ok) {
+      return response.json() as Promise<T>
+    }
+
+    const text = await response.text()
+    lastError = new Error(text || `Request failed with ${response.status}`)
+    if (attempt >= maxAttempts || !retryableStatuses.has(response.status)) {
+      throw lastError
+    }
+
+    await sleep(250 * attempt)
+  }
+
+  throw lastError ?? new Error('Request failed')
 }
 
 export function localDateTime(hoursAhead: number) {
@@ -193,5 +296,12 @@ export function formatDateTime(value?: string | null) {
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+  }).format(new Date(value))
+}
+
+export function formatShortDate(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    month: 'short',
   }).format(new Date(value))
 }

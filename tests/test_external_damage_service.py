@@ -241,3 +241,111 @@ def test_customer_cancel_for_moderate_damage_publishes_incident(monkeypatch):
             },
         )
     ]
+
+
+def test_post_trip_damage_service_records_follow_up_without_blocking_end_trip(monkeypatch):
+    record_updates: list[dict] = []
+    published_events: list[tuple[str, dict]] = []
+    vehicle_updates: list[tuple[int, str]] = []
+
+    monkeypatch.setattr(external_damage_service, "ensure_bucket", lambda: None)
+    monkeypatch.setattr(
+        external_damage_service,
+        "upload_bytes",
+        lambda key, raw, content_type="application/octet-stream": f"minio://{key}",
+    )
+    monkeypatch.setattr(external_damage_service, "post_json", lambda url, payload: {"recordId": 880})
+    monkeypatch.setattr(external_damage_service, "patch_json", lambda url, payload: record_updates.append(payload))
+    monkeypatch.setattr(
+        external_damage_service,
+        "publish_event",
+        lambda event_type, payload: published_events.append((event_type, payload)),
+    )
+    monkeypatch.setattr(
+        external_damage_service,
+        "update_vehicle_status",
+        lambda vehicle_id, status: vehicle_updates.append((vehicle_id, status)),
+    )
+
+    with TestClient(external_damage_service.app) as client:
+        response = client.post(
+            "/damage-assessment/post-trip",
+            data={"bookingId": 404, "tripId": 12, "vehicleId": 22, "userId": "user-4", "notes": "Rear door dent visible."},
+            files=[("photos", ("return.jpg", b"fake-image", "image/jpeg"))],
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["followUpRequired"] is False
+    assert payload["warningMessage"] == "Moderate post-trip issue noted. The report is saved for ops follow-up."
+    assert record_updates == [
+        {
+            "severity": "MODERATE",
+            "reviewState": "EXTERNAL_ASSESSED",
+            "confidence": 0.61,
+            "detectedDamage": ["possible body damage"],
+        }
+    ]
+    assert published_events == []
+    assert vehicle_updates == []
+
+
+def test_post_trip_damage_service_escalates_severe_damage(monkeypatch):
+    record_updates: list[dict] = []
+    published_events: list[tuple[str, dict]] = []
+    vehicle_updates: list[tuple[int, str]] = []
+
+    monkeypatch.setattr(external_damage_service, "ensure_bucket", lambda: None)
+    monkeypatch.setattr(
+        external_damage_service,
+        "upload_bytes",
+        lambda key, raw, content_type="application/octet-stream": f"minio://{key}",
+    )
+    monkeypatch.setattr(external_damage_service, "post_json", lambda url, payload: {"recordId": 990})
+    monkeypatch.setattr(external_damage_service, "patch_json", lambda url, payload: record_updates.append(payload))
+    monkeypatch.setattr(
+        external_damage_service,
+        "publish_event",
+        lambda event_type, payload: published_events.append((event_type, payload)),
+    )
+    monkeypatch.setattr(
+        external_damage_service,
+        "update_vehicle_status",
+        lambda vehicle_id, status: vehicle_updates.append((vehicle_id, status)),
+    )
+
+    with TestClient(external_damage_service.app) as client:
+        response = client.post(
+            "/damage-assessment/post-trip",
+            data={"bookingId": 505, "tripId": 14, "vehicleId": 23, "userId": "user-5", "notes": "Broken mirror and cracked bumper."},
+            files=[("photos", ("return.jpg", b"fake-image", "image/jpeg"))],
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["followUpRequired"] is True
+    assert payload["warningMessage"] == "Severe post-trip damage recorded. Ops review and downstream recovery have been triggered."
+    assert record_updates == [
+        {
+            "severity": "SEVERE",
+            "reviewState": "EXTERNAL_BLOCKED",
+            "confidence": 0.92,
+            "detectedDamage": ["major exterior damage"],
+        }
+    ]
+    assert vehicle_updates == [(23, "UNDER_INSPECTION")]
+    assert published_events == [
+        (
+            "incident.external_damage_detected",
+            {
+                "recordId": 990,
+                "bookingId": 505,
+                "tripId": 14,
+                "vehicleId": 23,
+                "userId": "user-5",
+                "severity": "SEVERE",
+                "damageType": "major exterior damage",
+                "recommendedAction": "Inspect vehicle before next rental and compensate affected bookings if needed",
+            },
+        )
+    ]

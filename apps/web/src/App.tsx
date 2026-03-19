@@ -1,8 +1,9 @@
-import { startTransition, useDeferredValue, useEffect, useState } from 'react'
+import { startTransition, useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
 
 import { OpsPage } from './OpsPage'
+import { SearchExperiencePage } from './SearchExperiencePage'
 import {
   customerStorageKey,
   fetchJson,
@@ -11,10 +12,13 @@ import {
 import type {
   Booking,
   CustomerSummary,
+  EndTripResult,
+  InternalDamageResult,
   InspectionCancellationResult,
   InspectionSubmissionResult,
   Notification,
   Payment,
+  PostTripInspectionResult,
   PricingSnapshot,
   RecordItem,
   SearchResponse,
@@ -27,11 +31,16 @@ import {
   BookingDetailsPage,
   BookingProcessingPage,
   CustomerShell,
-  DiscoverPage,
+  EndTripCompletePage,
+  EndTripConfirmPage,
+  EndTripInspectionPage,
+  EndTripReviewPage,
   HomePage,
   LandingPage,
+  TripProblemPage,
+  TripProblemResultPage,
   TripsPage,
-} from './customerPages'
+} from './customerMobilePages'
 
 type PendingBooking = {
   status: 'processing' | 'success' | 'error'
@@ -53,11 +62,12 @@ function App() {
   const [records, setRecords] = useState<RecordItem[]>([])
   const [status, setStatus] = useState('Loading FleetShare customer experience.')
   const [busy, setBusy] = useState(false)
-  const [searchResults, setSearchResults] = useState<Vehicle[]>([])
-  const [searchSummary, setSearchSummary] = useState('')
+  const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null)
   const [pendingBooking, setPendingBooking] = useState<PendingBooking | null>(null)
   const [latestInspectionResult, setLatestInspectionResult] = useState<InspectionSubmissionResult | null>(null)
-  const deferredSearchResults = useDeferredValue(searchResults)
+  const [reportedProblem, setReportedProblem] = useState<InternalDamageResult | null>(null)
+  const [postTripInspectionResult, setPostTripInspectionResult] = useState<PostTripInspectionResult | null>(null)
+  const [endTripResult, setEndTripResult] = useState<EndTripResult | null>(null)
   const [searchForm, setSearchForm] = useState({
     pickupLocation: '',
     vehicleType: '',
@@ -73,17 +83,33 @@ function App() {
   }
 
   async function loadVehicleMetadata() {
-    const [allVehicles, filters] = await Promise.all([
-      fetchJson<Vehicle[]>('/vehicles'),
-      fetchJson<VehicleFilters>('/vehicles/filters'),
-    ])
+    const allVehicles = await fetchJson<Vehicle[]>('/vehicles')
+    const filters = await fetchJson<VehicleFilters>('/vehicles/filters').catch(() => {
+      const locations = Array.from(new Set(allVehicles.map((vehicle) => vehicle.stationId ?? vehicle.zone)))
+      const locationOptions = locations.map((locationId) => {
+        const sampleVehicle = allVehicles.find((vehicle) => (vehicle.stationId ?? vehicle.zone) === locationId)
+        return {
+          id: locationId,
+          label: sampleVehicle?.stationName ?? locationId,
+          address: sampleVehicle?.stationAddress ?? sampleVehicle?.zone ?? locationId,
+          area: sampleVehicle?.area ?? sampleVehicle?.zone ?? 'Singapore',
+          latitude: sampleVehicle?.latitude ?? 1.3521,
+          longitude: sampleVehicle?.longitude ?? 103.8198,
+        }
+      })
+      return {
+        locations,
+        vehicleTypes: Array.from(new Set(allVehicles.map((vehicle) => vehicle.vehicleType))).sort(),
+        locationOptions,
+      }
+    })
     startTransition(() => {
       setVehicles(allVehicles)
       setVehicleFilters(filters)
       setSearchForm((current) => ({
         ...current,
-        pickupLocation: current.pickupLocation || filters.locations[0] || '',
-        vehicleType: current.vehicleType || filters.vehicleTypes[0] || '',
+        pickupLocation: current.pickupLocation || filters.locationOptions?.[0]?.id || filters.locations[0] || '',
+        vehicleType: current.vehicleType,
       }))
     })
   }
@@ -97,8 +123,7 @@ function App() {
         setPayments([])
         setNotifications([])
         setRecords([])
-        setSearchResults([])
-        setSearchSummary('')
+        setSearchResponse(null)
       })
       return
     }
@@ -180,16 +205,22 @@ function App() {
   function activateCustomer(userId: string) {
     localStorage.setItem(customerStorageKey, userId)
     setActiveUserId(userId)
-    setSearchResults([])
-    setSearchSummary('')
+    setSearchResponse(null)
     setLatestInspectionResult(null)
+    setReportedProblem(null)
+    setPostTripInspectionResult(null)
+    setEndTripResult(null)
   }
 
   function clearActiveCustomer() {
     localStorage.removeItem(customerStorageKey)
     setActiveUserId('')
     setPendingBooking(null)
+    setSearchResponse(null)
     setLatestInspectionResult(null)
+    setReportedProblem(null)
+    setPostTripInspectionResult(null)
+    setEndTripResult(null)
     setStatus('Choose a customer profile to enter the app.')
   }
 
@@ -219,7 +250,9 @@ function App() {
           body: JSON.stringify({
             userId: activeUserId,
             vehicleId,
-            pickupLocation: searchForm.pickupLocation,
+            pickupLocation:
+              vehicleFilters.locationOptions?.find((location) => location.id === searchForm.pickupLocation)?.label ??
+              searchForm.pickupLocation,
             startTime: new Date(searchForm.startTime).toISOString(),
             endTime: new Date(searchForm.endTime).toISOString(),
             displayedPrice: 0,
@@ -257,6 +290,99 @@ function App() {
     })()
   }
 
+  async function submitTripProblem(notes: string) {
+    if (!activeTrip) {
+      throw new Error('No active trip found.')
+    }
+    setBusy(true)
+    try {
+      const result = await fetchJson<InternalDamageResult>('/internal-damage/fault-alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookingId: activeTrip.bookingId,
+          tripId: activeTrip.tripId,
+          vehicleId: activeTrip.vehicleId,
+          userId: activeUserId,
+          sensorType: 'USER_REPORT',
+          notes,
+        }),
+      })
+      setReportedProblem(result)
+      await Promise.all([refreshCustomerData(activeUserId), loadCustomers()])
+      setStatus(result.recommendedAction)
+      return result
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to submit the vehicle problem.'
+      setStatus(message)
+      throw error
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function submitPostTripInspection(notes: string, photo: File | null) {
+    if (!activeTrip) {
+      throw new Error('No active trip found.')
+    }
+    setBusy(true)
+    try {
+      const formData = new FormData()
+      formData.append('bookingId', String(activeTrip.bookingId))
+      formData.append('tripId', String(activeTrip.tripId))
+      formData.append('vehicleId', String(activeTrip.vehicleId))
+      formData.append('userId', activeUserId)
+      formData.append('notes', notes)
+      if (photo) {
+        formData.append('photos', photo)
+      }
+      const result = await fetchJson<PostTripInspectionResult>('/damage-assessment/post-trip', {
+        method: 'POST',
+        body: formData,
+      })
+      setPostTripInspectionResult(result)
+      await Promise.all([refreshCustomerData(activeUserId), loadCustomers()])
+      setStatus(result.warningMessage)
+      return result
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to save the post-trip inspection.'
+      setStatus(message)
+      throw error
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function completeEndTrip(endReason: string) {
+    if (!activeTrip) {
+      throw new Error('No active trip found.')
+    }
+    setBusy(true)
+    try {
+      const result = await fetchJson<EndTripResult>('/end-trip/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookingId: activeTrip.bookingId,
+          tripId: activeTrip.tripId,
+          vehicleId: activeTrip.vehicleId,
+          userId: activeUserId,
+          endReason,
+        }),
+      })
+      setEndTripResult(result)
+      await Promise.all([refreshCustomerData(activeUserId), loadCustomers()])
+      setStatus('Trip ended and pricing finalized.')
+      return result
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to end the trip.'
+      setStatus(message)
+      throw error
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const customerProfiles = customers.filter((customer) => customer.role === 'CUSTOMER')
   const selectedProfile = customerProfiles.find((customer) => customer.userId === activeUserId) ?? null
   const upcomingBookings = bookings
@@ -291,32 +417,34 @@ function App() {
           path="/app/discover"
           element={
             activeUserId ? (
-              <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
-                <DiscoverPage
-                  customerSummary={customerSummary}
-                  deferredSearchResults={deferredSearchResults}
-                  searchForm={searchForm}
-                  searchSummary={searchSummary}
-                  vehicleFilters={vehicleFilters}
-                  onReserve={startReservation}
-                  onSearch={async () => {
-                    const params = new URLSearchParams({
-                      userId: activeUserId,
-                      pickupLocation: searchForm.pickupLocation,
-                      vehicleType: searchForm.vehicleType,
-                      startTime: new Date(searchForm.startTime).toISOString(),
-                      endTime: new Date(searchForm.endTime).toISOString(),
-                      subscriptionPlanId: customerSummary?.planName ?? 'STANDARD_MONTHLY',
-                    })
-                    const result = await fetchJson<SearchResponse>(`/process-booking/search?${params.toString()}`)
-                    startTransition(() => {
-                      setSearchResults(result.vehicleList)
-                      setSearchSummary(result.availabilitySummary)
-                    })
-                  }}
-                  setSearchForm={setSearchForm}
-                />
-              </CustomerShell>
+              <SearchExperiencePage
+                activeUser={selectedProfile}
+                busy={busy}
+                customerSummary={customerSummary}
+                onReserve={startReservation}
+                onSearch={async () => {
+                  const params = new URLSearchParams({
+                    userId: activeUserId,
+                    pickupLocation: searchForm.pickupLocation,
+                    startTime: new Date(searchForm.startTime).toISOString(),
+                    endTime: new Date(searchForm.endTime).toISOString(),
+                    subscriptionPlanId: customerSummary?.planName ?? 'STANDARD_MONTHLY',
+                  })
+                  if (searchForm.vehicleType) {
+                    params.set('vehicleType', searchForm.vehicleType)
+                  }
+                  const result = await fetchJson<SearchResponse>(`/process-booking/search?${params.toString()}`)
+                  startTransition(() => {
+                    setSearchResponse(result)
+                  })
+                }}
+                onSwitchUser={clearActiveCustomer}
+                searchForm={searchForm}
+                searchResponse={searchResponse}
+                setSearchForm={setSearchForm}
+                status={status}
+                vehicleFilters={vehicleFilters}
+              />
             ) : (
               <Navigate to="/" replace />
             )
@@ -369,23 +497,11 @@ function App() {
                       return result
                     }, (result) => result.message)
                   }
-                  onEndTrip={(bookingId, tripId, vehicleId, endReason) =>
-                    runCustomerAction(async () => {
-                      await fetchJson('/end-trip/request', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          bookingId,
-                          tripId,
-                          vehicleId,
-                          userId: activeUserId,
-                          endReason,
-                        }),
-                      })
-                    }, 'Trip ended and pricing finalized.')
-                  }
                   onStartTrip={(bookingId, vehicleId, notes) =>
                     runCustomerAction(async () => {
+                      setReportedProblem(null)
+                      setPostTripInspectionResult(null)
+                      setEndTripResult(null)
                       await fetchJson('/trips/start', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -425,6 +541,83 @@ function App() {
                   records={records}
                   latestInspectionResult={latestInspectionResult}
                 />
+              </CustomerShell>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/app/trips/report-problem"
+          element={
+            activeUserId ? (
+              <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
+                <TripProblemPage activeTrip={activeTrip} onSubmitProblem={submitTripProblem} />
+              </CustomerShell>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/app/trips/problem-advisory"
+          element={
+            activeUserId ? (
+              <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
+                <TripProblemResultPage activeTrip={activeTrip} reportedProblem={reportedProblem} />
+              </CustomerShell>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/app/trips/end-inspection"
+          element={
+            activeUserId ? (
+              <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
+                <EndTripInspectionPage activeTrip={activeTrip} onSubmitInspection={submitPostTripInspection} vehicles={vehicles} />
+              </CustomerShell>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/app/trips/end-review"
+          element={
+            activeUserId ? (
+              <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
+                <EndTripReviewPage activeTrip={activeTrip} postTripInspectionResult={postTripInspectionResult} vehicles={vehicles} />
+              </CustomerShell>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/app/trips/end-confirm"
+          element={
+            activeUserId ? (
+              <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
+                <EndTripConfirmPage
+                  activeTrip={activeTrip}
+                  onConfirmEndTrip={completeEndTrip}
+                  postTripInspectionResult={postTripInspectionResult}
+                  vehicles={vehicles}
+                />
+              </CustomerShell>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/app/trips/end-complete"
+          element={
+            activeUserId ? (
+              <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
+                <EndTripCompletePage endTripResult={endTripResult} postTripInspectionResult={postTripInspectionResult} />
               </CustomerShell>
             ) : (
               <Navigate to="/" replace />

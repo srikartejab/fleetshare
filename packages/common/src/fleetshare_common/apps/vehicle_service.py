@@ -12,8 +12,10 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from fleetshare_common.app import create_app
 from fleetshare_common.contracts import VehicleStatus
-from fleetshare_common.database import Base, SessionLocal, engine, get_db
+from fleetshare_common.database import Base, SessionLocal, get_db, initialize_schema_with_retry
 from fleetshare_common.generated import vehicle_pb2, vehicle_pb2_grpc
+from fleetshare_common.messaging import publish_event
+from fleetshare_common.station_catalog import STATION_CATALOG, get_station
 
 app = create_app("Vehicle Service", "Atomic vehicle state and telemetry service.")
 
@@ -54,6 +56,29 @@ class TelemetryPayload(BaseModel):
     faultCode: str = ""
 
 
+def telemetry_requires_attention(*, battery_level: int, tire_pressure_ok: bool, severity: str, fault_code: str) -> bool:
+    return severity in {"WARNING", "CRITICAL"} or battery_level < 20 or not tire_pressure_ok or bool(fault_code)
+
+
+def serialize_vehicle(vehicle: Vehicle) -> dict:
+    station = get_station(vehicle.zone)
+    return {
+        "id": vehicle.id,
+        "vehicleId": vehicle.id,
+        "plateNumber": vehicle.plate_number,
+        "model": vehicle.model,
+        "zone": vehicle.zone,
+        "vehicleType": vehicle.vehicle_type,
+        "status": vehicle.status,
+        "stationId": station["id"],
+        "stationName": station["name"],
+        "stationAddress": station["address"],
+        "area": station["area"],
+        "latitude": station["latitude"],
+        "longitude": station["longitude"],
+    }
+
+
 def seed_data():
     with SessionLocal() as db:
         existing_vehicle_ids = {vehicle_id for (vehicle_id,) in db.query(Vehicle.id).all()}
@@ -66,6 +91,24 @@ def seed_data():
             Vehicle(id=6, plate_number="SFA2006F", model="Mercedes EQE", zone="ORCHARD", vehicle_type="LUXURY"),
             Vehicle(id=7, plate_number="SFA2007G", model="Kia EV6", zone="TAMPINES", vehicle_type="SEDAN"),
             Vehicle(id=8, plate_number="SFA2008H", model="Hyundai Staria", zone="WOODLANDS", vehicle_type="MPV"),
+            Vehicle(id=101, plate_number="EVA1101K", model="MG 4 EV", zone="PASIR_RIS_BLK_149A", vehicle_type="SEDAN"),
+            Vehicle(id=102, plate_number="EVA1102L", model="BYD Dolphin", zone="PASIR_RIS_BLK_149A", vehicle_type="COMPACT"),
+            Vehicle(id=103, plate_number="EVA1103M", model="Hyundai Kona Electric", zone="PASIR_RIS_BLK_152", vehicle_type="SUV"),
+            Vehicle(id=104, plate_number="EVA1104N", model="Ora Good Cat", zone="PASIR_RIS_ST_11", vehicle_type="COMPACT"),
+            Vehicle(id=105, plate_number="EVA1105P", model="Kia Niro EV", zone="PASIR_RIS_ST_11", vehicle_type="SUV"),
+            Vehicle(id=106, plate_number="EVA1106Q", model="BYD Seal", zone="LOYANG_AVE", vehicle_type="SEDAN"),
+            Vehicle(id=107, plate_number="EVA1107R", model="Volvo EX30", zone="LOYANG_AVE", vehicle_type="SUV"),
+            Vehicle(id=108, plate_number="EVA1108S", model="Peugeot e-2008", zone="FLORA_DR", vehicle_type="SUV", status=VehicleStatus.BOOKED.value),
+            Vehicle(id=109, plate_number="EVA1109T", model="Opel Mokka-e", zone="FLORA_DR", vehicle_type="COMPACT"),
+            Vehicle(id=110, plate_number="EVA1110U", model="MG 5 EV", zone="TAMPINES_ST_45", vehicle_type="SEDAN", status=VehicleStatus.MAINTENANCE_REQUIRED.value),
+            Vehicle(id=111, plate_number="EVA1111V", model="Nissan Leaf", zone="TAMPINES_ST_34", vehicle_type="COMPACT"),
+            Vehicle(id=112, plate_number="EVA1112W", model="Citroen e-C4", zone="TAMPINES_ST_34", vehicle_type="SEDAN"),
+            Vehicle(id=113, plate_number="EVA1113X", model="BYD Atto 3", zone="CHANGI", vehicle_type="SUV"),
+            Vehicle(id=114, plate_number="EVA1114Y", model="Tesla Model Y", zone="SMU", vehicle_type="SUV"),
+            Vehicle(id=115, plate_number="EVA1115Z", model="BMW iX1", zone="ORCHARD", vehicle_type="SUV"),
+            Vehicle(id=116, plate_number="EVB1116A", model="Hyundai Ioniq 5", zone="PASIR_RIS_BLK_152", vehicle_type="SUV"),
+            Vehicle(id=117, plate_number="EVB1117B", model="Kia EV6", zone="PASIR_RIS_BLK_149A", vehicle_type="SEDAN"),
+            Vehicle(id=118, plate_number="EVB1118C", model="Hyundai Kona Electric", zone="LOYANG_AVE", vehicle_type="SUV"),
         ]
         for vehicle in vehicles:
             if vehicle.id in existing_vehicle_ids:
@@ -92,64 +135,87 @@ def get_vehicle_or_404(db: Session, vehicle_id: int) -> Vehicle:
 
 @app.on_event("startup")
 def startup_event():
-    Base.metadata.create_all(bind=engine)
+    initialize_schema_with_retry(Base.metadata)
     seed_data()
     threading.Thread(target=start_grpc_server, daemon=True).start()
 
 
 @app.get("/vehicles")
 def list_vehicles(db: Session = Depends(get_db)):
-    return [
-        {
-            "id": vehicle.id,
-            "plateNumber": vehicle.plate_number,
-            "model": vehicle.model,
-            "zone": vehicle.zone,
-            "vehicleType": vehicle.vehicle_type,
-            "status": vehicle.status,
-        }
-        for vehicle in db.query(Vehicle).order_by(Vehicle.id).all()
-    ]
+    return [serialize_vehicle(vehicle) for vehicle in db.query(Vehicle).order_by(Vehicle.id).all()]
 
 
 @app.get("/vehicles/filters")
 def list_vehicle_filters(db: Session = Depends(get_db)):
-    vehicles = db.query(Vehicle).order_by(Vehicle.zone.asc(), Vehicle.vehicle_type.asc(), Vehicle.id.asc()).all()
-    locations = sorted({vehicle.zone for vehicle in vehicles})
+    vehicles = db.query(Vehicle).order_by(Vehicle.id.asc()).all()
+    location_ids = {vehicle.zone for vehicle in vehicles}
+    locations = [station["id"] for station in STATION_CATALOG if station["id"] in location_ids]
+    locations.extend(sorted(location_id for location_id in location_ids if location_id not in locations))
     vehicle_types = sorted({vehicle.vehicle_type for vehicle in vehicles})
-    return {"locations": locations, "vehicleTypes": vehicle_types}
+    return {
+        "locations": locations,
+        "vehicleTypes": vehicle_types,
+        "locationOptions": [
+            {
+                "id": station["id"],
+                "label": station["name"],
+                "address": station["address"],
+                "area": station["area"],
+                "latitude": station["latitude"],
+                "longitude": station["longitude"],
+            }
+            for station in (get_station(location_id) for location_id in locations)
+        ],
+    }
+
+
+@app.get("/vehicles/stations")
+def list_vehicle_stations(db: Session = Depends(get_db)):
+    vehicles = db.query(Vehicle).order_by(Vehicle.id.asc()).all()
+    counts: dict[str, dict[str, int]] = {}
+    for vehicle in vehicles:
+        bucket = counts.setdefault(vehicle.zone, {"totalVehicleCount": 0, "operationalAvailableCount": 0})
+        bucket["totalVehicleCount"] += 1
+        if vehicle.status == VehicleStatus.AVAILABLE.value:
+            bucket["operationalAvailableCount"] += 1
+
+    stations = []
+    known_ids = {vehicle.zone for vehicle in vehicles}
+    ordered_ids = [station["id"] for station in STATION_CATALOG if station["id"] in known_ids]
+    ordered_ids.extend(sorted(station_id for station_id in known_ids if station_id not in ordered_ids))
+    for station_id in ordered_ids:
+        station = get_station(station_id)
+        bucket = counts.get(station_id, {"totalVehicleCount": 0, "operationalAvailableCount": 0})
+        stations.append(
+            {
+                "stationId": station["id"],
+                "stationName": station["name"],
+                "stationAddress": station["address"],
+                "area": station["area"],
+                "latitude": station["latitude"],
+                "longitude": station["longitude"],
+                "totalVehicleCount": bucket["totalVehicleCount"],
+                "operationalAvailableCount": bucket["operationalAvailableCount"],
+                "nextAvailableTiming": station["nextAvailableTiming"],
+            }
+        )
+    return stations
 
 
 @app.get("/vehicles/availability")
-def get_vehicle_availability(zone: str | None = None, db: Session = Depends(get_db)):
+def get_vehicle_availability(zone: str | None = None, stationId: str | None = None, db: Session = Depends(get_db)):
     query = db.query(Vehicle)
-    if zone:
-        query = query.filter(Vehicle.zone == zone)
+    lookup_zone = stationId or zone
+    if lookup_zone:
+        query = query.filter(Vehicle.zone == lookup_zone)
     vehicles = query.filter(Vehicle.status == VehicleStatus.AVAILABLE.value).order_by(Vehicle.id).all()
-    return [
-        {
-            "vehicleId": vehicle.id,
-            "plateNumber": vehicle.plate_number,
-            "model": vehicle.model,
-            "zone": vehicle.zone,
-            "vehicleType": vehicle.vehicle_type,
-            "status": vehicle.status,
-        }
-        for vehicle in vehicles
-    ]
+    return [serialize_vehicle(vehicle) for vehicle in vehicles]
 
 
 @app.get("/vehicles/{vehicle_id}")
 def get_vehicle(vehicle_id: int, db: Session = Depends(get_db)):
     vehicle = get_vehicle_or_404(db, vehicle_id)
-    return {
-        "id": vehicle.id,
-        "plateNumber": vehicle.plate_number,
-        "model": vehicle.model,
-        "zone": vehicle.zone,
-        "vehicleType": vehicle.vehicle_type,
-        "status": vehicle.status,
-    }
+    return serialize_vehicle(vehicle)
 
 
 @app.patch("/vehicles/{vehicle_id}/status")
@@ -172,6 +238,22 @@ def create_telemetry(payload: TelemetryPayload, db: Session = Depends(get_db)):
     )
     db.add(snapshot)
     db.commit()
+    if telemetry_requires_attention(
+        battery_level=payload.batteryLevel,
+        tire_pressure_ok=payload.tirePressureOk,
+        severity=payload.severity,
+        fault_code=payload.faultCode,
+    ):
+        publish_event(
+            "vehicle.telemetry_alert",
+            {
+                "vehicleId": payload.vehicleId,
+                "batteryLevel": payload.batteryLevel,
+                "tirePressureOk": payload.tirePressureOk,
+                "severity": payload.severity,
+                "faultCode": payload.faultCode,
+            },
+        )
     return {"message": "Telemetry captured", "severity": snapshot.severity}
 
 

@@ -9,8 +9,15 @@ from sqlalchemy import Boolean, Date, DateTime, Float, Integer, String, func
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from fleetshare_common.app import create_app
-from fleetshare_common.database import Base, engine, get_db
-from fleetshare_common.pricing import APOLOGY_CREDIT, BASE_HOURLY_RATE, booking_quote, rerate_after_renewal, trip_adjustment
+from fleetshare_common.database import Base, engine, get_db, initialize_schema_with_retry
+from fleetshare_common.pricing import (
+    APOLOGY_CREDIT,
+    BASE_HOURLY_RATE,
+    booking_quote,
+    refunded_included_hours,
+    rerate_after_renewal,
+    trip_adjustment,
+)
 from fleetshare_common.timeutils import as_utc_naive, utcnow
 
 app = create_app("Pricing Service", "Atomic pricing and re-rating service.")
@@ -76,6 +83,7 @@ class FinalizeTripPayload(BaseModel):
     startedAt: datetime
     endedAt: datetime
     disrupted: bool = False
+    endReason: str | None = None
 
 
 class DisruptionCompensationPayload(BaseModel):
@@ -137,7 +145,7 @@ def seed_customers():
 
 @app.on_event("startup")
 def startup_event():
-    Base.metadata.create_all(bind=engine)
+    initialize_schema_with_retry(Base.metadata)
     seed_customers()
 
 
@@ -198,8 +206,8 @@ def response_from_ledger(ledger: UsageLedger, profile: CustomerProfile, *, idemp
         "renewalPending": ledger.renewal_pending,
         "reconciliationStatus": ledger.reconciliation_status,
         "allowanceHoursApplied": round(ledger.included_hours_applied, 2),
-        "postRenewalIncludedHoursApplied": round(ledger.included_hours_after_renewal, 2),
-        "provisionalPostMidnightHours": round(ledger.provisional_post_renewal_hours, 2),
+        "postRenewalIncludedHoursApplied": round(ledger.included_hours_after_renewal or 0.0, 2),
+        "provisionalPostMidnightHours": round(ledger.provisional_post_renewal_hours or 0.0, 2),
         "customerSummary": summary_from_profile(profile),
         "idempotent": idempotent,
     }
@@ -269,8 +277,17 @@ def finalize_trip_pricing(payload: FinalizeTripPayload, db: Session = Depends(ge
         hours_used_this_cycle=profile.hours_used_this_cycle,
         renewal_date=profile.renewal_date,
     )
-    adjustment = trip_adjustment(payload.disrupted, quote.total_hours, quote.estimated_price)
-    profile.hours_used_this_cycle = round(profile.hours_used_this_cycle + quote.included_hours_applied, 2)
+    adjustment = trip_adjustment(payload.disrupted, quote.total_hours, quote.estimated_price, payload.endReason)
+    restored_allowance_hours = refunded_included_hours(
+        payload.disrupted,
+        quote.total_hours,
+        quote.included_hours_applied,
+        payload.endReason,
+    )
+    profile.hours_used_this_cycle = round(
+        max(profile.hours_used_this_cycle + quote.included_hours_applied - restored_allowance_hours, 0.0),
+        2,
+    )
 
     if not existing:
         existing = UsageLedger(
@@ -289,6 +306,7 @@ def finalize_trip_pricing(payload: FinalizeTripPayload, db: Session = Depends(ge
     existing.total_hours = quote.total_hours
     existing.current_cycle_hours = quote.current_cycle_hours
     existing.included_hours_applied = quote.included_hours_applied
+    existing.included_hours_after_renewal = 0.0
     existing.billable_hours = quote.billable_hours
     existing.provisional_post_renewal_hours = quote.provisional_post_midnight_hours
     existing.provisional_charge = quote.provisional_charge
@@ -304,8 +322,14 @@ def finalize_trip_pricing(payload: FinalizeTripPayload, db: Session = Depends(ge
 
 
 @app.get("/pricing/trip-adjustment")
-def get_trip_adjustment(tripId: int, durationHours: float = 0.0, disrupted: bool = False, baseFare: float | None = None):
-    return {"tripId": tripId, **trip_adjustment(disrupted, durationHours, baseFare)}
+def get_trip_adjustment(
+    tripId: int,
+    durationHours: float = 0.0,
+    disrupted: bool = False,
+    baseFare: float | None = None,
+    endReason: str | None = None,
+):
+    return {"tripId": tripId, **trip_adjustment(disrupted, durationHours, baseFare, endReason)}
 
 
 @app.post("/pricing/disruption-compensation")

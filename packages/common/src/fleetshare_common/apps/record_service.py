@@ -8,7 +8,7 @@ from sqlalchemy import JSON, DateTime, Float, Integer, String, func
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from fleetshare_common.app import create_app
-from fleetshare_common.database import Base, engine, get_db
+from fleetshare_common.database import Base, get_db, initialize_schema_with_retry
 
 app = create_app("Record Service", "Atomic evidence and record management service.")
 
@@ -53,7 +53,7 @@ class RecordPatchPayload(BaseModel):
 
 @app.on_event("startup")
 def startup_event():
-    Base.metadata.create_all(bind=engine)
+    initialize_schema_with_retry(Base.metadata)
 
 
 def record_to_dict(record: Record) -> dict:

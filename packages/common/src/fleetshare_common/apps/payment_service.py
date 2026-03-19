@@ -8,7 +8,7 @@ from sqlalchemy import JSON, DateTime, Float, Integer, String, func
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from fleetshare_common.app import create_app
-from fleetshare_common.database import Base, engine, get_db, session_scope
+from fleetshare_common.database import Base, get_db, initialize_schema_with_retry, session_scope
 from fleetshare_common.messaging import start_consumer
 
 app = create_app("Payment Service", "Atomic simulated payment execution service.")
@@ -39,7 +39,7 @@ class PaymentPayload(BaseModel):
 
 @app.on_event("startup")
 def startup_event():
-    Base.metadata.create_all(bind=engine)
+    initialize_schema_with_retry(Base.metadata)
     start_consumer("payment-adjustment-service", ["payment.refund_required", "payment.adjustment_required"], handle_payment_event)
 
 
@@ -97,4 +97,3 @@ def handle_payment_event(event: dict):
                 payload_json=payload,
             )
         )
-

@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     service_name: str = "fleetshare"
     service_port: int = 8000
     database_url: str = ""
+    db_startup_timeout_seconds: int = 60
+    db_startup_retry_interval_seconds: int = 2
     rabbitmq_url: str = "amqp://guest:guest@rabbitmq:5672/"
     rabbitmq_exchange: str = "fleetshare.events"
     minio_endpoint: str = "minio:9000"
@@ -49,4 +51,3 @@ def get_settings() -> Settings:
     service_name = os.getenv("SERVICE_NAME", "fleetshare")
     service_port = int(os.getenv("SERVICE_PORT", "8000"))
     return Settings(service_name=service_name, service_port=service_port)
-

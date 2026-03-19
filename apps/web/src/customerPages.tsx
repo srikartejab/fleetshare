@@ -1,5 +1,5 @@
 import { type Dispatch, type ReactNode, type SetStateAction, useEffect, useState } from 'react'
-import { Link, NavLink, useNavigate, useParams } from 'react-router-dom'
+import { Link, NavLink, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import {
   formatDate,
@@ -7,7 +7,19 @@ import {
   formatHours,
   formatMoney,
 } from './appTypes'
-import type { Booking, CustomerSummary, InspectionSubmissionResult, Notification, RecordItem, Trip, Vehicle, VehicleFilters } from './appTypes'
+import type {
+  Booking,
+  CustomerSummary,
+  EndTripResult,
+  InspectionSubmissionResult,
+  InternalDamageResult,
+  Notification,
+  PostTripInspectionResult,
+  RecordItem,
+  Trip,
+  Vehicle,
+  VehicleFilters,
+} from './appTypes'
 
 export function LandingPage({
   customers,
@@ -572,7 +584,6 @@ export function TripsPage({
   completedTrips,
   latestInspectionResult,
   onCancelModerateDamage,
-  onEndTrip,
   onStartTrip,
   onSubmitInspection,
   upcomingBookings,
@@ -584,7 +595,6 @@ export function TripsPage({
   completedTrips: Trip[]
   latestInspectionResult: InspectionSubmissionResult | null
   onCancelModerateDamage: (bookingId: number, vehicleId: number) => Promise<void>
-  onEndTrip: (bookingId: number, tripId: number, vehicleId: number, endReason: string) => Promise<void>
   onStartTrip: (bookingId: number, vehicleId: number, notes: string) => Promise<void>
   onSubmitInspection: (bookingId: number, vehicleId: number, notes: string, photo: File | null) => Promise<void>
   upcomingBookings: Booking[]
@@ -603,7 +613,6 @@ export function TripsPage({
   const [inspectionNotes, setInspectionNotes] = useState('Vehicle exterior looks clean.')
   const [inspectionPhoto, setInspectionPhoto] = useState<File | null>(null)
   const [startNotes, setStartNotes] = useState('')
-  const [endReason, setEndReason] = useState('USER_COMPLETED')
 
   return (
     <div className="stack">
@@ -693,16 +702,15 @@ export function TripsPage({
             <>
               <p><strong>Trip #{activeTrip.tripId}</strong></p>
               <p>Vehicle unlocked and trip started {formatDateTime(activeTrip.startedAt)}</p>
-              <label>
-                End reason
-                <select value={endReason} onChange={(event) => setEndReason(event.target.value)}>
-                  <option value="USER_COMPLETED">Trip completed normally</option>
-                  <option value="SEVERE_INTERNAL_FAULT">Vehicle issue during trip</option>
-                </select>
-              </label>
-              <button className="primary" onClick={() => void onEndTrip(activeTrip.bookingId, activeTrip.tripId, activeTrip.vehicleId, endReason)} type="button">
-                End trip
-              </button>
+              <p>Use the fault report flow if the car develops an issue during the trip, or start the normal end-trip flow when you are ready to return it.</p>
+              <div className="button-strip">
+                <Link className="primary link-button" to="/app/trips/end-inspection?reason=USER_COMPLETED">
+                  End trip
+                </Link>
+                <Link className="ghost-link" to="/app/trips/report-problem">
+                  Report vehicle problem
+                </Link>
+              </div>
             </>
           ) : (
             <div className="empty-card"><p>No active trip yet. A cleared inspection alone does not start the trip; the user must click Unlock vehicle.</p></div>
@@ -740,6 +748,357 @@ export function TripsPage({
           {completedTrips.length === 0 ? <div className="empty-card"><p>No completed trips yet.</p></div> : null}
         </div>
       </section>
+    </div>
+  )
+}
+
+export function TripProblemPage({
+  activeTrip,
+  onSubmitProblem,
+}: {
+  activeTrip: Trip | null
+  onSubmitProblem: (notes: string) => Promise<InternalDamageResult>
+}) {
+  const navigate = useNavigate()
+  const [notes, setNotes] = useState('Dashboard warning light came on while driving.')
+
+  if (!activeTrip) {
+    return (
+      <section className="panel-card">
+        <h2>No active trip</h2>
+        <p>You can only report a vehicle problem while a trip is active.</p>
+        <Link className="primary link-button" to="/app/trips">
+          Back to trip hub
+        </Link>
+      </section>
+    )
+  }
+
+  return (
+    <section className="panel-card">
+      <p className="eyebrow">Active trip problem report</p>
+      <h1>Tell FleetShare what is happening with the car.</h1>
+      <p className="hero-copy">
+        Submit a short description of the fault. FleetShare will assess the issue against the latest telemetry and tell you whether to stop and end the trip.
+      </p>
+      <label>
+        Problem description
+        <textarea rows={5} value={notes} onChange={(event) => setNotes(event.target.value)} />
+      </label>
+      <div className="button-strip">
+        <button
+          className="primary"
+          disabled={!notes.trim()}
+          onClick={() => {
+            void onSubmitProblem(notes).then(() => navigate('/app/trips/problem-advisory'))
+          }}
+          type="button"
+        >
+          Submit problem
+        </button>
+        <Link className="ghost-link" to="/app/trips">
+          Back
+        </Link>
+      </div>
+    </section>
+  )
+}
+
+export function TripProblemResultPage({
+  activeTrip,
+  reportedProblem,
+}: {
+  activeTrip: Trip | null
+  reportedProblem: InternalDamageResult | null
+}) {
+  if (!reportedProblem) {
+    return (
+      <section className="panel-card">
+        <h2>No problem report found</h2>
+        <p>Start from the active trip page to submit a vehicle problem.</p>
+        <Link className="primary link-button" to="/app/trips">
+          Back to trip hub
+        </Link>
+      </section>
+    )
+  }
+
+  return (
+    <section className="panel-card">
+      <p className="eyebrow">Problem assessment</p>
+      <h1>{reportedProblem.blocked ? 'Stop safely and end the trip.' : 'The report has been recorded.'}</h1>
+      <div className={`notice-card ${reportedProblem.blocked ? 'notice-card--error' : 'notice-card--success'}`}>
+        <strong>Severity: {reportedProblem.severity}</strong>
+        <p>{reportedProblem.recommendedAction}</p>
+        {reportedProblem.duplicateSuppressed ? <p>FleetShare detected an existing matching incident and avoided repeating the downstream recovery cycle.</p> : null}
+      </div>
+      <div className="button-strip">
+        {reportedProblem.blocked && activeTrip ? (
+          <Link className="primary link-button" to="/app/trips/end-inspection?reason=SEVERE_INTERNAL_FAULT">
+            Continue to end trip
+          </Link>
+        ) : (
+          <Link className="primary link-button" to="/app/trips">
+            Return to trip hub
+          </Link>
+        )}
+      </div>
+    </section>
+  )
+}
+
+export function EndTripInspectionPage({
+  activeTrip,
+  onSubmitInspection,
+  vehicles,
+}: {
+  activeTrip: Trip | null
+  onSubmitInspection: (notes: string, photo: File | null) => Promise<PostTripInspectionResult>
+  vehicles: Vehicle[]
+}) {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const [notes, setNotes] = useState('Vehicle returned in good condition.')
+  const [photo, setPhoto] = useState<File | null>(null)
+  const endReason = searchParams.get('reason') ?? 'USER_COMPLETED'
+  const vehicle = vehicles.find((item) => item.id === activeTrip?.vehicleId) ?? null
+
+  if (!activeTrip) {
+    return (
+      <section className="panel-card">
+        <h2>No active trip</h2>
+        <p>The end-trip wizard starts from an active trip.</p>
+        <Link className="primary link-button" to="/app/trips">
+          Back to trip hub
+        </Link>
+      </section>
+    )
+  }
+
+  return (
+    <section className="panel-card">
+      <p className="eyebrow">End trip step 1 of 3</p>
+      <h1>Complete the mandatory post-trip inspection.</h1>
+      <p className="hero-copy">
+        Record the exterior condition after use before you confirm the lock command for {vehicle?.model ?? `vehicle #${activeTrip.vehicleId}`}.
+      </p>
+      <label>
+        Inspection notes
+        <textarea rows={4} value={notes} onChange={(event) => setNotes(event.target.value)} />
+      </label>
+      <label>
+        Optional photo
+        <input type="file" accept="image/*" onChange={(event) => setPhoto(event.target.files?.[0] ?? null)} />
+      </label>
+      <div className="button-strip">
+        <button
+          className="primary"
+          onClick={() => {
+            void onSubmitInspection(notes, photo).then(() => navigate(`/app/trips/end-review?reason=${encodeURIComponent(endReason)}`))
+          }}
+          type="button"
+        >
+          Submit inspection
+        </button>
+        <Link className="ghost-link" to="/app/trips">
+          Cancel
+        </Link>
+      </div>
+    </section>
+  )
+}
+
+export function EndTripReviewPage({
+  activeTrip,
+  postTripInspectionResult,
+  vehicles,
+}: {
+  activeTrip: Trip | null
+  postTripInspectionResult: PostTripInspectionResult | null
+  vehicles: Vehicle[]
+}) {
+  const [searchParams] = useSearchParams()
+  const endReason = searchParams.get('reason') ?? 'USER_COMPLETED'
+  const vehicle = vehicles.find((item) => item.id === activeTrip?.vehicleId) ?? null
+
+  if (!postTripInspectionResult) {
+    return (
+      <section className="panel-card">
+        <h2>No post-trip inspection found</h2>
+        <p>Submit the mandatory inspection first.</p>
+        <Link className="primary link-button" to={`/app/trips/end-inspection?reason=${encodeURIComponent(endReason)}`}>
+          Go to inspection
+        </Link>
+      </section>
+    )
+  }
+
+  return (
+    <section className="panel-card">
+      <p className="eyebrow">End trip step 2 of 3</p>
+      <h1>Review the post-trip inspection result.</h1>
+      <div className={`notice-card ${postTripInspectionResult.followUpRequired ? 'notice-card--error' : 'notice-card--success'}`}>
+        <strong>{vehicle?.model ?? `Vehicle #${postTripInspectionResult.vehicleId}`}</strong>
+        <p>Severity: {postTripInspectionResult.assessmentResult.severity}</p>
+        <p>{postTripInspectionResult.warningMessage}</p>
+      </div>
+      {endReason === 'SEVERE_INTERNAL_FAULT' ? (
+        <div className="notice-card">
+          <strong>Fault-driven end trip</strong>
+          <p>You reported a severe in-trip issue. Once you confirm the lock command, FleetShare will finish the disrupted-trip flow and compute any compensation.</p>
+        </div>
+      ) : null}
+      <div className="button-strip">
+        <Link className="primary link-button" to={`/app/trips/end-confirm?reason=${encodeURIComponent(endReason)}`}>
+          Continue to lock confirmation
+        </Link>
+      </div>
+    </section>
+  )
+}
+
+export function EndTripConfirmPage({
+  activeTrip,
+  onConfirmEndTrip,
+  postTripInspectionResult,
+  vehicles,
+}: {
+  activeTrip: Trip | null
+  onConfirmEndTrip: (endReason: string) => Promise<EndTripResult>
+  postTripInspectionResult: PostTripInspectionResult | null
+  vehicles: Vehicle[]
+}) {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const endReason = searchParams.get('reason') ?? 'USER_COMPLETED'
+  const vehicle = vehicles.find((item) => item.id === activeTrip?.vehicleId) ?? null
+
+  if (!activeTrip || !postTripInspectionResult) {
+    return (
+      <section className="panel-card">
+        <h2>End-trip wizard is incomplete</h2>
+        <p>Complete the inspection step before confirming the lock action.</p>
+        <Link className="primary link-button" to={`/app/trips/end-inspection?reason=${encodeURIComponent(endReason)}`}>
+          Go to inspection
+        </Link>
+      </section>
+    )
+  }
+
+  return (
+    <section className="panel-card">
+      <p className="eyebrow">End trip step 3 of 3</p>
+      <h1>Confirm that the car is parked and ready to lock.</h1>
+      <p className="hero-copy">
+        When you confirm, FleetShare will send the final lock command for {vehicle?.model ?? `vehicle #${activeTrip.vehicleId}`} and complete the end-trip flow.
+      </p>
+      <div className="notice-card">
+        <strong>Customer confirmation required</strong>
+        <p>Only click this after the car is stopped safely, parked correctly, and you are ready for FleetShare to lock it.</p>
+      </div>
+      <div className="button-strip">
+        <button
+          className="primary"
+          onClick={() => {
+            void onConfirmEndTrip(endReason).then(() => navigate(`/app/trips/end-complete?reason=${encodeURIComponent(endReason)}`))
+          }}
+          type="button"
+        >
+          Lock car and end trip
+        </button>
+      </div>
+    </section>
+  )
+}
+
+export function EndTripCompletePage({
+  endTripResult,
+  postTripInspectionResult,
+}: {
+  endTripResult: EndTripResult | null
+  postTripInspectionResult: PostTripInspectionResult | null
+}) {
+  if (!endTripResult) {
+    return (
+      <section className="panel-card">
+        <h2>No completed end-trip result</h2>
+        <p>Run the end-trip flow from the trip hub first.</p>
+        <Link className="primary link-button" to="/app/trips">
+          Back to trip hub
+        </Link>
+      </section>
+    )
+  }
+
+  return (
+    <div className="stack">
+      <section className="booking-hero">
+        <div>
+          <p className="eyebrow">Trip completed</p>
+          <h1>Your trip has been locked and closed.</h1>
+          <p className="hero-copy">
+            FleetShare has stored the post-trip inspection, sent the lock command, and finalized the fare adjustment outcome for this journey.
+          </p>
+        </div>
+        <div className="summary-panel">
+          <div>
+            <span>Status</span>
+            <strong>{endTripResult.tripStatus}</strong>
+          </div>
+          <div>
+            <span>Vehicle locked</span>
+            <strong>{endTripResult.vehicleLocked ? 'Yes' : 'No'}</strong>
+          </div>
+          <div>
+            <span>Final fare</span>
+            <strong>{formatMoney(endTripResult.adjustedFare)}</strong>
+          </div>
+        </div>
+      </section>
+      <section className="dashboard-grid">
+        <article className="panel-card">
+          <p className="mini-label">Fare outcome</p>
+          <h2>Billing summary</h2>
+          <div className="quote-grid">
+            <div>
+              <span>Final fare</span>
+              <strong>{formatMoney(endTripResult.adjustedFare)}</strong>
+            </div>
+            <div>
+              <span>Discount applied</span>
+              <strong>{formatMoney(endTripResult.discountAmount)}</strong>
+            </div>
+            <div>
+              <span>Allowance used</span>
+              <strong>{formatHours(endTripResult.allowanceHoursApplied)}</strong>
+            </div>
+            <div>
+              <span>Refund pending</span>
+              <strong>{endTripResult.refundPending ? 'Yes' : 'No'}</strong>
+            </div>
+          </div>
+        </article>
+        <article className="panel-card">
+          <p className="mini-label">Inspection outcome</p>
+          <h2>Post-trip evidence</h2>
+          {postTripInspectionResult ? (
+            <>
+              <p>Severity: {postTripInspectionResult.assessmentResult.severity}</p>
+              <p>{postTripInspectionResult.warningMessage}</p>
+            </>
+          ) : (
+            <p>No post-trip inspection record was stored in this session.</p>
+          )}
+        </article>
+      </section>
+      <div className="button-strip">
+        <Link className="primary link-button" to="/app/trips">
+          Return to trip hub
+        </Link>
+        <Link className="ghost-link" to="/app/account">
+          View account summary
+        </Link>
+      </div>
     </div>
   )
 }

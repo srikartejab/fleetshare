@@ -8,7 +8,7 @@ from sqlalchemy import DateTime, Integer, String, func
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from fleetshare_common.app import create_app
-from fleetshare_common.database import Base, engine, get_db
+from fleetshare_common.database import Base, get_db, initialize_schema_with_retry
 
 app = create_app("Maintenance Service", "Atomic maintenance ticket service.")
 
@@ -36,7 +36,7 @@ class TicketPayload(BaseModel):
 
 @app.on_event("startup")
 def startup_event():
-    Base.metadata.create_all(bind=engine)
+    initialize_schema_with_retry(Base.metadata)
 
 
 @app.get("/maintenance/tickets")
@@ -84,4 +84,3 @@ def get_ticket(ticket_id: int, db: Session = Depends(get_db)):
         "estimatedDurationHours": ticket.estimated_duration_hours,
         "status": ticket.status,
     }
-
