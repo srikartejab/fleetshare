@@ -46,20 +46,30 @@ def test_refunded_included_hours_fully_restores_internal_fault_allowance():
 
 
 class _FakeQuery:
+    def __init__(self, items=None):
+        self.items = items or []
+
     def filter(self, *_args, **_kwargs):
+        return self
+
+    def order_by(self, *_args, **_kwargs):
         return self
 
     def first(self):
         return None
 
+    def all(self):
+        return self.items
+
 
 class _FakeDb:
-    def __init__(self):
+    def __init__(self, items=None):
         self.added = []
         self.committed = False
+        self.items = items or []
 
     def query(self, _model):
-        return _FakeQuery()
+        return _FakeQuery(self.items)
 
     def add(self, item):
         self.added.append(item)
@@ -132,6 +142,64 @@ def test_finalize_trip_pricing_only_keeps_uncompensated_allowance_usage(monkeypa
     assert result["customerSummary"]["hoursUsedThisCycle"] == 1.0
     assert result["customerSummary"]["remainingHoursThisCycle"] == 5.0
     assert result["allowanceHoursApplied"] == 3.0
+
+
+def test_get_customer_ledger_returns_wallet_entries(monkeypatch):
+    ledger_entry = SimpleNamespace(
+        id=7,
+        booking_id=11,
+        trip_id=21,
+        user_id="user-1001",
+        start_time=datetime(2026, 3, 19, 23, 0),
+        end_time=datetime(2026, 3, 20, 1, 0),
+        total_hours=2.0,
+        current_cycle_hours=1.0,
+        included_hours_applied=1.0,
+        included_hours_after_renewal=1.0,
+        billable_hours=0.0,
+        provisional_post_renewal_hours=1.0,
+        provisional_charge=20.0,
+        base_charge=20.0,
+        final_charge=0.0,
+        refund_amount=20.0,
+        discount_amount=0.0,
+        renewal_pending=False,
+        reconciliation_status="COMPLETED",
+        created_at=datetime(2026, 3, 20, 1, 5),
+        updated_at=datetime(2026, 3, 20, 1, 10),
+    )
+    db = _FakeDb([ledger_entry])
+
+    monkeypatch.setattr(pricing_service, "get_profile_or_404", lambda _db, _user_id: object())
+
+    result = pricing_service.get_customer_ledger("user-1001", db)
+
+    assert result == [
+        {
+            "ledgerId": 7,
+            "bookingId": 11,
+            "tripId": 21,
+            "userId": "user-1001",
+            "entryType": "RENEWAL",
+            "startTime": "2026-03-19T23:00:00",
+            "endTime": "2026-03-20T01:00:00",
+            "totalHours": 2.0,
+            "currentCycleHours": 1.0,
+            "includedHoursApplied": 1.0,
+            "includedHoursAfterRenewal": 1.0,
+            "billableHours": 0.0,
+            "provisionalPostMidnightHours": 1.0,
+            "provisionalCharge": 20.0,
+            "baseCharge": 20.0,
+            "finalPrice": 0.0,
+            "refundAmount": 20.0,
+            "discountAmount": 0.0,
+            "renewalPending": False,
+            "reconciliationStatus": "COMPLETED",
+            "createdAt": "2026-03-20T01:05:00",
+            "updatedAt": "2026-03-20T01:10:00",
+        }
+    ]
 
 
 def test_mock_ai_detects_severe_damage_keywords():

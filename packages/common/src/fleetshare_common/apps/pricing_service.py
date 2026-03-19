@@ -213,6 +213,39 @@ def response_from_ledger(ledger: UsageLedger, profile: CustomerProfile, *, idemp
     }
 
 
+def ledger_entry_to_dict(ledger: UsageLedger) -> dict:
+    entry_type = "RENEWAL"
+    if ledger.reconciliation_status != "COMPLETED":
+        entry_type = "USAGE"
+    elif ledger.refund_amount > 0 or ledger.included_hours_after_renewal > 0:
+        entry_type = "RENEWAL"
+
+    return {
+        "ledgerId": ledger.id,
+        "bookingId": ledger.booking_id,
+        "tripId": ledger.trip_id,
+        "userId": ledger.user_id,
+        "entryType": entry_type,
+        "startTime": ledger.start_time.isoformat() if ledger.start_time else None,
+        "endTime": ledger.end_time.isoformat() if ledger.end_time else None,
+        "totalHours": round(ledger.total_hours, 2),
+        "currentCycleHours": round(ledger.current_cycle_hours, 2),
+        "includedHoursApplied": round(ledger.included_hours_applied, 2),
+        "includedHoursAfterRenewal": round(ledger.included_hours_after_renewal, 2),
+        "billableHours": round(ledger.billable_hours, 2),
+        "provisionalPostMidnightHours": round(ledger.provisional_post_renewal_hours, 2),
+        "provisionalCharge": round(ledger.provisional_charge, 2),
+        "baseCharge": round(ledger.base_charge, 2),
+        "finalPrice": round(ledger.final_charge, 2),
+        "refundAmount": round(ledger.refund_amount, 2),
+        "discountAmount": round(ledger.discount_amount, 2),
+        "renewalPending": ledger.renewal_pending,
+        "reconciliationStatus": ledger.reconciliation_status,
+        "createdAt": ledger.created_at.isoformat() if ledger.created_at else None,
+        "updatedAt": ledger.updated_at.isoformat() if ledger.updated_at else None,
+    }
+
+
 @app.get("/pricing/customers")
 def list_customers(db: Session = Depends(get_db)):
     return [summary_from_profile(profile) for profile in db.query(CustomerProfile).order_by(CustomerProfile.user_id).all()]
@@ -221,6 +254,18 @@ def list_customers(db: Session = Depends(get_db)):
 @app.get("/pricing/customers/{user_id}/summary")
 def get_customer_summary(user_id: str, db: Session = Depends(get_db)):
     return summary_from_profile(get_profile_or_404(db, user_id))
+
+
+@app.get("/pricing/customers/{user_id}/ledger")
+def get_customer_ledger(user_id: str, db: Session = Depends(get_db)):
+    get_profile_or_404(db, user_id)
+    rows = (
+        db.query(UsageLedger)
+        .filter(UsageLedger.user_id == user_id)
+        .order_by(UsageLedger.updated_at.desc(), UsageLedger.id.desc())
+        .all()
+    )
+    return [ledger_entry_to_dict(row) for row in rows]
 
 
 @app.post("/pricing/customers/{user_id}/renewal")

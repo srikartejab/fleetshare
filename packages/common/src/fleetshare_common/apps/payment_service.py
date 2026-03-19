@@ -57,6 +57,7 @@ def list_payments(userId: str | None = None, db: Session = Depends(get_db)):
             "amount": payment.amount,
             "reason": payment.reason,
             "status": payment.status,
+            "createdAt": payment.created_at.isoformat() if payment.created_at else None,
         }
         for payment in query.order_by(PaymentRecord.id.desc()).all()
     ]

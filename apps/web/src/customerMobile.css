@@ -292,6 +292,16 @@
   color: #fff;
 }
 
+.customer-hero-card--blue .customer-stat-grid div {
+  background: rgba(244, 248, 252, 0.96);
+  box-shadow: inset 0 0 0 1px rgba(19, 55, 92, 0.08);
+}
+
+.customer-hero-card--blue .customer-stat-grid div span,
+.customer-hero-card--blue .customer-stat-grid div strong {
+  color: #173150;
+}
+
 .customer-hero-card--angled {
   position: relative;
 }
@@ -430,6 +440,66 @@
   padding: 0.95rem 1rem;
   border-radius: 1rem;
   background: rgba(238, 245, 252, 0.92);
+}
+
+.customer-transaction-card {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1rem;
+  border-radius: 1rem;
+  background: rgba(238, 245, 252, 0.92);
+}
+
+.customer-transaction-card__top,
+.customer-transaction-card__meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.customer-transaction-card__eyebrow,
+.customer-transaction-card__subtitle,
+.customer-transaction-card__detail,
+.customer-transaction-card__meta span {
+  margin: 0;
+}
+
+.customer-transaction-card__eyebrow {
+  color: #5d7c9f;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.customer-transaction-card__subtitle {
+  color: #173150;
+  font-weight: 700;
+}
+
+.customer-transaction-card__detail {
+  color: #5f7693;
+}
+
+.customer-transaction-card__meta {
+  flex-wrap: wrap;
+}
+
+.customer-transaction-amount {
+  white-space: nowrap;
+}
+
+.customer-transaction-amount--credit {
+  color: #2f7a47;
+}
+
+.customer-transaction-amount--debit {
+  color: #a04f0d;
+}
+
+.customer-transaction-amount--hours {
+  color: #1c6fb1;
 }
 
 .customer-list-card strong,
@@ -705,6 +775,11 @@
   .customer-booking-card__top,
   .customer-timeline {
     grid-template-columns: 1fr;
+  }
+
+  .customer-transaction-card__top {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .customer-page-header h1 {

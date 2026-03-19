@@ -136,6 +136,32 @@ export type Payment = {
   amount: number
   reason: string
   status: string
+  createdAt?: string | null
+}
+
+export type WalletLedgerEntry = {
+  ledgerId: number
+  bookingId: number
+  tripId?: number | null
+  userId: string
+  entryType: 'USAGE' | 'RENEWAL'
+  startTime?: string | null
+  endTime?: string | null
+  totalHours: number
+  currentCycleHours: number
+  includedHoursApplied: number
+  includedHoursAfterRenewal: number
+  billableHours: number
+  provisionalPostMidnightHours: number
+  provisionalCharge: number
+  baseCharge: number
+  finalPrice: number
+  refundAmount: number
+  discountAmount: number
+  renewalPending: boolean
+  reconciliationStatus: string
+  createdAt?: string | null
+  updatedAt?: string | null
 }
 
 export type Notification = {

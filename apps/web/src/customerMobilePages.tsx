@@ -19,6 +19,7 @@ import type {
   RecordItem,
   Trip,
   Vehicle,
+  WalletLedgerEntry,
 } from './appTypes'
 import './customerMobile.css'
 
@@ -44,6 +45,7 @@ function pageTitle(pathname: string) {
   if (pathname.startsWith('/app/trips/end-')) return 'End Trip'
   if (pathname === '/app/trips/report-problem') return 'Report Problem'
   if (pathname === '/app/trips/problem-advisory') return 'Problem Advisory'
+  if (pathname === '/app/wallet') return 'Wallet'
   if (pathname === '/app/account') return 'Account'
   if (pathname === '/app/trips') return 'Bookings'
   return 'Home'
@@ -97,10 +99,12 @@ function TripsIcon() {
   )
 }
 
-function SwitchIcon() {
+function WalletIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path d="M8 7h10M14 4l4 3-4 3M16 17H6M10 14l-4 3 4 3" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" />
+      <path d="M5 8.2a2.2 2.2 0 0 1 2.2-2.2h10.1a1.7 1.7 0 0 1 1.7 1.7v1.1H7.2A2.2 2.2 0 0 0 5 11v5a2.2 2.2 0 0 0 2.2 2.2h10.6A1.2 1.2 0 0 0 19 17V8.2" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.9" />
+      <path d="M19 10.2h-5.7a1.8 1.8 0 0 0 0 3.6H19" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.9" />
+      <circle cx="13.5" cy="12" r="0.85" fill="currentColor" />
     </svg>
   )
 }
@@ -295,11 +299,7 @@ function BookingTimeline({
   )
 }
 
-function BottomNav({
-  onSwitchUser,
-}: {
-  onSwitchUser: () => void
-}) {
+function BottomNav() {
   return (
     <nav className="customer-bottomnav">
       <NavLink className={({ isActive }) => `customer-bottomnav__item ${isActive ? 'customer-bottomnav__item--active' : ''}`} to="/app/account">
@@ -317,10 +317,10 @@ function BottomNav({
         <TripsIcon />
         <span>Bookings</span>
       </NavLink>
-      <button className="customer-bottomnav__item" onClick={onSwitchUser} type="button">
-        <SwitchIcon />
-        <span>Switch</span>
-      </button>
+      <NavLink className={({ isActive }) => `customer-bottomnav__item ${isActive ? 'customer-bottomnav__item--active' : ''}`} to="/app/wallet">
+        <WalletIcon />
+        <span>Wallet</span>
+      </NavLink>
     </nav>
   )
 }
@@ -435,7 +435,7 @@ export function CustomerShell({
       <main className="customer-page customer-mobile-content">
         {children}
       </main>
-      <BottomNav onSwitchUser={onSwitchUser} />
+      <BottomNav />
     </div>
   )
 }
@@ -755,8 +755,8 @@ export function BookingDetailsPage({
 
 export function TripsPage({
   activeTrip,
-  bookings,
   completedTrips,
+  historicalBookings,
   latestInspectionResult,
   onCancelModerateDamage,
   onStartTrip,
@@ -766,8 +766,8 @@ export function TripsPage({
   records,
 }: {
   activeTrip: Trip | null
-  bookings: Booking[]
   completedTrips: Trip[]
+  historicalBookings: Booking[]
   latestInspectionResult: InspectionSubmissionResult | null
   onCancelModerateDamage: (bookingId: number, vehicleId: number) => Promise<void>
   onStartTrip: (bookingId: number, vehicleId: number, notes: string) => Promise<void>
@@ -900,28 +900,32 @@ export function TripsPage({
         </>
       ) : (
         <section className="customer-list-stack">
-          {completedTrips.map((trip) => {
-            const booking = bookings.find((item) => item.bookingId === trip.bookingId)
-            const vehicle = vehicles.find((item) => item.id === trip.vehicleId)
+          {historicalBookings.map((booking) => {
+            const trip = completedTrips.find((item) => item.bookingId === booking.bookingId) ?? null
+            const vehicle = vehicles.find((item) => item.id === booking.vehicleId)
             return (
-              <article className="customer-booking-card customer-booking-card--compact" key={trip.tripId}>
+              <article className="customer-booking-card customer-booking-card--compact" key={booking.bookingId}>
                 <div className="customer-booking-card__top">
                   <div>
-                    <p className="customer-booking-card__code">T-{String(trip.tripId).padStart(6, '0')}</p>
-                    <h2>{vehicleDisplayName(vehicle, trip.vehicleId)}</h2>
-                    <span className="customer-status-tag">{booking?.status ?? trip.status}</span>
+                    <p className="customer-booking-card__code">B-{String(booking.bookingId).padStart(6, '0')}</p>
+                    <h2>{vehicleDisplayName(vehicle, booking.vehicleId)}</h2>
+                    <span className="customer-status-tag">{booking.status}</span>
                   </div>
                   <CarArtwork />
                 </div>
-                <BookingTimeline endTime={trip.endedAt} location={booking?.pickupLocation ?? 'Return station unavailable'} startTime={trip.startedAt} />
+                <BookingTimeline
+                  endTime={trip?.endedAt ?? booking.endTime}
+                  location={booking.pickupLocation ?? 'Return station unavailable'}
+                  startTime={trip?.startedAt ?? booking.startTime}
+                />
                 <div className="customer-link-row">
-                  <strong>{formatMoney(booking?.finalPrice ?? booking?.displayedPrice ?? 0)}</strong>
-                  {booking ? <Link to={`/app/bookings/${booking.bookingId}`}>View Details</Link> : null}
+                  <strong>{formatMoney(booking.finalPrice ?? booking.displayedPrice ?? 0)}</strong>
+                  <Link to={`/app/bookings/${booking.bookingId}`}>View Details</Link>
                 </div>
               </article>
             )
           })}
-          {completedTrips.length === 0 ? <EmptyState body="Once this customer completes a trip, it will appear here." title="No past bookings" /> : null}
+          {historicalBookings.length === 0 ? <EmptyState body="Once this customer has a completed or cancelled booking, it will appear here." title="No past bookings" /> : null}
         </section>
       )}
     </div>
@@ -1230,14 +1234,217 @@ export function EndTripCompletePage({
   )
 }
 
+function titleCaseWords(value: string) {
+  return value
+    .replaceAll(/[_\.]+/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (character) => character.toUpperCase())
+}
+
+export function WalletPage({
+  customerSummary,
+  bookings,
+  payments,
+  ledgerEntries,
+}: {
+  customerSummary: CustomerSummary | null
+  bookings: Booking[]
+  payments: Payment[]
+  ledgerEntries: WalletLedgerEntry[]
+}) {
+  const bookingsById = new Map(bookings.map((booking) => [booking.bookingId, booking]))
+  const paymentsByBookingId = new Map<number, Payment[]>()
+  const ledgerBookingIds = new Set(ledgerEntries.map((entry) => entry.bookingId))
+
+  for (const payment of payments) {
+    if (!payment.bookingId) continue
+    const existing = paymentsByBookingId.get(payment.bookingId) ?? []
+    existing.push(payment)
+    paymentsByBookingId.set(payment.bookingId, existing)
+  }
+
+  const bookingHourTransactions = bookings.flatMap((booking) => {
+    const includedHoursApplied = booking.pricingSnapshot?.includedHoursApplied ?? 0
+    if (includedHoursApplied <= 0 || ledgerBookingIds.has(booking.bookingId)) {
+      return []
+    }
+
+    const bookingPayments = paymentsByBookingId.get(booking.bookingId) ?? []
+    const provisionalCharge = bookingPayments.find((payment) => payment.reason === 'BOOKING_PROVISIONAL_CHARGE') ?? null
+    const refundOrAdjustment = bookingPayments.find((payment) => payment.status === 'REFUNDED' || payment.status === 'ADJUSTED') ?? null
+    const reservedHours = {
+      id: `booking-hours-held-${booking.bookingId}`,
+      postedAt: provisionalCharge?.createdAt ?? booking.startTime,
+      category: 'HOURS',
+      title: 'Included hours reserved',
+      tone: 'hours',
+      amountLabel: `-${formatHours(includedHoursApplied)}`,
+      subtitle: `Booking #${booking.bookingId} - ${booking.pickupLocation}`,
+      detail: `Reserved during booking confirmation for ${formatDateTime(booking.startTime)} to ${formatDateTime(booking.endTime)}`,
+      chips: [booking.status, 'Allowance hold'],
+    }
+
+    if (booking.status !== 'CANCELLED' && booking.status !== 'RECONCILED') {
+      return [reservedHours]
+    }
+
+    return [
+      reservedHours,
+      {
+        id: `booking-hours-restored-${booking.bookingId}`,
+        postedAt: refundOrAdjustment?.createdAt ?? booking.endTime ?? booking.startTime,
+        category: 'HOURS',
+        title: 'Included hours restored',
+        tone: 'credit',
+        amountLabel: `+${formatHours(includedHoursApplied)}`,
+        subtitle: `Booking #${booking.bookingId} - ${booking.pickupLocation}`,
+        detail: booking.cancellationReason
+          ? `Returned after ${titleCaseWords(booking.cancellationReason)}`
+          : 'Returned after booking cancellation',
+        chips: [booking.status, 'Allowance refund'],
+      },
+    ]
+  })
+
+  const transactions = [
+    ...bookingHourTransactions,
+    ...payments.map((payment) => {
+      const booking = payment.bookingId ? bookingsById.get(payment.bookingId) ?? null : null
+      const isCredit = payment.status === 'REFUNDED' || payment.status === 'ADJUSTED'
+      const title =
+        payment.reason === 'BOOKING_PROVISIONAL_CHARGE'
+          ? 'Booking charge captured'
+          : payment.status === 'REFUNDED'
+            ? 'Refund processed'
+            : payment.status === 'ADJUSTED'
+              ? 'Adjustment applied'
+              : titleCaseWords(payment.reason)
+
+      return {
+        id: `payment-${payment.paymentId}`,
+        postedAt: payment.createdAt ?? null,
+        category: 'PAYMENT',
+        title,
+        tone: isCredit ? 'credit' : 'debit',
+        amountLabel: `${isCredit ? '+' : '-'}${formatMoney(payment.amount)}`,
+        subtitle: booking
+          ? `Booking #${booking.bookingId} - ${booking.pickupLocation}`
+          : `Payment #${payment.paymentId}`,
+        detail: booking
+          ? `${formatDateTime(booking.startTime)} to ${formatDateTime(booking.endTime)}`
+          : payment.status,
+        chips: [payment.status, payment.reason === 'BOOKING_PROVISIONAL_CHARGE' ? 'Invoice' : titleCaseWords(payment.reason)],
+      }
+    }),
+    ...ledgerEntries.map((entry) => {
+      const booking = bookingsById.get(entry.bookingId) ?? null
+      const positiveHours = entry.includedHoursAfterRenewal > 0
+      const hoursValue = positiveHours ? entry.includedHoursAfterRenewal : entry.includedHoursApplied
+      const amountLabel = `${positiveHours ? '+' : '-'}${formatHours(hoursValue)}`
+      const chips = []
+
+      if (entry.billableHours > 0) chips.push(`Billable ${formatHours(entry.billableHours)}`)
+      if (entry.refundAmount > 0) chips.push(`Refund ${formatMoney(entry.refundAmount)}`)
+      if (entry.provisionalPostMidnightHours > 0) chips.push(`Overnight ${formatHours(entry.provisionalPostMidnightHours)}`)
+      if (entry.reconciliationStatus !== 'NONE') chips.push(titleCaseWords(entry.reconciliationStatus))
+
+      return {
+        id: `ledger-${entry.ledgerId}`,
+        postedAt: entry.updatedAt ?? entry.endTime ?? entry.createdAt ?? null,
+        category: entry.entryType,
+        title: entry.entryType === 'RENEWAL' ? 'Renewal reconciliation' : 'Included hours settled',
+        tone: positiveHours ? 'credit' : 'hours',
+        amountLabel,
+        subtitle: booking
+          ? `Booking #${booking.bookingId} - ${booking.pickupLocation}`
+          : `Trip settlement #${entry.tripId ?? entry.bookingId}`,
+        detail:
+          entry.entryType === 'RENEWAL'
+            ? `Final fare ${formatMoney(entry.finalPrice)} after renewal recalculation`
+            : `Final fare ${formatMoney(entry.finalPrice)} for ${formatHours(entry.totalHours)} reserved`,
+        chips,
+      }
+    }),
+  ].sort((left, right) => new Date(right.postedAt ?? 0).getTime() - new Date(left.postedAt ?? 0).getTime())
+
+  return (
+    <div className="customer-page-stack">
+      <PageHeader
+        eyebrow="E-Wallet"
+        subtitle="All money movement, hour usage, refunds, and renewal reconciliations for this customer profile."
+        title="Transaction history"
+      />
+
+      <section className="customer-hero-card customer-hero-card--blue">
+        <div>
+          <p className="customer-page-header__eyebrow">Wallet summary</p>
+          <h2>{planLabel(customerSummary?.planName)}</h2>
+          <p>Booking deductions, refunds, included-hour usage, and any post-renewal reconciliation are consolidated here.</p>
+        </div>
+        <div className="customer-stat-grid">
+          <div>
+            <span>Remaining</span>
+            <strong>{formatHours(customerSummary?.remainingHoursThisCycle ?? 0)}</strong>
+          </div>
+          <div>
+            <span>Renews</span>
+            <strong>{formatDate(customerSummary?.renewalDate)}</strong>
+          </div>
+          <div>
+            <span>Hourly rate</span>
+            <strong>{formatMoney(customerSummary?.hourlyRate ?? 0)}</strong>
+          </div>
+          <div>
+            <span>Entries</span>
+            <strong>{transactions.length}</strong>
+          </div>
+        </div>
+      </section>
+
+      <article className="customer-card">
+        <div className="customer-card__header">
+          <div>
+            <p className="customer-page-header__eyebrow">History</p>
+            <h2>All transactions</h2>
+          </div>
+        </div>
+        <div className="customer-list-stack">
+          {transactions.map((transaction) => (
+            <article className="customer-transaction-card" key={transaction.id}>
+              <div className="customer-transaction-card__top">
+                <div>
+                  <p className="customer-transaction-card__eyebrow">{transaction.category}</p>
+                  <strong>{transaction.title}</strong>
+                </div>
+                <strong className={`customer-transaction-amount customer-transaction-amount--${transaction.tone}`}>{transaction.amountLabel}</strong>
+              </div>
+              <p className="customer-transaction-card__subtitle">{transaction.subtitle}</p>
+              <p className="customer-transaction-card__detail">{transaction.detail}</p>
+              <div className="customer-transaction-card__meta">
+                <span>{formatDateTime(transaction.postedAt)}</span>
+                <div className="customer-pill-row">
+                  {transaction.chips.map((chip) => (
+                    <span className="customer-status-tag" key={`${transaction.id}-${chip}`}>{chip}</span>
+                  ))}
+                </div>
+              </div>
+            </article>
+          ))}
+          {transactions.length === 0 ? (
+            <p className="customer-empty-copy">No wallet transactions have been recorded for this user yet.</p>
+          ) : null}
+        </div>
+      </article>
+    </div>
+  )
+}
+
 export function AccountPage({
   customerSummary,
   notifications,
-  payments,
 }: {
   customerSummary: CustomerSummary | null
   notifications: Notification[]
-  payments: Payment[]
 }) {
   return (
     <div className="customer-page-stack">
@@ -1271,21 +1478,15 @@ export function AccountPage({
       <article className="customer-card">
         <div className="customer-card__header">
           <div>
-            <p className="customer-page-header__eyebrow">Payments</p>
-            <h2>Recent charges and adjustments</h2>
+            <p className="customer-page-header__eyebrow">Wallet</p>
+            <h2>Open transaction history</h2>
           </div>
         </div>
-        <div className="customer-list-stack">
-          {payments.map((payment) => (
-            <article className="customer-list-card customer-list-card--split" key={payment.paymentId}>
-              <div>
-                <strong>{payment.reason.replaceAll('_', ' ')}</strong>
-                <p>{payment.status}</p>
-              </div>
-              <strong>{formatMoney(payment.amount)}</strong>
-            </article>
-          ))}
-          {payments.length === 0 ? <p className="customer-empty-copy">No payments yet.</p> : null}
+        <p className="customer-inline-notice">Open the Wallet tab to review booking deductions, refunds, included-hour settlements, and renewal reconciliation history.</p>
+        <div className="customer-action-row">
+          <Link className="customer-button customer-button--secondary link-button" to="/app/wallet">
+            Open wallet
+          </Link>
         </div>
       </article>
 

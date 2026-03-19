@@ -25,6 +25,7 @@ import type {
   Trip,
   Vehicle,
   VehicleFilters,
+  WalletLedgerEntry,
 } from './appTypes'
 import {
   AccountPage,
@@ -40,6 +41,7 @@ import {
   TripProblemPage,
   TripProblemResultPage,
   TripsPage,
+  WalletPage,
 } from './customerMobilePages'
 
 type PendingBooking = {
@@ -58,6 +60,7 @@ function App() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [trips, setTrips] = useState<Trip[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
+  const [walletLedger, setWalletLedger] = useState<WalletLedgerEntry[]>([])
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [records, setRecords] = useState<RecordItem[]>([])
   const [status, setStatus] = useState('Loading FleetShare customer experience.')
@@ -74,6 +77,14 @@ function App() {
     startTime: localDateTime(1),
     endTime: localDateTime(4),
   })
+
+  async function fetchOrDefault<T>(path: string, fallback: T) {
+    try {
+      return await fetchJson<T>(path)
+    } catch {
+      return fallback
+    }
+  }
 
   async function loadCustomers() {
     const allCustomers = await fetchJson<CustomerSummary[]>('/pricing/customers')
@@ -121,6 +132,7 @@ function App() {
         setBookings([])
         setTrips([])
         setPayments([])
+        setWalletLedger([])
         setNotifications([])
         setRecords([])
         setSearchResponse(null)
@@ -129,14 +141,16 @@ function App() {
     }
 
     const query = encodeURIComponent(userId)
-    const [summary, bookingData, tripData, paymentData, notificationData, recordData, allVehicles] = await Promise.all([
-      fetchJson<CustomerSummary>(`/pricing/customers/${query}/summary`),
-      fetchJson<Booking[]>(`/bookings?userId=${query}`),
-      fetchJson<Trip[]>(`/trips?userId=${query}`),
-      fetchJson<Payment[]>(`/payments?userId=${query}`),
-      fetchJson<Notification[]>(`/notifications?userId=${query}`),
-      fetchJson<RecordItem[]>('/records'),
-      fetchJson<Vehicle[]>('/vehicles'),
+    const fallbackSummary = customers.find((customer) => customer.userId === userId) ?? null
+    const [summary, bookingData, tripData, paymentData, ledgerData, notificationData, recordData, allVehicles] = await Promise.all([
+      fetchOrDefault<CustomerSummary | null>(`/pricing/customers/${query}/summary`, fallbackSummary),
+      fetchOrDefault<Booking[]>(`/bookings?userId=${query}`, []),
+      fetchOrDefault<Trip[]>(`/trips?userId=${query}`, []),
+      fetchOrDefault<Payment[]>(`/payments?userId=${query}`, []),
+      fetchOrDefault<WalletLedgerEntry[]>(`/pricing/customers/${query}/ledger`, []),
+      fetchOrDefault<Notification[]>(`/notifications?userId=${query}`, []),
+      fetchOrDefault<RecordItem[]>('/records', []),
+      fetchOrDefault<Vehicle[]>('/vehicles', vehicles),
     ])
 
     startTransition(() => {
@@ -144,6 +158,7 @@ function App() {
       setBookings(bookingData)
       setTrips(tripData)
       setPayments(paymentData)
+      setWalletLedger(ledgerData)
       setNotifications(notificationData)
       setRecords(recordData)
       setVehicles(allVehicles)
@@ -205,6 +220,13 @@ function App() {
   function activateCustomer(userId: string) {
     localStorage.setItem(customerStorageKey, userId)
     setActiveUserId(userId)
+    setCustomerSummary(null)
+    setBookings([])
+    setTrips([])
+    setPayments([])
+    setWalletLedger([])
+    setNotifications([])
+    setRecords([])
     setSearchResponse(null)
     setLatestInspectionResult(null)
     setReportedProblem(null)
@@ -392,6 +414,10 @@ function App() {
   const completedTrips = trips
     .filter((trip) => trip.status === 'ENDED')
     .sort((left, right) => new Date(right.endedAt ?? right.startedAt).getTime() - new Date(left.endedAt ?? left.startedAt).getTime())
+  const historicalBookings = bookings
+    .filter((booking) => booking.bookingId !== activeTrip?.bookingId)
+    .filter((booking) => booking.status === 'CANCELLED' || booking.status === 'COMPLETED' || booking.status === 'RECONCILED' || Boolean(booking.tripId))
+    .sort((left, right) => new Date(right.endTime ?? right.startTime).getTime() - new Date(left.endTime ?? left.startTime).getTime())
 
   return (
     <BrowserRouter>
@@ -406,7 +432,7 @@ function App() {
           element={
             activeUserId ? (
               <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
-                <HomePage customerSummary={customerSummary} notifications={notifications} upcomingBookings={upcomingBookings} activeTrip={activeTrip} />
+                <HomePage customerSummary={customerSummary ?? selectedProfile} notifications={notifications} upcomingBookings={upcomingBookings} activeTrip={activeTrip} />
               </CustomerShell>
             ) : (
               <Navigate to="/" replace />
@@ -420,7 +446,7 @@ function App() {
               <SearchExperiencePage
                 activeUser={selectedProfile}
                 busy={busy}
-                customerSummary={customerSummary}
+                customerSummary={customerSummary ?? selectedProfile}
                 onReserve={startReservation}
                 onSearch={async () => {
                   const params = new URLSearchParams({
@@ -467,7 +493,7 @@ function App() {
           element={
             activeUserId ? (
               <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
-                <BookingDetailsPage bookings={bookings} customerSummary={customerSummary} vehicles={vehicles} />
+                <BookingDetailsPage bookings={bookings} customerSummary={customerSummary ?? selectedProfile} vehicles={vehicles} />
               </CustomerShell>
             ) : (
               <Navigate to="/" replace />
@@ -481,8 +507,8 @@ function App() {
               <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
                 <TripsPage
                   activeTrip={activeTrip}
-                  bookings={bookings}
                   completedTrips={completedTrips}
+                  historicalBookings={historicalBookings}
                   onCancelModerateDamage={(bookingId, vehicleId) =>
                     runCustomerAction(async () => {
                       const result = await fetchJson<InspectionCancellationResult>('/damage-assessment/external/customer-cancel', {
@@ -629,7 +655,24 @@ function App() {
           element={
             activeUserId ? (
               <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
-                <AccountPage customerSummary={customerSummary} notifications={notifications} payments={payments} />
+                <AccountPage customerSummary={customerSummary ?? selectedProfile} notifications={notifications} />
+              </CustomerShell>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/app/wallet"
+          element={
+            activeUserId ? (
+              <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
+                <WalletPage
+                  bookings={bookings}
+                  customerSummary={customerSummary ?? selectedProfile}
+                  ledgerEntries={walletLedger}
+                  payments={payments}
+                />
               </CustomerShell>
             ) : (
               <Navigate to="/" replace />
