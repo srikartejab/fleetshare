@@ -7,7 +7,7 @@ import {
   formatHours,
   formatMoney,
 } from './appTypes'
-import type { Booking, CustomerSummary, Notification, RecordItem, Trip, Vehicle, VehicleFilters } from './appTypes'
+import type { Booking, CustomerSummary, InspectionSubmissionResult, Notification, RecordItem, Trip, Vehicle, VehicleFilters } from './appTypes'
 
 export function LandingPage({
   customers,
@@ -570,6 +570,8 @@ export function TripsPage({
   activeTrip,
   bookings,
   completedTrips,
+  latestInspectionResult,
+  onCancelModerateDamage,
   onEndTrip,
   onStartTrip,
   onSubmitInspection,
@@ -580,6 +582,8 @@ export function TripsPage({
   activeTrip: Trip | null
   bookings: Booking[]
   completedTrips: Trip[]
+  latestInspectionResult: InspectionSubmissionResult | null
+  onCancelModerateDamage: (bookingId: number, vehicleId: number) => Promise<void>
   onEndTrip: (bookingId: number, tripId: number, vehicleId: number, endReason: string) => Promise<void>
   onStartTrip: (bookingId: number, vehicleId: number, notes: string) => Promise<void>
   onSubmitInspection: (bookingId: number, vehicleId: number, notes: string, photo: File | null) => Promise<void>
@@ -592,7 +596,10 @@ export function TripsPage({
   const inspectionRecord = nextBooking
     ? records.find((record) => record.bookingId === nextBooking.bookingId && record.recordType === 'EXTERNAL_DAMAGE') ?? null
     : null
+  const inspectionFeedback = nextBooking && latestInspectionResult?.bookingId === nextBooking.bookingId ? latestInspectionResult : null
   const inspectionCleared = Boolean(inspectionRecord && inspectionRecord.reviewState === 'EXTERNAL_ASSESSED' && inspectionRecord.severity !== 'SEVERE')
+  const inspectionSeverity = inspectionFeedback?.assessmentResult.severity ?? inspectionRecord?.severity ?? 'PENDING'
+  const moderateInspection = Boolean(inspectionRecord && inspectionRecord.reviewState === 'EXTERNAL_ASSESSED' && inspectionSeverity === 'MODERATE')
   const [inspectionNotes, setInspectionNotes] = useState('Vehicle exterior looks clean.')
   const [inspectionPhoto, setInspectionPhoto] = useState<File | null>(null)
   const [startNotes, setStartNotes] = useState('')
@@ -625,23 +632,49 @@ export function TripsPage({
                 <strong>Inspection gate</strong>
                 <p>
                   {inspectionCleared
-                    ? 'Inspection cleared. You can now start the trip.'
+                    ? moderateInspection
+                      ? 'Moderate external damage was noted. You can still click Unlock vehicle, or cancel the booking to escalate the incident to ops.'
+                      : 'Inspection cleared. Click Unlock vehicle to send the unlock command and start the trip.'
                     : inspectionRecord
-                      ? `Inspection status: ${inspectionRecord.reviewState}. Start trip stays locked until the external inspection is cleared.`
+                      ? `Inspection status: ${inspectionRecord.reviewState}. Unlock stays disabled until the external inspection is cleared.`
                       : 'Submit the external inspection first. Start trip stays locked until that record is created and cleared.'}
                 </p>
               </div>
+              {inspectionRecord ? (
+                <div className={`notice-card ${inspectionCleared ? 'notice-card--success' : inspectionRecord.reviewState === 'MANUAL_REVIEW' || inspectionRecord.reviewState === 'EXTERNAL_BLOCKED' ? 'notice-card--error' : ''}`}>
+                  <strong>Latest inspection result</strong>
+                  <p>
+                    Severity: {inspectionSeverity}. Review state: {inspectionRecord.reviewState}.
+                  </p>
+                  <p>
+                    {inspectionCleared
+                      ? moderateInspection
+                        ? 'Trip start is still allowed. If the customer is uncomfortable proceeding, they can cancel here and the same damage incident workflow will notify ops and process compensation.'
+                        : 'No trip has started yet. The user must still click Unlock vehicle.'
+                      : inspectionRecord.reviewState === 'MANUAL_REVIEW'
+                        ? 'The inspection is waiting for manual review, so unlock is blocked.'
+                        : inspectionRecord.reviewState === 'EXTERNAL_BLOCKED'
+                          ? 'Damage was flagged as blocking, so unlock is blocked.'
+                          : inspectionFeedback?.warningMessage ?? 'Inspection data is still being processed.'}
+                  </p>
+                </div>
+              ) : null}
               <div className="button-strip">
                 <button className="primary" onClick={() => void onSubmitInspection(nextBooking.bookingId, nextBooking.vehicleId, inspectionNotes, inspectionPhoto)} type="button">
                   Submit inspection
                 </button>
-                <button disabled={!inspectionCleared} onClick={() => void onStartTrip(nextBooking.bookingId, nextBooking.vehicleId, startNotes)} type="button">
-                  Start trip
+                <button className={inspectionCleared ? 'primary' : ''} disabled={!inspectionCleared} onClick={() => void onStartTrip(nextBooking.bookingId, nextBooking.vehicleId, startNotes)} type="button">
+                  Unlock vehicle
                 </button>
+                {moderateInspection ? (
+                  <button onClick={() => void onCancelModerateDamage(nextBooking.bookingId, nextBooking.vehicleId)} type="button">
+                    Cancel due to damage
+                  </button>
+                ) : null}
               </div>
               <label>
                 Start notes
-                <input value={startNotes} onChange={(event) => setStartNotes(event.target.value)} placeholder="Optional start notes" />
+                <input value={startNotes} onChange={(event) => setStartNotes(event.target.value)} placeholder="Optional notes sent with the unlock/start request" />
               </label>
             </>
           ) : (
@@ -659,7 +692,7 @@ export function TripsPage({
           {activeTrip ? (
             <>
               <p><strong>Trip #{activeTrip.tripId}</strong></p>
-              <p>Started {formatDateTime(activeTrip.startedAt)}</p>
+              <p>Vehicle unlocked and trip started {formatDateTime(activeTrip.startedAt)}</p>
               <label>
                 End reason
                 <select value={endReason} onChange={(event) => setEndReason(event.target.value)}>
@@ -672,7 +705,7 @@ export function TripsPage({
               </button>
             </>
           ) : (
-            <div className="empty-card"><p>No active trip yet.</p></div>
+            <div className="empty-card"><p>No active trip yet. A cleared inspection alone does not start the trip; the user must click Unlock vehicle.</p></div>
           )}
         </article>
       </section>

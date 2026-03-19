@@ -8,7 +8,20 @@ import {
   fetchJson,
   localDateTime,
 } from './appTypes'
-import type { Booking, CustomerSummary, Notification, Payment, PricingSnapshot, RecordItem, SearchResponse, Trip, Vehicle, VehicleFilters } from './appTypes'
+import type {
+  Booking,
+  CustomerSummary,
+  InspectionCancellationResult,
+  InspectionSubmissionResult,
+  Notification,
+  Payment,
+  PricingSnapshot,
+  RecordItem,
+  SearchResponse,
+  Trip,
+  Vehicle,
+  VehicleFilters,
+} from './appTypes'
 import {
   AccountPage,
   BookingDetailsPage,
@@ -43,6 +56,7 @@ function App() {
   const [searchResults, setSearchResults] = useState<Vehicle[]>([])
   const [searchSummary, setSearchSummary] = useState('')
   const [pendingBooking, setPendingBooking] = useState<PendingBooking | null>(null)
+  const [latestInspectionResult, setLatestInspectionResult] = useState<InspectionSubmissionResult | null>(null)
   const deferredSearchResults = useDeferredValue(searchResults)
   const [searchForm, setSearchForm] = useState({
     pickupLocation: '',
@@ -168,21 +182,23 @@ function App() {
     setActiveUserId(userId)
     setSearchResults([])
     setSearchSummary('')
+    setLatestInspectionResult(null)
   }
 
   function clearActiveCustomer() {
     localStorage.removeItem(customerStorageKey)
     setActiveUserId('')
     setPendingBooking(null)
+    setLatestInspectionResult(null)
     setStatus('Choose a customer profile to enter the app.')
   }
 
-  async function runCustomerAction(action: () => Promise<void>, successMessage: string) {
+  async function runCustomerAction<T>(action: () => Promise<T>, successMessage: string | ((result: T) => string)) {
     setBusy(true)
     try {
-      await action()
+      const result = await action()
       await Promise.all([loadCustomers(), refreshCustomerData()])
-      setStatus(successMessage)
+      setStatus(typeof successMessage === 'function' ? successMessage(result) : successMessage)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Unexpected error')
     } finally {
@@ -197,7 +213,7 @@ function App() {
     void (async () => {
       let bookingId: number | null = null
       try {
-        const response = await fetchJson<{ bookingId: number; pricing: PricingSnapshot }>(`/process-booking/reserve`, {
+        const reserve = await fetchJson<{ bookingId: number; pricing: PricingSnapshot }>(`/process-booking/reserve`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -210,7 +226,15 @@ function App() {
             subscriptionPlanId: customerSummary?.planName ?? 'STANDARD_MONTHLY',
           }),
         })
-        bookingId = response.bookingId
+        bookingId = reserve.bookingId
+        await fetchJson<{ bookingId: number; paymentId: number; status: string }>(`/process-booking/pay`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bookingId: reserve.bookingId,
+            userId: activeUserId,
+          }),
+        })
         setPendingBooking({ status: 'success', vehicleId, bookingId })
         setStatus(`Booking ${bookingId} confirmed.`)
       } catch (error) {
@@ -284,7 +308,7 @@ function App() {
                       endTime: new Date(searchForm.endTime).toISOString(),
                       subscriptionPlanId: customerSummary?.planName ?? 'STANDARD_MONTHLY',
                     })
-                    const result = await fetchJson<SearchResponse>(`/search-vehicles/search?${params.toString()}`)
+                    const result = await fetchJson<SearchResponse>(`/process-booking/search?${params.toString()}`)
                     startTransition(() => {
                       setSearchResults(result.vehicleList)
                       setSearchSummary(result.availabilitySummary)
@@ -331,6 +355,20 @@ function App() {
                   activeTrip={activeTrip}
                   bookings={bookings}
                   completedTrips={completedTrips}
+                  onCancelModerateDamage={(bookingId, vehicleId) =>
+                    runCustomerAction(async () => {
+                      const result = await fetchJson<InspectionCancellationResult>('/damage-assessment/external/customer-cancel', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          bookingId,
+                          vehicleId,
+                          userId: activeUserId,
+                        }),
+                      })
+                      return result
+                    }, (result) => result.message)
+                  }
                   onEndTrip={(bookingId, tripId, vehicleId, endReason) =>
                     runCustomerAction(async () => {
                       await fetchJson('/end-trip/request', {
@@ -370,15 +408,22 @@ function App() {
                       if (photo) {
                         formData.append('photos', photo)
                       }
-                      await fetchJson('/damage-assessment/external', {
+                      const result = await fetchJson<InspectionSubmissionResult>('/damage-assessment/external', {
                         method: 'POST',
                         body: formData,
                       })
-                    }, 'Pre-trip inspection submitted.')
+                      setLatestInspectionResult(result)
+                      return result
+                    }, (result) =>
+                      result.tripStatus === 'CLEARED'
+                        ? result.warningMessage
+                        : `Inspection submitted. ${result.warningMessage}`
+                    )
                   }
                   upcomingBookings={upcomingBookings}
                   vehicles={vehicles}
                   records={records}
+                  latestInspectionResult={latestInspectionResult}
                 />
               </CustomerShell>
             ) : (

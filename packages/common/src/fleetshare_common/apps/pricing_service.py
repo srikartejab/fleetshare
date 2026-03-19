@@ -10,7 +10,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from fleetshare_common.app import create_app
 from fleetshare_common.database import Base, engine, get_db
-from fleetshare_common.pricing import BASE_HOURLY_RATE, booking_quote, rerate_after_renewal, trip_adjustment
+from fleetshare_common.pricing import APOLOGY_CREDIT, BASE_HOURLY_RATE, booking_quote, rerate_after_renewal, trip_adjustment
 from fleetshare_common.timeutils import as_utc_naive, utcnow
 
 app = create_app("Pricing Service", "Atomic pricing and re-rating service.")
@@ -76,6 +76,11 @@ class FinalizeTripPayload(BaseModel):
     startedAt: datetime
     endedAt: datetime
     disrupted: bool = False
+
+
+class DisruptionCompensationPayload(BaseModel):
+    affectedBookings: list[dict]
+    reason: str = "VEHICLE_UNAVAILABLE"
 
 
 def seed_customers():
@@ -159,7 +164,9 @@ def summary_from_profile(profile: CustomerProfile) -> dict:
     }
 
 
-def quote_to_dict(user_id: str, quote) -> dict:
+def quote_to_dict(user_id: str, quote, profile: CustomerProfile) -> dict:
+    current_cycle_id = profile.renewal_date.strftime("%Y-%m")
+    next_cycle_id = (profile.renewal_date + relativedelta(months=1)).strftime("%Y-%m")
     return {
         "userId": user_id,
         "estimatedPrice": quote.estimated_price,
@@ -174,6 +181,8 @@ def quote_to_dict(user_id: str, quote) -> dict:
         "billableHours": quote.billable_hours,
         "provisionalPostMidnightHours": quote.provisional_post_midnight_hours,
         "provisionalCharge": quote.provisional_charge,
+        "currentBillingCycleId": current_cycle_id,
+        "nextBillingCycleId": next_cycle_id,
     }
 
 
@@ -238,7 +247,7 @@ def get_quote(
     return {
         "vehicleId": vehicleId,
         "subscriptionPlanId": subscriptionPlanId,
-        **quote_to_dict(userId, quote),
+        **quote_to_dict(userId, quote, profile),
         "renewalDate": profile.renewal_date.isoformat(),
         "customerSummary": summary_from_profile(profile),
     }
@@ -299,6 +308,29 @@ def get_trip_adjustment(tripId: int, durationHours: float = 0.0, disrupted: bool
     return {"tripId": tripId, **trip_adjustment(disrupted, durationHours, baseFare)}
 
 
+@app.post("/pricing/disruption-compensation")
+def disruption_compensation(payload: DisruptionCompensationPayload):
+    adjustments = []
+    for booking in payload.affectedBookings:
+        base_amount = float(booking.get("finalPrice") or booking.get("displayedPrice") or 0.0)
+        adjustments.append(
+            {
+                "bookingId": booking["bookingId"],
+                "tripId": booking.get("tripId"),
+                "userId": booking["userId"],
+                "refundAmount": round(base_amount, 2),
+                "discountAmount": APOLOGY_CREDIT,
+                "reason": payload.reason,
+            }
+        )
+    return {
+        "adjustments": adjustments,
+        "affectedUsers": sorted({item["userId"] for item in adjustments}),
+        "totalRefundAmount": round(sum(item["refundAmount"] for item in adjustments), 2),
+        "totalDiscountAmount": round(sum(item["discountAmount"] for item in adjustments), 2),
+    }
+
+
 @app.post("/pricing/re-rate-renewed-booking")
 def rerate(payload: ReRatePayload, db: Session = Depends(get_db)):
     profile = get_profile_or_404(db, payload.userId)
@@ -334,5 +366,6 @@ def rerate(payload: ReRatePayload, db: Session = Depends(get_db)):
         "bookingId": payload.bookingId,
         "tripId": payload.tripId,
         **rerate_result,
+        "finalPrice": round(ledger.final_charge, 2),
         "customerSummary": summary_from_profile(profile),
     }

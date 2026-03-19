@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import JSON, DateTime, Float, Integer, String, func
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
@@ -40,8 +40,8 @@ class RecordPayload(BaseModel):
     severity: str = "MODERATE"
     reviewState: str = "PENDING_EXTERNAL"
     confidence: float = 0.0
-    evidenceUrls: list[str] = []
-    detectedDamage: list[str] = []
+    evidenceUrls: list[str] = Field(default_factory=list)
+    detectedDamage: list[str] = Field(default_factory=list)
 
 
 class RecordPatchPayload(BaseModel):

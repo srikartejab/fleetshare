@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import uuid
 from collections.abc import Callable
@@ -10,6 +11,8 @@ import pika
 
 from fleetshare_common.contracts import EventEnvelope
 from fleetshare_common.settings import get_settings
+
+logger = logging.getLogger("fleetshare.messaging")
 
 
 def _connection():
@@ -30,6 +33,10 @@ def publish_event(event_type: str, payload: dict[str, Any]):
             body=event.model_dump_json(),
             properties=pika.BasicProperties(delivery_mode=2),
         )
+        logger.info(
+            "published event",
+            extra={"service": settings.service_name, "event_type": event_type, "event_id": event.event_id},
+        )
     finally:
         connection.close()
 
@@ -44,10 +51,36 @@ def start_consumer(queue_name: str, routing_keys: list[str], callback: Callable[
         channel.queue_declare(queue=queue_name, durable=True)
         for routing_key in routing_keys:
             channel.queue_bind(exchange=settings.rabbitmq_exchange, queue=queue_name, routing_key=routing_key)
+        logger.info(
+            "consumer ready",
+            extra={"service": settings.service_name, "queue": queue_name, "routing_keys": ",".join(routing_keys)},
+        )
 
         def on_message(_channel, _method, _properties, body: bytes):
             payload = json.loads(body.decode("utf-8"))
-            callback(payload)
+            try:
+                callback(payload)
+            except Exception:
+                logger.exception(
+                    "consumer callback failed",
+                    extra={
+                        "service": settings.service_name,
+                        "queue": queue_name,
+                        "event_id": payload.get("event_id"),
+                        "event_type": payload.get("event_type"),
+                    },
+                )
+                _channel.basic_nack(delivery_tag=_method.delivery_tag, requeue=True)
+                return
+            logger.info(
+                "consumed event",
+                extra={
+                    "service": settings.service_name,
+                    "queue": queue_name,
+                    "event_id": payload.get("event_id"),
+                    "event_type": payload.get("event_type"),
+                },
+            )
             _channel.basic_ack(delivery_tag=_method.delivery_tag)
 
         channel.basic_qos(prefetch_count=1)

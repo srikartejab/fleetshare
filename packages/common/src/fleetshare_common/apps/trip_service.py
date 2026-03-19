@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import JSON, DateTime, Float, Integer, String, func
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
@@ -39,7 +39,7 @@ class TripStartPayload(BaseModel):
     vehicleId: int
     userId: str
     startedAt: datetime | None = None
-    subscriptionSnapshot: dict = {}
+    subscriptionSnapshot: dict = Field(default_factory=dict)
 
 
 class TripStatusPayload(BaseModel):

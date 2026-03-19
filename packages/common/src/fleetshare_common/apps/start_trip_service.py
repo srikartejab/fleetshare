@@ -6,7 +6,6 @@ from pydantic import BaseModel
 from fleetshare_common.app import create_app
 from fleetshare_common.http import get_json, patch_json, post_json
 from fleetshare_common.settings import get_settings
-from fleetshare_common.timeutils import iso, utcnow
 from fleetshare_common.vehicle_grpc import unlock_vehicle
 
 app = create_app("Start Trip Service", "Composite trip start workflow.")
@@ -22,6 +21,12 @@ class StartTripPayload(BaseModel):
 @app.post("/trips/start")
 def start_trip(payload: StartTripPayload):
     settings = get_settings()
+    booking = get_json(f"{settings.booking_service_url}/booking/{payload.bookingId}")
+    if booking["userId"] != payload.userId:
+        raise HTTPException(status_code=403, detail="Booking does not belong to the requesting user.")
+    if booking["status"] != "CONFIRMED":
+        raise HTTPException(status_code=409, detail=f"Booking is not ready to start. Current status: {booking['status']}")
+
     records = get_json(
         f"{settings.record_service_url}/records",
         {"bookingId": payload.bookingId, "recordType": "EXTERNAL_DAMAGE"},
@@ -56,12 +61,16 @@ def start_trip(payload: StartTripPayload):
             "bookingId": payload.bookingId,
             "vehicleId": payload.vehicleId,
             "userId": payload.userId,
-            "startedAt": iso(utcnow()),
-            "subscriptionSnapshot": {"renewalStatus": "PENDING", "billingCycleId": "2026-03"},
+            "startedAt": booking["startTime"],
+            "subscriptionSnapshot": {
+                "renewalStatus": "PENDING" if booking["refundPendingOnRenewal"] else "NOT_REQUIRED",
+                "billingCycleId": booking.get("pricingSnapshot", {}).get("currentBillingCycleId"),
+                "nextBillingCycleId": booking.get("pricingSnapshot", {}).get("nextBillingCycleId"),
+            },
         },
     )
     patch_json(
         f"{settings.booking_service_url}/booking/{payload.bookingId}/status",
-        {"status": "CONFIRMED", "tripId": trip["tripId"]},
+        {"status": "IN_PROGRESS", "tripId": trip["tripId"]},
     )
     return {"tripId": trip["tripId"], "status": "STARTED", "unlockCommandSent": True}

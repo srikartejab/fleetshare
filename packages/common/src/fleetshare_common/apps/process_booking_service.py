@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Query
 from pydantic import BaseModel
 
 from fleetshare_common.app import create_app
 from fleetshare_common.http import get_json, patch_json, post_json
 from fleetshare_common.settings import get_settings
-from fleetshare_common.vehicle_grpc import check_availability, update_vehicle_status
+from fleetshare_common.vehicle_grpc import check_availability
 
 app = create_app("Process Booking Service", "Composite booking and payment orchestration.")
 
@@ -27,6 +27,35 @@ class PaymentResultPayload(BaseModel):
     bookingId: int
     paymentId: int
     status: str
+
+
+class PaymentPayload(BaseModel):
+    bookingId: int
+    userId: str
+    amount: float | None = None
+    paymentMethod: str = "SIMULATED_CARD"
+
+
+@app.get("/process-booking/search")
+def search_booking_options(
+    userId: str = Query(...),
+    startTime: datetime = Query(...),
+    endTime: datetime = Query(...),
+    pickupLocation: str = Query(...),
+    vehicleType: str | None = None,
+    subscriptionPlanId: str = "STANDARD_MONTHLY",
+):
+    settings = get_settings()
+    params = {
+        "userId": userId,
+        "startTime": startTime.isoformat(),
+        "endTime": endTime.isoformat(),
+        "pickupLocation": pickupLocation,
+        "subscriptionPlanId": subscriptionPlanId,
+    }
+    if vehicleType:
+        params["vehicleType"] = vehicleType
+    return get_json(f"{settings.search_service_url}/search-vehicles/search", params)
 
 
 @app.post("/process-booking/reserve")
@@ -67,27 +96,37 @@ def process_booking(payload: ReservePayload):
             "pricingSnapshot": quote,
         },
     )
+    return {
+        "bookingId": booking["bookingId"],
+        "status": "PAYMENT_PENDING",
+        "paymentStatus": "REQUIRED",
+        "pricing": quote,
+        "customerSummary": quote["customerSummary"],
+    }
+
+
+@app.post("/process-booking/pay")
+def pay_for_booking(payload: PaymentPayload):
+    settings = get_settings()
+    booking = get_json(f"{settings.booking_service_url}/booking/{payload.bookingId}")
+    amount = payload.amount if payload.amount is not None else float(booking["displayedPrice"])
     payment = post_json(
         f"{settings.payment_service_url}/payments",
         {
-            "bookingId": booking["bookingId"],
+            "bookingId": payload.bookingId,
             "userId": payload.userId,
-            "amount": quote["estimatedPrice"] or payload.displayedPrice,
+            "amount": amount,
             "reason": "BOOKING_PROVISIONAL_CHARGE",
         },
     )
-    patch_json(
-        f"{settings.booking_service_url}/booking/{booking['bookingId']}/status",
-        {"status": "CONFIRMED"},
+    result = payment_result(
+        PaymentResultPayload(bookingId=payload.bookingId, paymentId=payment["paymentId"], status=payment["status"])
     )
-    update_vehicle_status(payload.vehicleId, "BOOKED")
     return {
-        "bookingId": booking["bookingId"],
-        "status": "CONFIRMED",
-        "paymentStatus": "SUCCESS",
+        "bookingId": payload.bookingId,
         "paymentId": payment["paymentId"],
-        "pricing": quote,
-        "customerSummary": quote["customerSummary"],
+        "paymentMethod": payload.paymentMethod,
+        **result,
     }
 
 
@@ -95,11 +134,13 @@ def process_booking(payload: ReservePayload):
 def payment_result(payload: PaymentResultPayload):
     settings = get_settings()
     if payload.status.upper() == "SUCCESS":
-        return patch_json(
+        booking = patch_json(
             f"{settings.booking_service_url}/booking/{payload.bookingId}/status",
             {"status": "CONFIRMED"},
         )
-    return patch_json(
+        return {"status": booking["status"], "paymentStatus": "SUCCESS"}
+    booking = patch_json(
         f"{settings.booking_service_url}/booking/{payload.bookingId}/status",
         {"status": "CANCELLED", "cancellationReason": "PAYMENT_FAILED"},
     )
+    return {"status": booking["status"], "paymentStatus": "FAILED"}

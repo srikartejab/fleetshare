@@ -160,6 +160,12 @@ def booking_availability(
 @app.get("/bookings/reconciliation-pending")
 def reconciliation_pending(userId: str, billingCycleId: str | None = None, db: Session = Depends(get_db)):
     bookings = db.query(Booking).filter(Booking.user_id == userId, Booking.refund_pending_on_renewal.is_(True)).all()
+    if billingCycleId:
+        bookings = [
+            booking
+            for booking in bookings
+            if (booking.metadata_json or {}).get("nextBillingCycleId") == billingCycleId
+        ]
     return {
         "bookingIds": [booking.id for booking in bookings],
         "tripIds": [booking.trip_id for booking in bookings if booking.trip_id is not None],
@@ -255,14 +261,39 @@ def cancel_affected(payload: CancelAffectedPayload, db: Session = Depends(get_db
         db.query(Booking)
         .filter(
             Booking.vehicle_id == payload.vehicleId,
-            Booking.status.in_([BookingStatus.CONFIRMED.value, BookingStatus.PAYMENT_PENDING.value]),
+            Booking.status.in_(
+                [
+                    BookingStatus.CONFIRMED.value,
+                    BookingStatus.PAYMENT_PENDING.value,
+                    BookingStatus.IN_PROGRESS.value,
+                ]
+            ),
         )
         .all()
     )
     affected_ids = []
+    affected_bookings = []
     for booking in bookings:
         booking.status = BookingStatus.CANCELLED.value
         booking.cancellation_reason = payload.reason
         affected_ids.append(booking.id)
+        affected_bookings.append(
+            {
+                "bookingId": booking.id,
+                "userId": booking.user_id,
+                "vehicleId": booking.vehicle_id,
+                "status": booking.status,
+                "displayedPrice": booking.displayed_price,
+                "finalPrice": booking.final_price,
+                "tripId": booking.trip_id,
+                "pickupLocation": booking.pickup_location,
+                "startTime": iso(booking.start_time),
+                "endTime": iso(booking.end_time),
+            }
+        )
     db.commit()
-    return {"affectedBookingIds": affected_ids, "cancelledCount": len(affected_ids)}
+    return {
+        "affectedBookingIds": affected_ids,
+        "affectedBookings": affected_bookings,
+        "cancelledCount": len(affected_ids),
+    }

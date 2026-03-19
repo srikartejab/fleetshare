@@ -254,7 +254,7 @@ services:
       <<: *backend-env
       SERVICE_NAME: start-trip-service
       DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/start_trip_db
-    depends_on: [trip-service, booking-service, internal-damage-service, vehicle-service]
+    depends_on: [trip-service, booking-service, record-service, internal-damage-service, vehicle-service]
 
   internal-damage-service:
     build:
@@ -276,7 +276,7 @@ services:
       <<: *backend-env
       SERVICE_NAME: end-trip-service
       DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/end_trip_db
-    depends_on: [trip-service, pricing-service, vehicle-service, rabbitmq]
+    depends_on: [trip-service, booking-service, pricing-service, vehicle-service, rabbitmq]
 
   handle-damage-service:
     build:

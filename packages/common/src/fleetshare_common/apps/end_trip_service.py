@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+from fastapi import HTTPException
 from pydantic import BaseModel
 
 from fleetshare_common.app import create_app
 from fleetshare_common.http import get_json, patch_json, post_json
 from fleetshare_common.messaging import publish_event
 from fleetshare_common.settings import get_settings
-from fleetshare_common.timeutils import iso, utcnow
 from fleetshare_common.vehicle_grpc import lock_vehicle
 
 app = create_app("End Trip Service", "Composite trip end workflow.")
@@ -22,6 +22,7 @@ class EndTripPayload(BaseModel):
 
 def process_end_trip(payload: EndTripPayload):
     settings = get_settings()
+    booking = get_json(f"{settings.booking_service_url}/booking/{payload.bookingId}")
     trip = get_json(f"{settings.trip_service_url}/trips/{payload.tripId}")
     if trip["status"] == "ENDED":
         lock_success = True
@@ -30,11 +31,14 @@ def process_end_trip(payload: EndTripPayload):
     else:
         lock = lock_vehicle(payload.vehicleId, str(payload.bookingId), payload.userId)
         lock_success = lock["success"]
+        if not lock_success:
+            raise HTTPException(status_code=409, detail=lock["message"])
+        effective_end = booking["endTime"]
         trip_result = patch_json(
             f"{settings.trip_service_url}/trips/{payload.tripId}/status",
             {
                 "status": "ENDED",
-                "endedAt": iso(utcnow()),
+                "endedAt": effective_end,
                 "endReason": payload.endReason,
                 "disruptionReason": payload.endReason if "FAULT" in payload.endReason else None,
             },
@@ -55,6 +59,10 @@ def process_end_trip(payload: EndTripPayload):
     patch_json(
         f"{settings.booking_service_url}/booking/{payload.bookingId}/financials",
         {"finalPrice": pricing_result["finalPrice"]},
+    )
+    patch_json(
+        f"{settings.booking_service_url}/booking/{payload.bookingId}/status",
+        {"status": "COMPLETED"},
     )
     if pricing_result["refundAmount"] > 0 or pricing_result["discountAmount"] > 0:
         publish_event(

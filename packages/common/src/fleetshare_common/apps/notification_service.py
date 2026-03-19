@@ -114,7 +114,7 @@ def handle_notification_event(event: dict):
                     user_id=str(target),
                     booking_id=payload.get("bookingId"),
                     trip_id=payload.get("tripId"),
-                    audience="OPS" if str(target).lower() == "ops" else "CUSTOMER",
+                    audience="OPS" if str(target).lower().startswith("ops") else "CUSTOMER",
                     subject=payload.get("subject", event["event_type"]),
                     message=payload.get("message", "A FleetShare event requires attention."),
                     event_id=event["event_id"] if index == 0 else None,

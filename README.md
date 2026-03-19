@@ -56,6 +56,35 @@ python scripts/export_openapi.py
 
 to export selected OpenAPI specs into `docs/generated/openapi/` once the stack is running.
 
+## Tests
+
+Run the Python test suite from the repo root:
+
+```powershell
+pytest -q
+```
+
+This runs the fast unit/integration-style tests locally.
+
+To run the full end-to-end business scenario tests against Docker Compose:
+
+```powershell
+python scripts/run_scenario_tests.py
+```
+
+This will:
+
+- bring the full FleetShare stack up with `docker compose`
+- wait for Kong and the backend services to become ready
+- run all 3 scenario tests with terminal log output for key checkpoints
+- shut the stack down and remove volumes when finished
+
+If you want to keep the stack running after the scenario tests:
+
+```powershell
+python scripts/run_scenario_tests.py --keep-up
+```
+
 ## Important Notes
 
 - `Vehicle Service` is implemented in Python first so the surrounding contracts stay stable; it is intentionally isolated so it can later be ported to OutSystems.

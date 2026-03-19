@@ -295,6 +295,16 @@
   background: rgba(255, 196, 107, 0.12);
 }
 
+.notice-card--success {
+  background: rgba(113, 207, 142, 0.12);
+  border-color: rgba(113, 207, 142, 0.3);
+}
+
+.notice-card--error {
+  background: rgba(214, 98, 98, 0.12);
+  border-color: rgba(214, 98, 98, 0.28);
+}
+
 .history-list,
 .notification-stack {
   margin-top: 1rem;
@@ -366,6 +376,227 @@
   gap: 0.45rem;
 }
 
+.ops-shell--dashboard {
+  background:
+    radial-gradient(circle at top left, rgba(18, 120, 127, 0.18), transparent 26%),
+    radial-gradient(circle at top right, rgba(255, 184, 77, 0.12), transparent 18%),
+    linear-gradient(180deg, #08111d 0%, #0c1624 100%);
+}
+
+.ops-launchbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.5rem 1.75rem;
+  border-radius: 28px;
+  background: linear-gradient(135deg, rgba(9, 20, 35, 0.96), rgba(7, 15, 28, 0.98));
+  border: 1px solid rgba(135, 162, 193, 0.18);
+  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.22);
+}
+
+.ops-launchbar__title,
+.ops-launchbar__actions,
+.ops-tabbar,
+.ops-metric-grid,
+.ops-dashboard-grid,
+.ops-quick-grid,
+.ops-vehicle-grid,
+.ops-stack-list,
+.ops-vehicle-card__actions,
+.ops-vehicle-card__top,
+.ops-list-row,
+.ops-inbox-summary {
+  display: grid;
+  gap: 1rem;
+}
+
+.ops-launchbar__title h1 {
+  margin: 0.35rem 0 0.55rem;
+  font-size: clamp(2rem, 3vw, 3rem);
+}
+
+.ops-launchbar__actions {
+  align-content: start;
+  justify-items: end;
+}
+
+.ops-bell-button,
+.ops-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  border: 1px solid rgba(135, 162, 193, 0.18);
+  background: rgba(10, 25, 42, 0.88);
+  color: #e6eef8;
+}
+
+.ops-bell-button {
+  padding: 0.8rem 1rem;
+  border-radius: 999px;
+}
+
+.ops-bell-button strong {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  background: #f3b759;
+  color: #1f1710;
+  font-size: 0.85rem;
+}
+
+.ops-bell-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.ops-tabbar {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-top: 1rem;
+}
+
+.ops-tab {
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+}
+
+.ops-tab small {
+  color: #9eb0c8;
+}
+
+.ops-tab--active {
+  border-color: rgba(243, 183, 89, 0.45);
+  background: rgba(243, 183, 89, 0.14);
+  color: #fff2d7;
+}
+
+.ops-metric-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin-top: 1rem;
+}
+
+.ops-metric {
+  padding: 1rem 1.1rem;
+  border-radius: 22px;
+  border: 1px solid rgba(135, 162, 193, 0.14);
+  background: rgba(10, 22, 39, 0.88);
+}
+
+.ops-metric span {
+  color: #8ea6c7;
+  font-size: 0.82rem;
+}
+
+.ops-metric strong {
+  display: block;
+  margin-top: 0.4rem;
+  font-size: 1.6rem;
+}
+
+.ops-metric--attention {
+  border-color: rgba(220, 111, 102, 0.26);
+}
+
+.ops-metric--good {
+  border-color: rgba(113, 207, 142, 0.24);
+}
+
+.ops-dashboard-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 1rem;
+}
+
+.ops-span-wide {
+  grid-column: 1 / -1;
+}
+
+.ops-quick-grid,
+.ops-vehicle-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ops-quick-card,
+.ops-vehicle-card {
+  padding: 1.25rem;
+  border-radius: 22px;
+  border: 1px solid rgba(135, 162, 193, 0.14);
+  background: rgba(8, 19, 33, 0.82);
+}
+
+.ops-quick-card h3,
+.ops-vehicle-card h3 {
+  margin: 0.2rem 0 0.45rem;
+}
+
+.ops-vehicle-card__top,
+.ops-list-row,
+.ops-inbox-summary {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.ops-vehicle-card__actions {
+  margin-top: 1rem;
+}
+
+.ops-stack-list {
+  margin-top: 0.5rem;
+}
+
+.ops-list-row {
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+  background: rgba(8, 19, 33, 0.78);
+  border: 1px solid rgba(135, 162, 193, 0.12);
+}
+
+.ops-list-row p,
+.ops-vehicle-card p,
+.ops-quick-card p {
+  margin: 0.2rem 0 0;
+  color: #a9bbd2;
+}
+
+.ops-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 7.5rem;
+  padding: 0.5rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  border: 1px solid transparent;
+}
+
+.ops-status-pill--good {
+  background: rgba(113, 207, 142, 0.14);
+  color: #b7f2c6;
+  border-color: rgba(113, 207, 142, 0.24);
+}
+
+.ops-status-pill--neutral {
+  background: rgba(92, 156, 219, 0.14);
+  color: #c4ddff;
+  border-color: rgba(92, 156, 219, 0.22);
+}
+
+.ops-status-pill--attention {
+  background: rgba(220, 111, 102, 0.14);
+  color: #ffd0cb;
+  border-color: rgba(220, 111, 102, 0.24);
+}
+
+.ops-inbox-summary {
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  color: #d7e2f2;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -380,6 +611,11 @@
   .profile-grid,
   .results-grid,
   .ops-grid,
+  .ops-dashboard-grid,
+  .ops-metric-grid,
+  .ops-tabbar,
+  .ops-quick-grid,
+  .ops-vehicle-grid,
   .customer-form-grid,
   .summary-panel,
   .quote-grid,
@@ -393,7 +629,8 @@
   .panel-card__header,
   .button-strip,
   .topbar-actions,
-  .ops-header {
+  .ops-header,
+  .ops-launchbar {
     align-items: flex-start;
     flex-direction: column;
   }

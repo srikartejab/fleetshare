@@ -136,6 +136,28 @@ export type SearchResponse = {
   availabilitySummary: string
 }
 
+export type InspectionSubmissionResult = {
+  recordId: number
+  bookingId: number
+  vehicleId: number
+  assessmentResult: {
+    severity: string
+    confidence: number
+    detectedDamage: string[]
+  }
+  tripStatus: 'CLEARED' | 'BLOCKED'
+  warningMessage: string
+  manualReview: boolean
+}
+
+export type InspectionCancellationResult = {
+  bookingId: number
+  vehicleId: number
+  recordId: number
+  status: string
+  message: string
+}
+
 export async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBase}${path}`, options)
   if (!response.ok) {
