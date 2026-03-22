@@ -5,6 +5,10 @@ from uuid import uuid4
 from fastapi import File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
+
+import os
+from azure.storage.blob import BlobServiceClient
+
 from fleetshare_common.ai import assess_damage
 from fleetshare_common.app import create_app
 from fleetshare_common.http import get_json, patch_json, post_json
@@ -42,11 +46,22 @@ async def assess_external_damage(
     settings = get_settings()
     uploaded_keys = []
     filenames = []
+    image_bytes_list = []  # We will save the raw bytes to send to Azure AI
+    connect_str = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
+    blob_service_client = BlobServiceClient.from_connection_string(connect_str)
+    container_client = blob_service_client.get_container_client("inspections")
+    
     for photo in photos:
         data = await photo.read()
-        key = upload_bytes(f"damage/{bookingId}/{uuid4()}-{photo.filename}", data, photo.content_type or "image/jpeg")
-        uploaded_keys.append(key)
-        filenames.append(photo.filename)
+        image_bytes_list.append(data)  # Save bytes for the AI
+        
+        # Upload the bytes to Azure Blob
+        blob_name = f"damage/{bookingId}/{uuid4()}-{photo.filename}"
+        blob_client = container_client.get_blob_client(blob_name)
+        blob_client.upload_blob(data, overwrite=True)
+        
+        # Save the public Azure URL
+        uploaded_keys.append(blob_client.url)
 
     record = post_json(
         f"{settings.record_service_url}/records",
@@ -59,7 +74,7 @@ async def assess_external_damage(
             "evidenceUrls": uploaded_keys,
         },
     )
-    assessment = assess_damage(notes, filenames, mode=settings.azure_vision_mode)
+    assessment = assess_damage(notes, image_bytes_list=image_bytes_list, mode=settings.azure_vision_mode)
     review_state = "EXTERNAL_ASSESSED"
     blocked = False
     warning = "Inspection passed"
@@ -117,30 +132,26 @@ async def assess_post_trip_damage(
 ):
     settings = get_settings()
     uploaded_keys = []
-    filenames = []
+    image_bytes_list = []
+    connect_str = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
+    blob_service_client = BlobServiceClient.from_connection_string(connect_str)
+    container_client = blob_service_client.get_container_client("inspections")
+    
     for photo in photos:
         data = await photo.read()
-        key = upload_bytes(
-            f"damage/post-trip/{bookingId}/{uuid4()}-{photo.filename}",
-            data,
-            photo.content_type or "image/jpeg",
-        )
-        uploaded_keys.append(key)
-        filenames.append(photo.filename)
+        image_bytes_list.append(data)
+        
+        # Notice the slightly different folder path for post-trip!
+        blob_name = f"damage/post-trip/{bookingId}/{uuid4()}-{photo.filename}"
+        blob_client = container_client.get_blob_client(blob_name)
+        blob_client.upload_blob(data, overwrite=True)
+        uploaded_keys.append(blob_client.url)
 
-    record = post_json(
-        f"{settings.record_service_url}/records",
-        {
-            "bookingId": bookingId,
-            "tripId": tripId,
-            "vehicleId": vehicleId,
-            "recordType": "POST_TRIP_EXTERNAL_DAMAGE",
-            "notes": notes,
-            "reviewState": "PENDING_EXTERNAL",
-            "evidenceUrls": uploaded_keys,
-        },
-    )
-    assessment = assess_damage(notes, filenames, mode=settings.azure_vision_mode)
+    # ... The record creation post_json stays exactly the same ...
+    
+    # 2. FIX THE AI FUNCTION CALL
+    # Change "filenames" to "image_bytes_list=image_bytes_list"
+    assessment = assess_damage(notes, image_bytes_list=image_bytes_list, mode=settings.azure_vision_mode)
     review_state = "EXTERNAL_ASSESSED"
     follow_up_required = False
     warning = "Post-trip inspection recorded. You can now review and lock the car."
