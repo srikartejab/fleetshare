@@ -1,103 +1,78 @@
 from __future__ import annotations
 import os
+import json
+import base64
 from typing import Any
-from azure.ai.vision.imageanalysis import ImageAnalysisClient
-from azure.ai.vision.imageanalysis.models import VisualFeatures
-from azure.core.credentials import AzureKeyCredential
+from openai import AzureOpenAI
 
-SEVERE_TOKENS = (
-    "broken",
-    "crack",
-    "cracked",
-    "flat tire",
-    "hazard",
-    "leak",
-    "major dent",
-    "shattered",
-    "severe",
-)
-AMBIGUOUS_DAMAGE_TOKENS = (
-    "dent",
-    "damaged",
-    "damage",
-    "door ding",
-    "mirror",
-    "panel",
-    "scrape",
-)
-MINOR_DAMAGE_TOKENS = (
-    "dirty",
-    "dust",
-    "light scratch",
-    "scratch",
-    "scuff",
-    "stain",
-)
-CLEAR_TOKENS = (
-    "all good",
-    "clean",
-    "looks clean",
-    "no damage",
-    "no visible damage",
-    "nothing found",
-)
-
+# Mock fallback tokens
+SEVERE_TOKENS = ("broken", "crack", "cracked", "flat tire", "hazard", "leak", "major dent", "shattered", "severe")
+AMBIGUOUS_DAMAGE_TOKENS = ("dent", "damaged", "damage", "door ding", "mirror", "panel", "scrape")
+MINOR_DAMAGE_TOKENS = ("dirty", "dust", "light scratch", "scratch", "scuff", "stain")
+CLEAR_TOKENS = ("all good", "clean", "looks clean", "no damage", "no visible damage", "nothing found")
 
 def _normalize(text: str) -> str:
     return " ".join(text.lower().split())
 
-
 def assess_damage(notes: str, image_bytes_list: list[bytes] | None = None, mode: str = "mock") -> dict[str, Any]:
+    print(f"--- AI START: Mode is set to '{mode}' ---", flush=True)
+
     if mode == "azure" and image_bytes_list:
         try:
-            endpoint = os.environ.get("AZURE_VISION_ENDPOINT")
-            key = os.environ.get("AZURE_VISION_KEY")
-            client = ImageAnalysisClient(endpoint, AzureKeyCredential(key))
-            
-            all_detected_issues = []
-            highest_confidence = 0.0
-            
-            for image_data in image_bytes_list:
-                # Ask Azure for both TAGS and a CAPTION
-                result = client.analyze(
-                    image_data=image_data,
-                    visual_features=[VisualFeatures.TAGS, VisualFeatures.CAPTION]
-                )
-                
-                # 1. Check the Tags (just in case)
-                if result.tags is not None:
-                    for tag in result.tags.list:
-                        if tag.name.lower() in ['damage', 'dent', 'scratch', 'broken', 'crack', 'smashed', 'crash', 'accident']:
-                            all_detected_issues.append(tag.name.lower())
-                            highest_confidence = max(highest_confidence, tag.confidence)
-                            
-                # 2. Check the Caption (The secret weapon!)
-                if result.caption is not None:
-                    caption_text = result.caption.text.lower()
-                    print(f"Azure Caption: '{caption_text}'", flush=True)
-                    
-                    damage_words = ['damage', 'dent', 'scratch', 'broken', 'crack', 'smashed', 'crash', 'wreck', 'shattered']
-                    for word in damage_words:
-                        if word in caption_text:
-                            all_detected_issues.append(word)
-                            # Captions use a different confidence scale, so we default to a high one if it explicitly says the word
-                            highest_confidence = max(highest_confidence, result.caption.confidence)
+            print("--- ANALYZING WITH GPT-4o-MINI ---", flush=True)
+            client = AzureOpenAI(
+                api_key= os.environ.get("AZURE_OPENAI_KEY"),
+                api_version="2024-02-15-preview",
+                azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT")
+            )
+            deployment_name = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini")
 
-            if "broken" in all_detected_issues or "smashed" in all_detected_issues or "crash" in all_detected_issues or "wreck" in all_detected_issues or "shattered" in all_detected_issues:
-                return {"severity": "SEVERE", "confidence": highest_confidence, "detectedDamage": list(set(all_detected_issues))}
-            elif all_detected_issues:
-                return {"severity": "MODERATE", "confidence": highest_confidence, "detectedDamage": list(set(all_detected_issues))}
-            else:
-                return {"severity": "MINOR", "confidence": 0.95, "detectedDamage": ["no visible exterior damage"]}
-                
+            # Convert the raw image bytes to base64 for the prompt
+            base64_image = base64.b64encode(image_bytes_list[0]).decode('utf-8')
+
+            # The exact prompt instructing the AI
+            prompt = """
+            You are an expert car damage assessor. Analyze the image and return a JSON object with two keys:
+            1. "severity": Must be exactly one of the following:
+               - "SEVERE": Crushed body panels, bent or misaligned parts (like trunk lids or doors), broken light housings, shattered glass, deployed airbags, or major crashes.
+               - "MODERATE": Medium dents, deep scratches, scraped bumpers, or missing small non-critical parts.
+               - "MINOR": Small surface dents, light scratches, scuffs, dirt, clean, or no visible damage.
+            2. "detectedDamage": A list of short strings describing the damage (e.g., ["crushed rear bumper", "smashed windshield"]). If no damage, return ["no visible exterior damage"].
+            Return ONLY valid JSON format.
+            """
+
+            response = client.chat.completions.create(
+                model=deployment_name,
+                response_format={ "type": "json_object" },
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
+                            }
+                        ]
+                    }
+                ]
+            )
+
+            # Parse the JSON response from GPT
+            result_json = json.loads(response.choices[0].message.content)
+            print(f"GPT Output: {result_json}", flush=True)
+
+            return {
+                "severity": result_json.get("severity", "MODERATE"),
+                "confidence": 0.95,
+                "detectedDamage": result_json.get("detectedDamage", [])
+            }
+
         except Exception as e:
-            print(f"Azure Vision Error: {e}", flush=True)
+            print(f"Azure OpenAI Error: {e}", flush=True)
 
-
+    # --- MOCK TEXT FALLBACK ---
     print("--- FALLING BACK TO TEXT MOCK ---", flush=True)
-    # ... Rest of text mock logic ...
-
-    # --- MOCK TEXT-ONLY LOGIC ---
     normalized_notes = _normalize(notes)
     if any(token in normalized_notes for token in SEVERE_TOKENS):
         return {"severity": "SEVERE", "confidence": 0.92, "detectedDamage": ["major exterior damage"]}

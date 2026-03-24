@@ -14,3 +14,5 @@ python-dateutil==2.9.0.post0
 pytest==8.3.5
 azure-storage-blob>=12.19.0
 azure-ai-vision-imageanalysis>=1.0.0b1
+azure-storage-blob>=12.19.0
+openai>=1.14.0

@@ -13,7 +13,7 @@ from fleetshare_common.ai import assess_damage
 from fleetshare_common.app import create_app
 from fleetshare_common.http import get_json, patch_json, post_json
 from fleetshare_common.messaging import publish_event
-from fleetshare_common.object_store import ensure_bucket, upload_bytes
+from fleetshare_common.object_store import ensure_bucket
 from fleetshare_common.settings import get_settings
 from fleetshare_common.vehicle_grpc import update_vehicle_status
 
@@ -26,13 +26,13 @@ class ExternalDamageCancellationPayload(BaseModel):
     userId: str
 
 
-@app.on_event("startup")
-def startup_event():
-    try:
-        ensure_bucket()
-    except Exception:
-        # MinIO may still be starting when the service boots; uploads re-check lazily.
-        pass
+# @app.on_event("startup")
+# def startup_event():
+#     try:
+#         ensure_bucket()
+#     except Exception:
+#         # MinIO may still be starting when the service boots; uploads re-check lazily.
+#         pass
 
 
 @app.post("/damage-assessment/external")
