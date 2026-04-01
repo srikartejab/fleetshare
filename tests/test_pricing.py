@@ -123,7 +123,45 @@ def test_finalize_trip_pricing_returns_used_allowance_on_internal_fault(monkeypa
     assert profile.hours_used_this_cycle == 5.0
     assert result["customerSummary"]["remainingHoursThisCycle"] == 1.0
     assert result["allowanceHoursApplied"] == 1.0
+    assert result["restoredIncludedHours"] == 1.0
     assert result["refundAmount"] == 10.0
+
+
+def test_finalize_trip_pricing_internal_fault_clears_renewal_pending_and_restores_allowance(monkeypatch):
+    profile = SimpleNamespace(
+        user_id="user-1001",
+        display_name="Alicia Tan",
+        role="CUSTOMER",
+        demo_badge="Renews tonight",
+        plan_name="STANDARD_MONTHLY",
+        monthly_included_hours=6.0,
+        hours_used_this_cycle=5.0,
+        renewal_date=date(2026, 4, 1),
+    )
+    payload = pricing_service.FinalizeTripPayload(
+        bookingId=13,
+        tripId=23,
+        userId="user-1001",
+        startedAt=datetime(2026, 4, 1, 15, 10),
+        endedAt=datetime(2026, 4, 1, 18, 10),
+        quotedRenewalDate=date(2026, 4, 1),
+        disrupted=True,
+        endReason="SEVERE_INTERNAL_FAULT",
+    )
+    db = _FakeDb()
+
+    monkeypatch.setattr(pricing_service, "get_profile_or_404", lambda _db, _user_id: profile)
+
+    result = pricing_service.finalize_trip_pricing(payload, db)
+
+    assert db.committed is True
+    assert result["finalPrice"] == 0.0
+    assert result["refundAmount"] == 43.33
+    assert result["renewalPending"] is False
+    assert result["reconciliationStatus"] == "RESTORED"
+    assert result["allowanceHoursApplied"] == 0.83
+    assert result["restoredIncludedHours"] == 0.83
+    assert profile.hours_used_this_cycle == 5.0
 
 
 def test_finalize_trip_pricing_only_keeps_uncompensated_allowance_usage(monkeypatch):
@@ -196,12 +234,13 @@ def test_get_customer_ledger_returns_wallet_entries(monkeypatch):
             "tripId": 21,
             "userId": "user-1001",
             "entryType": "RENEWAL",
-            "startTime": "2026-03-19T23:00:00",
-            "endTime": "2026-03-20T01:00:00",
+            "startTime": "2026-03-19T23:00:00Z",
+            "endTime": "2026-03-20T01:00:00Z",
             "totalHours": 2.0,
             "currentCycleHours": 1.0,
             "includedHoursApplied": 1.0,
             "includedHoursAfterRenewal": 1.0,
+            "restoredIncludedHours": 0.0,
             "billableHours": 0.0,
             "provisionalPostMidnightHours": 1.0,
             "provisionalCharge": 20.0,
@@ -211,8 +250,8 @@ def test_get_customer_ledger_returns_wallet_entries(monkeypatch):
             "discountAmount": 0.0,
             "renewalPending": False,
             "reconciliationStatus": "COMPLETED",
-            "createdAt": "2026-03-20T01:05:00",
-            "updatedAt": "2026-03-20T01:10:00",
+            "createdAt": "2026-03-20T01:05:00Z",
+            "updatedAt": "2026-03-20T01:10:00Z",
         }
     ]
 

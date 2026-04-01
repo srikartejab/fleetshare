@@ -13,11 +13,47 @@ except ImportError:  # pragma: no cover - optional dependency for local mock tes
 SEVERE_TOKENS = ("broken", "crack", "cracked", "flat tire", "hazard", "leak", "major dent", "shattered", "severe")
 AMBIGUOUS_DAMAGE_TOKENS = ("dent", "damaged", "damage", "door ding", "mirror", "panel", "scrape")
 MINOR_DAMAGE_TOKENS = ("dirty", "dust", "light scratch", "scratch", "scuff", "stain")
-CLEAR_TOKENS = ("all good", "clean", "looks clean", "no damage", "no visible damage", "nothing found")
+CLEAR_TOKENS = (
+    "all good",
+    "clean",
+    "looks clean",
+    "good condition",
+    "in good condition",
+    "returned in good condition",
+    "looks good",
+    "no damage",
+    "no visible damage",
+    "nothing found",
+)
 TEXT_ONLY_BLOCK_TOKENS = ("damage", "damaged")
 
 def _normalize(text: str) -> str:
     return " ".join(text.lower().split())
+
+
+def _no_damage_assessment(confidence: float) -> dict[str, Any]:
+    return {"severity": "NO_DAMAGE", "confidence": confidence, "detectedDamage": ["no visible exterior damage"]}
+
+
+def _normalize_assessment(raw: dict[str, Any], notes: str) -> dict[str, Any]:
+    severity = str(raw.get("severity", "MODERATE")).upper()
+    confidence = float(raw.get("confidence", 0.55))
+    detected_damage = [str(item) for item in raw.get("detectedDamage", [])]
+    detected_text = " ".join(detected_damage).lower()
+    normalized_notes = _normalize(notes)
+    no_damage_detected = any(token in normalized_notes for token in CLEAR_TOKENS) or any(
+        token in detected_text for token in ("no visible exterior damage", "no visible damage", "no damage")
+    )
+
+    if severity in {"NO_DAMAGE", "NONE", "CLEAR"} or (severity == "MINOR" and no_damage_detected):
+        return _no_damage_assessment(confidence if confidence > 0 else 0.95)
+    if severity not in {"MINOR", "MODERATE", "SEVERE"}:
+        severity = "MODERATE"
+    return {
+        "severity": severity,
+        "confidence": confidence,
+        "detectedDamage": detected_damage,
+    }
 
 
 def _mock_assessment_from_text(notes: str, *, text_only: bool = False) -> dict[str, Any]:
@@ -25,7 +61,7 @@ def _mock_assessment_from_text(notes: str, *, text_only: bool = False) -> dict[s
     if any(token in normalized_notes for token in SEVERE_TOKENS):
         return {"severity": "SEVERE", "confidence": 0.92, "detectedDamage": ["major exterior damage"]}
     if any(token in normalized_notes for token in CLEAR_TOKENS):
-        return {"severity": "MINOR", "confidence": 0.98, "detectedDamage": ["no visible exterior damage"]}
+        return _no_damage_assessment(0.98)
     if text_only and any(token in normalized_notes for token in TEXT_ONLY_BLOCK_TOKENS):
         return {"severity": "SEVERE", "confidence": 0.9, "detectedDamage": ["major exterior damage"]}
     if any(token in normalized_notes for token in MINOR_DAMAGE_TOKENS):
@@ -56,9 +92,10 @@ def assess_damage(notes: str, image_bytes_list: list[bytes] | None = None, mode:
             prompt = """
             You are an expert car damage assessor. Analyze the image and return a JSON object with two keys:
             1. "severity": Must be exactly one of the following:
+               - "NO_DAMAGE": Car looks clean, normal, or has no visible exterior damage.
                - "SEVERE": Crushed body panels, bent or misaligned parts (like trunk lids or doors), broken light housings, shattered glass, deployed airbags, or major crashes.
                - "MODERATE": Medium dents, deep scratches, scraped bumpers, or missing small non-critical parts.
-               - "MINOR": Small surface dents, light scratches, scuffs, dirt, clean, or no visible damage.
+               - "MINOR": Small surface dents, light scratches, scuffs, or dirt.
             2. "detectedDamage": A list of short strings describing the damage (e.g., ["crushed rear bumper", "smashed windshield"]). If no damage, return ["no visible exterior damage"].
             Return ONLY valid JSON format.
             """
@@ -84,11 +121,14 @@ def assess_damage(notes: str, image_bytes_list: list[bytes] | None = None, mode:
             result_json = json.loads(response.choices[0].message.content)
             print(f"GPT Output: {result_json}", flush=True)
 
-            return {
-                "severity": result_json.get("severity", "MODERATE"),
-                "confidence": 0.95,
-                "detectedDamage": result_json.get("detectedDamage", [])
-            }
+            return _normalize_assessment(
+                {
+                    "severity": result_json.get("severity", "MODERATE"),
+                    "confidence": 0.95,
+                    "detectedDamage": result_json.get("detectedDamage", []),
+                },
+                notes,
+            )
 
         except Exception as e:
             print(f"Azure OpenAI Error: {e}", flush=True)
@@ -97,7 +137,7 @@ def assess_damage(notes: str, image_bytes_list: list[bytes] | None = None, mode:
 
     if not image_bytes_list:
         print("--- USING TEXT-ONLY MOCK FOR TESTING ---", flush=True)
-        return _mock_assessment_from_text(notes, text_only=True)
+        return _normalize_assessment(_mock_assessment_from_text(notes, text_only=True), notes)
 
     print("--- FALLING BACK TO TEXT MOCK ---", flush=True)
-    return _mock_assessment_from_text(notes)
+    return _normalize_assessment(_mock_assessment_from_text(notes), notes)

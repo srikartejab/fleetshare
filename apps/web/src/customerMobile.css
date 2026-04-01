@@ -10,6 +10,8 @@
   --customer-demo-width: var(--app-device-width, 430px);
   --customer-safe-top: env(safe-area-inset-top, 0px);
   position: relative;
+  display: flex;
+  flex-direction: column;
   min-height: 100svh;
   max-width: var(--customer-demo-width);
   margin: 0 auto;
@@ -171,6 +173,7 @@
 }
 
 .customer-mobile-shell__chrome {
+  flex-shrink: 0;
   padding: calc(1rem + var(--customer-safe-top)) 1rem 1rem;
   background:
     linear-gradient(180deg, rgba(18, 125, 193, 0.24), rgba(18, 125, 193, 0)),
@@ -214,8 +217,12 @@
 }
 
 .customer-mobile-content {
-  min-height: calc(100svh - 8.5rem);
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 0.9rem 1rem calc(8.4rem + env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .customer-page-header {
@@ -300,6 +307,23 @@
 .customer-hero-card--blue .customer-stat-grid div span,
 .customer-hero-card--blue .customer-stat-grid div strong {
   color: #173150;
+}
+
+.customer-complete-hero {
+  display: block;
+}
+
+.customer-complete-hero__stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+}
+
+.customer-complete-hero__stats div {
+  min-width: 0;
+}
+
+.customer-wallet-summary-card {
+  grid-template-columns: 1fr;
 }
 
 .customer-hero-card--angled {
@@ -774,7 +798,28 @@
 @media (min-width: 561px) {
   .customer-mobile-shell,
   .customer-entry-shell {
+    width: var(--app-device-width, 430px);
+    min-width: var(--app-device-width, 430px);
+    height: var(--app-device-height, 932px);
     min-height: var(--app-device-height, 932px);
+    overflow-x: hidden;
+  }
+
+  .customer-mobile-shell {
+    overflow-y: hidden;
+  }
+
+  .customer-entry-shell {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .customer-bottomnav {
+    position: absolute;
+    left: 0;
+    right: 0;
+    width: 100%;
+    transform: none;
   }
 }
 

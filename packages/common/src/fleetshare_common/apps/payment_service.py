@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 from fleetshare_common.app import create_app
 from fleetshare_common.database import Base, get_db, initialize_schema_with_retry, session_scope
 from fleetshare_common.messaging import start_consumer
+from fleetshare_common.timeutils import iso
 
 app = create_app("Payment Service", "Atomic simulated payment execution service.")
 
@@ -57,7 +58,7 @@ def list_payments(userId: str | None = None, db: Session = Depends(get_db)):
             "amount": payment.amount,
             "reason": payment.reason,
             "status": payment.status,
-            "createdAt": payment.created_at.isoformat() if payment.created_at else None,
+            "createdAt": iso(payment.created_at),
         }
         for payment in query.order_by(PaymentRecord.id.desc()).all()
     ]

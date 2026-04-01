@@ -6,6 +6,7 @@ import {
   formatDateTime,
   formatHours,
   formatMoney,
+  formatSeverityLabel,
 } from './appTypes'
 import type {
   Booking,
@@ -47,6 +48,9 @@ function pageTitle(pathname: string) {
   if (pathname === '/app/bookings/processing') return 'Booking'
   if (pathname.startsWith('/app/trips/inspection-')) return 'Inspection'
   if (pathname === '/app/trips/unlock-processing') return 'Unlocking'
+  if (pathname === '/app/trips/problem-processing') return 'Problem Check'
+  if (pathname === '/app/trips/end-inspection-processing') return 'Inspection'
+  if (pathname === '/app/trips/end-lock-processing') return 'Locking'
   if (pathname.startsWith('/app/trips/end-')) return 'End Trip'
   if (pathname === '/app/trips/report-problem') return 'Report Problem'
   if (pathname === '/app/trips/problem-advisory') return 'Problem Advisory'
@@ -1035,6 +1039,12 @@ export function TripsPage({
                 </div>
               </div>
             </article>
+          ) : activeTrip ? (
+            <article className="customer-card customer-card--info">
+              <p className="customer-page-header__eyebrow">Booking status</p>
+              <h2>Current booking is already in progress</h2>
+              <p>Booking #{activeTrip.bookingId} has already moved into the live trip flow, so there is no separate upcoming booking card to show here.</p>
+            </article>
           ) : (
             <EmptyState actionLabel="Find a vehicle" actionTo="/app/discover" body="You do not have any upcoming bookings. Reserve a vehicle to start the trip flow." title="No upcoming bookings" />
           )}
@@ -1112,11 +1122,13 @@ export function TripsPage({
 
 export function PreTripInspectionProcessingPage({
   latestInspectionResult,
+  records,
   request,
   vehicles,
   onSubmitInspection,
 }: {
   latestInspectionResult: InspectionSubmissionResult | null
+  records: RecordItem[]
   request: { bookingId: number; vehicleId: number; notes: string; photo: File | null } | null
   vehicles: Vehicle[]
   onSubmitInspection: (request: { bookingId: number; vehicleId: number; notes: string; photo: File | null }) => Promise<InspectionSubmissionResult>
@@ -1125,16 +1137,19 @@ export function PreTripInspectionProcessingPage({
   const vehicle = vehicles.find((item) => item.id === request?.vehicleId) ?? null
   const [error, setError] = useState<string | null>(null)
   const startedRequestRef = useRef<string | null>(null)
+  const recordReady = Boolean(
+    request && records.some((record) => record.bookingId === request.bookingId && record.recordType === 'EXTERNAL_DAMAGE'),
+  )
   const submitInspection = useEffectEvent(async (pendingRequest: { bookingId: number; vehicleId: number; notes: string; photo: File | null }) => {
     await onSubmitInspection(pendingRequest)
   })
 
   useEffect(() => {
-    if (!request || latestInspectionResult?.bookingId !== request.bookingId) {
+    if (!request || latestInspectionResult?.bookingId !== request.bookingId || !recordReady) {
       return
     }
     navigate('/app/trips/inspection-result', { replace: true })
-  }, [latestInspectionResult, navigate, request])
+  }, [latestInspectionResult, navigate, recordReady, request])
 
   useEffect(() => {
     if (!request) {
@@ -1177,7 +1192,9 @@ export function PreTripInspectionProcessingPage({
           <p>
             {error
               ? error
-              : 'Uploading the inspection details and running the damage check now. This page will continue automatically when the result is ready.'}
+              : latestInspectionResult?.bookingId === request.bookingId && !recordReady
+                ? 'The inspection assessment is done. FleetShare is syncing the booking result now before opening the next step.'
+                : 'Uploading the inspection details and running the damage check now. This page will continue automatically when the result is ready.'}
           </p>
         </div>
         <CarArtwork />
@@ -1188,13 +1205,13 @@ export function PreTripInspectionProcessingPage({
             <strong>Submit inspection details</strong>
             <span>Completed</span>
           </div>
-          <div className={`customer-step ${error ? 'customer-step--error' : 'customer-step--active'}`}>
+          <div className={`customer-step ${error ? 'customer-step--error' : latestInspectionResult?.bookingId === request.bookingId ? 'customer-step--done' : 'customer-step--active'}`}>
             <strong>Run AI damage assessment</strong>
-            <span>{error ? 'Failed' : 'In progress'}</span>
+            <span>{error ? 'Failed' : latestInspectionResult?.bookingId === request.bookingId ? 'Completed' : 'In progress'}</span>
           </div>
-          <div className="customer-step">
+          <div className={`customer-step ${error ? '' : latestInspectionResult?.bookingId === request.bookingId && !recordReady ? 'customer-step--active' : recordReady ? 'customer-step--done' : ''}`}>
             <strong>Prepare unlock step</strong>
-            <span>Waiting</span>
+            <span>{error ? 'Waiting' : latestInspectionResult?.bookingId === request.bookingId && !recordReady ? 'Syncing' : recordReady ? 'Completed' : 'Waiting'}</span>
           </div>
         </div>
         {error ? (
@@ -1245,7 +1262,7 @@ export function PreTripInspectionResultPage({
         <p>{inspection.warningMessage}</p>
         <div className="customer-pill-row">
           <span className={`customer-status-tag ${inspection.canUnlock ? 'customer-status-tag--success' : 'customer-status-tag--warning'}`}>
-            {inspection.severity}
+            {formatSeverityLabel(inspection.severity)}
           </span>
           <strong>{inspection.reviewState}</strong>
         </div>
@@ -1425,10 +1442,10 @@ export function TripUnlockProcessingPage({
 
 export function TripProblemPage({
   activeTrip,
-  onSubmitProblem,
+  onQueueProblem,
 }: {
   activeTrip: Trip | null
-  onSubmitProblem: (notes: string) => Promise<InternalDamageResult>
+  onQueueProblem: (notes: string) => void
 }) {
   const navigate = useNavigate()
   const [notes, setNotes] = useState('Dashboard warning light came on while driving.')
@@ -1451,7 +1468,8 @@ export function TripProblemPage({
             className="customer-button customer-button--primary"
             disabled={!notes.trim()}
             onClick={() => {
-              void onSubmitProblem(notes).then(() => navigate('/app/trips/problem-advisory'))
+              onQueueProblem(notes)
+              navigate('/app/trips/problem-processing')
             }}
             type="button"
           >
@@ -1459,6 +1477,99 @@ export function TripProblemPage({
           </button>
         </div>
       </article>
+    </div>
+  )
+}
+
+export function TripProblemProcessingPage({
+  activeTrip,
+  onSubmitProblem,
+  reportedProblem,
+  request,
+}: {
+  activeTrip: Trip | null
+  onSubmitProblem: (notes: string) => Promise<InternalDamageResult>
+  reportedProblem: InternalDamageResult | null
+  request: { tripId: number; notes: string } | null
+}) {
+  const navigate = useNavigate()
+  const [error, setError] = useState<string | null>(null)
+  const startedRequestRef = useRef<string | null>(null)
+  const submitProblem = useEffectEvent(async (pendingRequest: { tripId: number; notes: string }) => {
+    await onSubmitProblem(pendingRequest.notes)
+  })
+
+  useEffect(() => {
+    if (!request || !reportedProblem) {
+      return
+    }
+    navigate('/app/trips/problem-advisory', { replace: true })
+  }, [navigate, reportedProblem, request])
+
+  useEffect(() => {
+    if (!request || activeTrip?.tripId !== request.tripId) {
+      return
+    }
+    const requestKey = `${request.tripId}:${request.notes}`
+    if (startedRequestRef.current === requestKey) {
+      return
+    }
+    startedRequestRef.current = requestKey
+    let active = true
+    void submitProblem(request)
+      .catch((submissionError) => {
+        if (!active) {
+          return
+        }
+        setError(submissionError instanceof Error ? submissionError.message : 'Unable to assess the reported vehicle issue.')
+      })
+    return () => {
+      active = false
+    }
+  }, [activeTrip?.tripId, request, submitProblem])
+
+  if (!activeTrip || !request || activeTrip.tripId !== request.tripId) {
+    return <EmptyState actionLabel="Back to bookings" actionTo="/app/trips" body="Start from the live trip page to submit a vehicle problem first." title="No problem report in progress" />
+  }
+
+  return (
+    <div className="customer-page-stack">
+      <PageHeader backTo="/app/trips" eyebrow="Problem assessment" title={error ? 'Problem check failed' : 'Checking the reported issue'} />
+      <section className="customer-hero-card customer-hero-card--angled">
+        <div>
+          <p className="customer-page-header__eyebrow">Live trip</p>
+          <h2>Trip #{activeTrip.tripId}</h2>
+          <p>
+            {error
+              ? error
+              : 'FleetShare is reviewing the reported issue now and deciding whether the trip can continue safely.'}
+          </p>
+        </div>
+        <CarArtwork />
+      </section>
+      <section className="customer-card">
+        <div className="customer-step-list">
+          <div className="customer-step customer-step--done">
+            <strong>Submit customer report</strong>
+            <span>Completed</span>
+          </div>
+          <div className={`customer-step ${error ? 'customer-step--error' : 'customer-step--active'}`}>
+            <strong>Assess trip safety</strong>
+            <span>{error ? 'Failed' : 'In progress'}</span>
+          </div>
+          <div className="customer-step">
+            <strong>Prepare next action</strong>
+            <span>Waiting</span>
+          </div>
+        </div>
+        {error ? (
+          <div className="customer-action-row">
+            <Link className="customer-button customer-button--primary link-button" to="/app/trips">
+              Back to bookings
+            </Link>
+          </div>
+        ) : null}
+      </section>
     </div>
   )
 }
@@ -1478,7 +1589,7 @@ export function TripProblemResultPage({
     <div className="customer-page-stack">
       <PageHeader backTo="/app/trips" eyebrow="Problem assessment" title={reportedProblem.blocked ? 'Stop safely and end the trip' : 'The report has been recorded'} />
       <article className={`customer-card customer-card--${reportedProblem.blocked ? 'danger' : 'success'}`}>
-        <h2>Severity: {reportedProblem.severity}</h2>
+        <h2>Severity: {formatSeverityLabel(reportedProblem.severity)}</h2>
         <p>{reportedProblem.recommendedAction}</p>
         {reportedProblem.duplicateSuppressed ? <p>FleetShare detected a matching incident and suppressed a duplicate recovery run.</p> : null}
       </article>
@@ -1499,11 +1610,11 @@ export function TripProblemResultPage({
 
 export function EndTripInspectionPage({
   activeTrip,
-  onSubmitInspection,
+  onQueueInspection,
   vehicles,
 }: {
   activeTrip: Trip | null
-  onSubmitInspection: (notes: string, photo: File | null) => Promise<PostTripInspectionResult>
+  onQueueInspection: (notes: string, photo: File | null, endReason: string) => void
   vehicles: Vehicle[]
 }) {
   const navigate = useNavigate()
@@ -1540,7 +1651,8 @@ export function EndTripInspectionPage({
           <button
             className="customer-button customer-button--primary"
             onClick={() => {
-              void onSubmitInspection(notes, photo).then(() => navigate(`/app/trips/end-review?reason=${encodeURIComponent(endReason)}`))
+              onQueueInspection(notes, photo, endReason)
+              navigate(`/app/trips/end-inspection-processing?reason=${encodeURIComponent(endReason)}`)
             }}
             type="button"
           >
@@ -1548,6 +1660,102 @@ export function EndTripInspectionPage({
           </button>
         </div>
       </article>
+    </div>
+  )
+}
+
+export function EndTripInspectionProcessingPage({
+  activeTrip,
+  onSubmitInspection,
+  postTripInspectionResult,
+  request,
+  vehicles,
+}: {
+  activeTrip: Trip | null
+  onSubmitInspection: (notes: string, photo: File | null) => Promise<PostTripInspectionResult>
+  postTripInspectionResult: PostTripInspectionResult | null
+  request: { tripId: number; notes: string; photo: File | null; endReason: string } | null
+  vehicles: Vehicle[]
+}) {
+  const navigate = useNavigate()
+  const vehicle = vehicles.find((item) => item.id === activeTrip?.vehicleId) ?? null
+  const [error, setError] = useState<string | null>(null)
+  const startedRequestRef = useRef<string | null>(null)
+  const submitInspection = useEffectEvent(async (pendingRequest: { tripId: number; notes: string; photo: File | null; endReason: string }) => {
+    await onSubmitInspection(pendingRequest.notes, pendingRequest.photo)
+  })
+
+  useEffect(() => {
+    if (!request || !postTripInspectionResult) {
+      return
+    }
+    navigate(`/app/trips/end-review?reason=${encodeURIComponent(request.endReason)}`, { replace: true })
+  }, [navigate, postTripInspectionResult, request])
+
+  useEffect(() => {
+    if (!request || activeTrip?.tripId !== request.tripId) {
+      return
+    }
+    const requestKey = `${request.tripId}:${request.notes}:${request.photo?.name ?? 'none'}:${request.photo?.lastModified ?? 0}:${request.endReason}`
+    if (startedRequestRef.current === requestKey) {
+      return
+    }
+    startedRequestRef.current = requestKey
+    let active = true
+    void submitInspection(request)
+      .catch((submissionError) => {
+        if (!active) {
+          return
+        }
+        setError(submissionError instanceof Error ? submissionError.message : 'Unable to save the post-trip inspection.')
+      })
+    return () => {
+      active = false
+    }
+  }, [activeTrip?.tripId, request, submitInspection])
+
+  if (!activeTrip || !request || activeTrip.tripId !== request.tripId) {
+    return <EmptyState actionLabel="Go to inspection" actionTo="/app/trips/end-inspection" body="Start from the end-trip inspection page to submit the post-trip evidence first." title="No inspection in progress" />
+  }
+
+  return (
+    <div className="customer-page-stack">
+      <PageHeader backTo={`/app/trips/end-inspection?reason=${encodeURIComponent(request.endReason)}`} eyebrow="End trip step 1 of 3" title={error ? 'Inspection upload failed' : 'Processing post-trip inspection'} />
+      <section className="customer-hero-card customer-hero-card--angled">
+        <div>
+          <p className="customer-page-header__eyebrow">Vehicle</p>
+          <h2>{vehicleDisplayName(vehicle, activeTrip.vehicleId)}</h2>
+          <p>
+            {error
+              ? error
+              : 'FleetShare is uploading the post-trip inspection and checking the reported condition now.'}
+          </p>
+        </div>
+        <CarArtwork />
+      </section>
+      <section className="customer-card">
+        <div className="customer-step-list">
+          <div className="customer-step customer-step--done">
+            <strong>Submit inspection details</strong>
+            <span>Completed</span>
+          </div>
+          <div className={`customer-step ${error ? 'customer-step--error' : 'customer-step--active'}`}>
+            <strong>Store evidence and assess condition</strong>
+            <span>{error ? 'Failed' : 'In progress'}</span>
+          </div>
+          <div className="customer-step">
+            <strong>Prepare lock confirmation</strong>
+            <span>Waiting</span>
+          </div>
+        </div>
+        {error ? (
+          <div className="customer-action-row">
+            <Link className="customer-button customer-button--primary link-button" to={`/app/trips/end-inspection?reason=${encodeURIComponent(request.endReason)}`}>
+              Back to inspection
+            </Link>
+          </div>
+        ) : null}
+      </section>
     </div>
   )
 }
@@ -1574,7 +1782,7 @@ export function EndTripReviewPage({
       <PageHeader backTo={`/app/trips/end-inspection?reason=${encodeURIComponent(endReason)}`} eyebrow="End trip step 2 of 3" title="Review the inspection result" />
       <article className={`customer-card customer-card--${postTripInspectionResult.followUpRequired ? 'warning' : 'success'}`}>
         <h2>{vehicleDisplayName(vehicle, postTripInspectionResult.vehicleId)}</h2>
-        <p>Severity: {postTripInspectionResult.assessmentResult.severity}</p>
+        <p>Severity: {formatSeverityLabel(postTripInspectionResult.assessmentResult.severity)}</p>
         <p>{postTripInspectionResult.warningMessage}</p>
       </article>
       {endReason === 'SEVERE_INTERNAL_FAULT' ? (
@@ -1594,12 +1802,12 @@ export function EndTripReviewPage({
 
 export function EndTripConfirmPage({
   activeTrip,
-  onConfirmEndTrip,
+  onQueueEndTrip,
   postTripInspectionResult,
   vehicles,
 }: {
   activeTrip: Trip | null
-  onConfirmEndTrip: (endReason: string) => Promise<EndTripResult>
+  onQueueEndTrip: (endReason: string) => void
   postTripInspectionResult: PostTripInspectionResult | null
   vehicles: Vehicle[]
 }) {
@@ -1630,13 +1838,110 @@ export function EndTripConfirmPage({
         <button
           className="customer-button customer-button--primary"
           onClick={() => {
-            void onConfirmEndTrip(endReason).then(() => navigate(`/app/trips/end-complete?reason=${encodeURIComponent(endReason)}`))
+            onQueueEndTrip(endReason)
+            navigate(`/app/trips/end-lock-processing?reason=${encodeURIComponent(endReason)}`)
           }}
           type="button"
         >
           Lock car and end trip
         </button>
       </div>
+    </div>
+  )
+}
+
+export function EndTripLockProcessingPage({
+  activeTrip,
+  endTripResult,
+  onConfirmEndTrip,
+  request,
+  vehicles,
+}: {
+  activeTrip: Trip | null
+  endTripResult: EndTripResult | null
+  onConfirmEndTrip: (endReason: string) => Promise<EndTripResult>
+  request: { tripId: number; endReason: string } | null
+  vehicles: Vehicle[]
+}) {
+  const navigate = useNavigate()
+  const vehicle = vehicles.find((item) => item.id === activeTrip?.vehicleId) ?? null
+  const [error, setError] = useState<string | null>(null)
+  const startedRequestRef = useRef<string | null>(null)
+  const confirmEndTrip = useEffectEvent(async (pendingRequest: { tripId: number; endReason: string }) => {
+    await onConfirmEndTrip(pendingRequest.endReason)
+  })
+
+  useEffect(() => {
+    if (!request || !endTripResult) {
+      return
+    }
+    navigate(`/app/trips/end-complete?reason=${encodeURIComponent(request.endReason)}`, { replace: true })
+  }, [endTripResult, navigate, request])
+
+  useEffect(() => {
+    if (!request || activeTrip?.tripId !== request.tripId) {
+      return
+    }
+    const requestKey = `${request.tripId}:${request.endReason}`
+    if (startedRequestRef.current === requestKey) {
+      return
+    }
+    startedRequestRef.current = requestKey
+    let active = true
+    void confirmEndTrip(request)
+      .catch((submissionError) => {
+        if (!active) {
+          return
+        }
+        setError(submissionError instanceof Error ? submissionError.message : 'Unable to lock the vehicle and end the trip.')
+      })
+    return () => {
+      active = false
+    }
+  }, [activeTrip?.tripId, confirmEndTrip, request])
+
+  if (!activeTrip || !request || activeTrip.tripId !== request.tripId) {
+    return <EmptyState actionLabel="Go to lock confirmation" actionTo="/app/trips/end-confirm" body="Complete the inspection review step before locking the vehicle." title="No lock request in progress" />
+  }
+
+  return (
+    <div className="customer-page-stack">
+      <PageHeader backTo={`/app/trips/end-confirm?reason=${encodeURIComponent(request.endReason)}`} eyebrow="End trip step 3 of 3" title={error ? 'Lock request failed' : 'Locking the vehicle'} />
+      <section className="customer-hero-card customer-hero-card--angled">
+        <div>
+          <p className="customer-page-header__eyebrow">Vehicle</p>
+          <h2>{vehicleDisplayName(vehicle, activeTrip.vehicleId)}</h2>
+          <p>
+            {error
+              ? error
+              : 'FleetShare is sending the final lock command and closing the trip now.'}
+          </p>
+        </div>
+        <CarArtwork />
+      </section>
+      <section className="customer-card">
+        <div className="customer-step-list">
+          <div className="customer-step customer-step--done">
+            <strong>Confirm lock action</strong>
+            <span>Completed</span>
+          </div>
+          <div className={`customer-step ${error ? 'customer-step--error' : 'customer-step--active'}`}>
+            <strong>Lock vehicle and finalize billing</strong>
+            <span>{error ? 'Failed' : 'In progress'}</span>
+          </div>
+          <div className="customer-step">
+            <strong>Show trip summary</strong>
+            <span>Waiting</span>
+          </div>
+        </div>
+        {error ? (
+          <div className="customer-action-row">
+            <Link className="customer-button customer-button--primary link-button" to={`/app/trips/end-confirm?reason=${encodeURIComponent(request.endReason)}`}>
+              Back to lock confirmation
+            </Link>
+          </div>
+        ) : null}
+      </section>
     </div>
   )
 }
@@ -1652,15 +1957,18 @@ export function EndTripCompletePage({
     return <EmptyState actionLabel="Back to bookings" actionTo="/app/trips" body="Run the end-trip flow from the bookings page first." title="No completed end-trip result" />
   }
 
+  const settlementLabel = endTripResult.renewalReconciliationPending ? 'Renewal reconciliation' : 'Refund queued'
+  const settlementValue = endTripResult.renewalReconciliationPending ? 'Pending' : endTripResult.refundPending ? 'Yes' : 'No'
+
   return (
     <div className="customer-page-stack">
       <PageHeader eyebrow="Trip completed" title="Your trip has been closed" />
-      <section className="customer-hero-card customer-hero-card--blue">
-        <div>
-          <h2>{formatMoney(endTripResult.adjustedFare)}</h2>
-          <p>FleetShare stored the post-trip inspection, sent the lock command, and finalized the billing outcome.</p>
-        </div>
-        <div className="customer-stat-grid">
+      <section className="customer-hero-card customer-hero-card--blue customer-complete-hero">
+        <div className="customer-stat-grid customer-complete-hero__stats">
+          <div>
+            <span>Final fare</span>
+            <strong>{formatMoney(endTripResult.adjustedFare)}</strong>
+          </div>
           <div>
             <span>Status</span>
             <strong>{endTripResult.tripStatus}</strong>
@@ -1670,8 +1978,8 @@ export function EndTripCompletePage({
             <strong>{endTripResult.vehicleLocked ? 'Yes' : 'No'}</strong>
           </div>
           <div>
-            <span>Refund pending</span>
-            <strong>{endTripResult.refundPending ? 'Yes' : 'No'}</strong>
+            <span>{settlementLabel}</span>
+            <strong>{settlementValue}</strong>
           </div>
         </div>
       </section>
@@ -1692,8 +2000,12 @@ export function EndTripCompletePage({
             <strong>{formatMoney(endTripResult.discountAmount)}</strong>
           </div>
           <div className="customer-keyvalue-row">
-            <span>Allowance used</span>
-            <strong>{formatHours(endTripResult.allowanceHoursApplied)}</strong>
+            <span>{(endTripResult.allowanceHoursRestored ?? 0) > 0 ? 'Allowance restored' : 'Allowance used'}</span>
+            <strong>{formatHours((endTripResult.allowanceHoursRestored ?? 0) > 0 ? endTripResult.allowanceHoursRestored ?? 0 : endTripResult.allowanceHoursApplied)}</strong>
+          </div>
+          <div className="customer-keyvalue-row">
+            <span>{settlementLabel}</span>
+            <strong>{settlementValue}</strong>
           </div>
         </div>
       </article>
@@ -1706,7 +2018,7 @@ export function EndTripCompletePage({
         </div>
         {postTripInspectionResult ? (
           <>
-            <p>Severity: {postTripInspectionResult.assessmentResult.severity}</p>
+            <p>Severity: {formatSeverityLabel(postTripInspectionResult.assessmentResult.severity)}</p>
             <p>{postTripInspectionResult.warningMessage}</p>
           </>
         ) : (
@@ -1829,8 +2141,9 @@ export function WalletPage({
     }),
     ...ledgerEntries.map((entry) => {
       const booking = bookingsById.get(entry.bookingId) ?? null
-      const positiveHours = entry.includedHoursAfterRenewal > 0
-      const hoursValue = positiveHours ? entry.includedHoursAfterRenewal : entry.includedHoursApplied
+      const restoredHours = entry.restoredIncludedHours ?? 0
+      const positiveHours = restoredHours > 0 || entry.includedHoursAfterRenewal > 0
+      const hoursValue = restoredHours > 0 ? restoredHours : positiveHours ? entry.includedHoursAfterRenewal : entry.includedHoursApplied
       const amountLabel = `${positiveHours ? '+' : '-'}${formatHours(hoursValue)}`
       const chips = []
 
@@ -1843,7 +2156,7 @@ export function WalletPage({
         id: `ledger-${entry.ledgerId}`,
         postedAt: entry.updatedAt ?? entry.endTime ?? entry.createdAt ?? null,
         category: entry.entryType,
-        title: entry.entryType === 'RENEWAL' ? 'Renewal reconciliation' : 'Included hours settled',
+        title: entry.entryType === 'RENEWAL' ? 'Renewal reconciliation' : restoredHours > 0 ? 'Included hours restored' : 'Included hours settled',
         tone: positiveHours ? 'credit' : 'hours',
         amountLabel,
         subtitle: booking
@@ -1852,7 +2165,9 @@ export function WalletPage({
         detail:
           entry.entryType === 'RENEWAL'
             ? `Final fare ${formatMoney(entry.finalPrice)} after renewal recalculation`
-            : `Final fare ${formatMoney(entry.finalPrice)} for ${formatHours(entry.totalHours)} reserved`,
+            : restoredHours > 0
+              ? `Allowance restored after trip disruption. Final fare ${formatMoney(entry.finalPrice)} for ${formatHours(entry.totalHours)} reserved`
+              : `Final fare ${formatMoney(entry.finalPrice)} for ${formatHours(entry.totalHours)} reserved`,
         chips,
       }
     }),
@@ -1866,12 +2181,7 @@ export function WalletPage({
         title="Transaction history"
       />
 
-      <section className="customer-hero-card customer-hero-card--blue">
-        <div>
-          <p className="customer-page-header__eyebrow">Wallet summary</p>
-          <h2>{planLabel(customerSummary?.planName)}</h2>
-          <p>Booking deductions, refunds, included-hour usage, and any post-renewal reconciliation are consolidated here.</p>
-        </div>
+      <section className="customer-hero-card customer-hero-card--blue customer-wallet-summary-card">
         <div className="customer-stat-grid">
           <div>
             <span>Remaining</span>

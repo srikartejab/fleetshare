@@ -12,7 +12,7 @@ from fleetshare_common.apps import external_damage_service
 def test_mock_assessment_ignores_uploaded_filename_keywords():
     result = assess_damage("Vehicle exterior looks clean.", ["dent-fix-cost-estimate.jpg"])
 
-    assert result["severity"] == "MINOR"
+    assert result["severity"] == "NO_DAMAGE"
     assert result["confidence"] >= 0.7
     assert result["detectedDamage"] == ["no visible exterior damage"]
 
@@ -30,7 +30,7 @@ def test_mock_assessment_text_only_testing_shortcuts():
     damage_result = assess_damage("damage", [])
 
     assert clean_result == {
-        "severity": "MINOR",
+        "severity": "NO_DAMAGE",
         "confidence": 0.98,
         "detectedDamage": ["no visible exterior damage"],
     }
@@ -38,6 +38,16 @@ def test_mock_assessment_text_only_testing_shortcuts():
         "severity": "SEVERE",
         "confidence": 0.9,
         "detectedDamage": ["major exterior damage"],
+    }
+
+
+def test_mock_assessment_treats_good_condition_as_no_damage():
+    result = assess_damage("Vehicle returned in good condition.", [])
+
+    assert result == {
+        "severity": "NO_DAMAGE",
+        "confidence": 0.98,
+        "detectedDamage": ["no visible exterior damage"],
     }
 
 
@@ -76,10 +86,10 @@ def test_external_damage_service_keeps_clean_inspection_cleared(monkeypatch):
     payload = response.json()
     assert payload["tripStatus"] == "CLEARED"
     assert payload["warningMessage"] == "Inspection passed"
-    assert payload["assessmentResult"]["severity"] == "MINOR"
+    assert payload["assessmentResult"]["severity"] == "NO_DAMAGE"
     assert record_updates == [
         {
-            "severity": "MINOR",
+            "severity": "NO_DAMAGE",
             "reviewState": "EXTERNAL_ASSESSED",
             "confidence": 0.98,
             "detectedDamage": ["no visible exterior damage"],
@@ -120,7 +130,7 @@ def test_external_damage_service_allows_text_only_mock_testing(monkeypatch):
     assert clean_response.status_code == 200
     assert clean_response.json()["tripStatus"] == "CLEARED"
     assert clean_response.json()["assessmentResult"] == {
-        "severity": "MINOR",
+        "severity": "NO_DAMAGE",
         "confidence": 0.98,
         "detectedDamage": ["no visible exterior damage"],
     }
@@ -135,7 +145,7 @@ def test_external_damage_service_allows_text_only_mock_testing(monkeypatch):
 
     assert record_updates == [
         {
-            "severity": "MINOR",
+            "severity": "NO_DAMAGE",
             "reviewState": "EXTERNAL_ASSESSED",
             "confidence": 0.98,
             "detectedDamage": ["no visible exterior damage"],

@@ -13,6 +13,13 @@
   --search-pill-offset: 4.9rem;
   --search-card-offset: 9.85rem;
   --search-card-pill-offset: 17.4rem;
+  --search-bottomnav-height: 6.9rem;
+  --search-bottomnav-offset: calc(var(--search-bottomnav-height) + env(safe-area-inset-bottom, 0px));
+  --search-card-bottom-offset: calc(var(--search-bottomnav-offset) + 0.85rem);
+  --search-availability-bottom: calc(7.2rem + env(safe-area-inset-bottom, 0px));
+  --search-availability-bottom-with-card: calc(var(--search-card-pill-offset) + env(safe-area-inset-bottom, 0px));
+  --search-utility-bottom: calc(11rem + env(safe-area-inset-bottom, 0px));
+  --search-utility-bottom-with-card: calc(19.2rem + env(safe-area-inset-bottom, 0px));
   position: relative;
   height: 100svh;
   min-height: 100svh;
@@ -278,7 +285,7 @@
 
 .availability-pill {
   position: fixed;
-  bottom: calc(7.2rem + env(safe-area-inset-bottom, 0px));
+  bottom: var(--search-availability-bottom);
   left: 50%;
   z-index: 565;
   transform: translateX(-50%);
@@ -295,7 +302,7 @@
 }
 
 .search-map-shell--with-card .availability-pill {
-  bottom: calc(7.2rem + env(safe-area-inset-bottom, 0px));
+  bottom: var(--search-availability-bottom-with-card);
 }
 
 .search-marker-icon {
@@ -346,7 +353,7 @@
 
 .map-utility-bar {
   position: fixed;
-  bottom: calc(11rem + env(safe-area-inset-bottom, 0px));
+  bottom: var(--search-utility-bottom);
   left: calc(50% - (var(--search-demo-width) / 2) + 0.75rem);
   z-index: 565;
   display: inline-flex;
@@ -356,6 +363,10 @@
   background: rgba(255, 255, 255, 0.96);
   border-radius: 1rem;
   box-shadow: var(--search-shadow);
+}
+
+.search-map-shell--with-card .map-utility-bar {
+  bottom: var(--search-utility-bottom-with-card);
 }
 
 .map-utility-bar button {
@@ -375,8 +386,8 @@
   position: fixed;
   left: 0.75rem;
   right: 0.75rem;
-  top: calc(var(--search-safe-top) + var(--search-panel-offset) + var(--search-card-offset));
-  bottom: auto;
+  top: auto;
+  bottom: var(--search-card-bottom-offset);
   z-index: 580;
   background: rgba(255, 255, 255, 0.98);
   border-radius: 0.95rem;
@@ -667,6 +678,7 @@
   left: 0;
   right: 0;
   bottom: 0;
+  max-height: calc(100% - 1rem);
   box-sizing: border-box;
   display: grid;
   gap: 0.95rem;
@@ -675,6 +687,8 @@
   border-radius: 1.4rem 1.4rem 0 0;
   transform: translateY(100%);
   transition: transform 200ms ease;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .filter-sheet--open .filter-sheet__panel {
@@ -761,52 +775,56 @@
   cursor: pointer;
 }
 
-@media (min-width: 720px) {
+@media (min-width: 561px) {
   .search-experience {
-    max-width: var(--search-demo-width);
+    width: var(--search-demo-width);
+    min-width: var(--search-demo-width);
     height: var(--app-device-height, 932px);
     min-height: var(--app-device-height, 932px);
     margin: 0 auto;
     box-shadow: 0 0 0 1px rgba(30, 53, 86, 0.06), 0 28px 70px rgba(21, 42, 74, 0.2);
   }
 
-  .search-bottomnav,
-  .filter-sheet,
-  .search-panel,
-  .search-header,
-  .station-card {
-    max-width: var(--search-demo-width);
-    margin: 0 auto;
+  .availability-pill {
+    position: absolute;
     left: 50%;
-    right: auto;
-    width: 100%;
     transform: translateX(-50%);
   }
 
-  .search-header {
-    position: relative;
+  .map-utility-bar {
+    position: absolute;
+    left: 0.75rem;
   }
 
   .search-bottomnav {
-    width: var(--search-demo-width);
+    position: absolute;
+    left: 0;
+    right: 0;
+    width: 100%;
   }
 
   .station-card {
-    width: calc(var(--search-demo-width) - 1.5rem);
-    top: calc(var(--search-safe-top) + var(--search-panel-offset) + var(--search-card-offset));
+    position: absolute;
+    left: 0.75rem;
+    right: 0.75rem;
+    width: auto;
+    top: auto;
+    bottom: var(--search-card-bottom-offset);
+    transform: none;
   }
 
-  .map-utility-bar {
-    left: calc(50% - (var(--search-demo-width) / 2) + 0.75rem);
+  .filter-sheet {
+    position: absolute;
   }
 
   .filter-sheet__panel {
-    left: 50%;
-    width: var(--search-demo-width);
-    transform: translate(-50%, 100%);
+    left: 0;
+    right: 0;
+    width: auto;
+    transform: translateY(100%);
   }
 
   .filter-sheet--open .filter-sheet__panel {
-    transform: translate(-50%, 0);
+    transform: translateY(0);
   }
 }

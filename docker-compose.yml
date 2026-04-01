@@ -29,6 +29,16 @@ services:
       - "9000:9000"
       - "9001:9001"
 
+  adminer:
+    image: adminer:4
+    environment:
+      ADMINER_DEFAULT_SERVER: mysql
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
   kong:
     image: kong:3.6
     environment:

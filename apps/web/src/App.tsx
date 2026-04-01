@@ -37,12 +37,15 @@ import {
   EndTripCompletePage,
   EndTripConfirmPage,
   EndTripInspectionPage,
+  EndTripInspectionProcessingPage,
+  EndTripLockProcessingPage,
   EndTripReviewPage,
   HomePage,
   LandingPage,
   PreTripInspectionProcessingPage,
   PreTripInspectionResultPage,
   TripProblemPage,
+  TripProblemProcessingPage,
   TripProblemResultPage,
   TripUnlockProcessingPage,
   TripsPage,
@@ -69,6 +72,23 @@ type PendingUnlockRequest = {
   notes: string
 }
 
+type PendingProblemRequest = {
+  tripId: number
+  notes: string
+}
+
+type PendingPostTripInspectionRequest = {
+  tripId: number
+  notes: string
+  photo: File | null
+  endReason: string
+}
+
+type PendingEndTripRequest = {
+  tripId: number
+  endReason: string
+}
+
 function App() {
   const [customers, setCustomers] = useState<CustomerSummary[]>([])
   const [activeUserId, setActiveUserId] = useState(() => localStorage.getItem(customerStorageKey) ?? '')
@@ -88,6 +108,9 @@ function App() {
   const [pendingBooking, setPendingBooking] = useState<PendingBooking | null>(null)
   const [pendingInspectionRequest, setPendingInspectionRequest] = useState<PendingInspectionRequest | null>(null)
   const [pendingUnlockRequest, setPendingUnlockRequest] = useState<PendingUnlockRequest | null>(null)
+  const [pendingProblemRequest, setPendingProblemRequest] = useState<PendingProblemRequest | null>(null)
+  const [pendingPostTripInspectionRequest, setPendingPostTripInspectionRequest] = useState<PendingPostTripInspectionRequest | null>(null)
+  const [pendingEndTripRequest, setPendingEndTripRequest] = useState<PendingEndTripRequest | null>(null)
   const [latestInspectionResult, setLatestInspectionResult] = useState<InspectionSubmissionResult | null>(null)
   const [reportedProblem, setReportedProblem] = useState<InternalDamageResult | null>(null)
   const [postTripInspectionResult, setPostTripInspectionResult] = useState<PostTripInspectionResult | null>(null)
@@ -159,6 +182,9 @@ function App() {
         setReservationDraft(null)
         setPendingInspectionRequest(null)
         setPendingUnlockRequest(null)
+        setPendingProblemRequest(null)
+        setPendingPostTripInspectionRequest(null)
+        setPendingEndTripRequest(null)
         setSearchResponse(null)
       })
       return
@@ -254,6 +280,9 @@ function App() {
     setReservationDraft(null)
     setPendingInspectionRequest(null)
     setPendingUnlockRequest(null)
+    setPendingProblemRequest(null)
+    setPendingPostTripInspectionRequest(null)
+    setPendingEndTripRequest(null)
     setSearchResponse(null)
     setLatestInspectionResult(null)
     setReportedProblem(null)
@@ -391,6 +420,7 @@ function App() {
       throw new Error('No active trip found.')
     }
     setBusy(true)
+    setStatus('Assessing the reported issue...')
     try {
       const result = await fetchJson<InternalDamageResult>('/internal-damage/fault-alert', {
         method: 'POST',
@@ -417,6 +447,17 @@ function App() {
     }
   }
 
+  function queueTripProblem(notes: string) {
+    if (!activeTrip) {
+      throw new Error('No active trip found.')
+    }
+    setReportedProblem(null)
+    setPendingProblemRequest({
+      tripId: activeTrip.tripId,
+      notes,
+    })
+  }
+
   async function submitQueuedPreTripInspection(request: PendingInspectionRequest) {
     setBusy(true)
     setStatus('AI is checking the inspection now...')
@@ -433,8 +474,8 @@ function App() {
         method: 'POST',
         body: formData,
       })
-      setLatestInspectionResult(result)
       await refreshCustomerViews()
+      setLatestInspectionResult(result)
       setStatus(
         result.tripStatus === 'CLEARED'
           ? result.warningMessage
@@ -495,8 +536,8 @@ function App() {
         method: 'POST',
         body: formData,
       })
-      setPostTripInspectionResult(result)
       await refreshCustomerViews(activeUserId)
+      setPostTripInspectionResult(result)
       setStatus(result.warningMessage)
       return result
     } catch (error) {
@@ -506,6 +547,20 @@ function App() {
     } finally {
       setBusy(false)
     }
+  }
+
+  function queuePostTripInspection(notes: string, photo: File | null, endReason: string) {
+    if (!activeTrip) {
+      throw new Error('No active trip found.')
+    }
+    setPostTripInspectionResult(null)
+    setEndTripResult(null)
+    setPendingPostTripInspectionRequest({
+      tripId: activeTrip.tripId,
+      notes,
+      photo,
+      endReason,
+    })
   }
 
   async function completeEndTrip(endReason: string) {
@@ -525,8 +580,8 @@ function App() {
           endReason,
         }),
       })
-      setEndTripResult(result)
       await refreshCustomerViews(activeUserId)
+      setEndTripResult(result)
       setStatus('Trip ended and pricing finalized.')
       return result
     } catch (error) {
@@ -536,6 +591,17 @@ function App() {
     } finally {
       setBusy(false)
     }
+  }
+
+  function queueEndTrip(endReason: string) {
+    if (!activeTrip) {
+      throw new Error('No active trip found.')
+    }
+    setEndTripResult(null)
+    setPendingEndTripRequest({
+      tripId: activeTrip.tripId,
+      endReason,
+    })
   }
 
   const customerProfiles = customers.filter((customer) => customer.role === 'CUSTOMER')
@@ -680,6 +746,7 @@ function App() {
               <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
                 <PreTripInspectionProcessingPage
                   latestInspectionResult={latestInspectionResult}
+                  records={records}
                   request={pendingInspectionRequest}
                   vehicles={vehicles}
                   onSubmitInspection={submitQueuedPreTripInspection}
@@ -744,7 +811,24 @@ function App() {
           element={
             activeUserId ? (
               <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
-                <TripProblemPage activeTrip={activeTrip} onSubmitProblem={submitTripProblem} />
+                <TripProblemPage activeTrip={activeTrip} onQueueProblem={queueTripProblem} />
+              </CustomerShell>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/app/trips/problem-processing"
+          element={
+            activeUserId ? (
+              <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
+                <TripProblemProcessingPage
+                  activeTrip={activeTrip}
+                  onSubmitProblem={submitTripProblem}
+                  reportedProblem={reportedProblem}
+                  request={pendingProblemRequest}
+                />
               </CustomerShell>
             ) : (
               <Navigate to="/" replace />
@@ -768,7 +852,25 @@ function App() {
           element={
             activeUserId ? (
               <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
-                <EndTripInspectionPage activeTrip={activeTrip} onSubmitInspection={submitPostTripInspection} vehicles={vehicles} />
+                <EndTripInspectionPage activeTrip={activeTrip} onQueueInspection={queuePostTripInspection} vehicles={vehicles} />
+              </CustomerShell>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/app/trips/end-inspection-processing"
+          element={
+            activeUserId ? (
+              <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
+                <EndTripInspectionProcessingPage
+                  activeTrip={activeTrip}
+                  onSubmitInspection={submitPostTripInspection}
+                  postTripInspectionResult={postTripInspectionResult}
+                  request={pendingPostTripInspectionRequest}
+                  vehicles={vehicles}
+                />
               </CustomerShell>
             ) : (
               <Navigate to="/" replace />
@@ -794,8 +896,26 @@ function App() {
               <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
                 <EndTripConfirmPage
                   activeTrip={activeTrip}
-                  onConfirmEndTrip={completeEndTrip}
+                  onQueueEndTrip={queueEndTrip}
                   postTripInspectionResult={postTripInspectionResult}
+                  vehicles={vehicles}
+                />
+              </CustomerShell>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/app/trips/end-lock-processing"
+          element={
+            activeUserId ? (
+              <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
+                <EndTripLockProcessingPage
+                  activeTrip={activeTrip}
+                  endTripResult={endTripResult}
+                  onConfirmEndTrip={completeEndTrip}
+                  request={pendingEndTripRequest}
                   vehicles={vehicles}
                 />
               </CustomerShell>

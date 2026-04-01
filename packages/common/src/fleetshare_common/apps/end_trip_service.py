@@ -99,9 +99,11 @@ def process_end_trip(payload: EndTripPayload):
         "tripStatus": trip_result["status"],
         "vehicleLocked": lock_success,
         "adjustedFare": pricing_result["finalPrice"],
-        "refundPending": pricing_result["renewalPending"] or pricing_result["refundAmount"] > 0,
+        "refundPending": pricing_result["refundAmount"] > 0,
+        "renewalReconciliationPending": pricing_result["renewalPending"],
         "discountAmount": pricing_result["discountAmount"],
         "allowanceHoursApplied": pricing_result["allowanceHoursApplied"],
+        "allowanceHoursRestored": pricing_result.get("restoredIncludedHours", 0.0),
         "customerSummary": pricing_result["customerSummary"],
     }
 

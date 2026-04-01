@@ -162,6 +162,7 @@ export type WalletLedgerEntry = {
   currentCycleHours: number
   includedHoursApplied: number
   includedHoursAfterRenewal: number
+  restoredIncludedHours?: number
   billableHours: number
   provisionalPostMidnightHours: number
   provisionalCharge: number
@@ -274,8 +275,10 @@ export type EndTripResult = {
   vehicleLocked: boolean
   adjustedFare: number
   refundPending: boolean
+  renewalReconciliationPending?: boolean
   discountAmount: number
   allowanceHoursApplied: number
+  allowanceHoursRestored?: number
   customerSummary: CustomerSummary
 }
 
@@ -319,6 +322,11 @@ export function formatMoney(value: number) {
 
 export function formatHours(value: number) {
   return `${value.toFixed(1)}h`
+}
+
+export function formatSeverityLabel(value?: string | null) {
+  if (!value) return 'N/A'
+  return value.replaceAll('_', ' ')
 }
 
 export function formatDate(value?: string | null) {
