@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime
 
-from fastapi import Query
+from fastapi import HTTPException, Query
 
 from fleetshare_common.app import create_app
 from fleetshare_common.http import get_json
@@ -12,6 +12,11 @@ from fleetshare_common.station_catalog import get_station, haversine_km, resolve
 from fleetshare_common.vehicle_grpc import check_availability
 
 app = create_app("Search Available Vehicles Service", "Composite vehicle search workflow.")
+
+
+def validate_booking_window(start_time: datetime, end_time: datetime) -> None:
+    if end_time <= start_time:
+        raise HTTPException(status_code=400, detail="endTime must be later than startTime")
 
 
 @app.get("/search-vehicles/search")
@@ -23,6 +28,7 @@ def search_available_vehicles(
     vehicleType: str | None = None,
     subscriptionPlanId: str = "STANDARD_MONTHLY",
 ):
+    validate_booking_window(startTime, endTime)
     settings = get_settings()
     stations = get_json(f"{settings.vehicle_service_url}/vehicles/stations")
     vehicles = get_json(f"{settings.vehicle_service_url}/vehicles/availability")
@@ -77,7 +83,10 @@ def search_available_vehicles(
                 "distanceKm": round(distance_km, 2),
                 "estimatedPrice": quote["estimatedPrice"],
                 "allowanceStatus": quote["allowanceStatus"],
+                "crossCycleBooking": quote["crossCycleBooking"],
                 "hourlyRate": quote["hourlyRate"],
+                "totalHours": quote["totalHours"],
+                "currentCycleHours": quote["currentCycleHours"],
                 "includedHoursApplied": quote["includedHoursApplied"],
                 "includedHoursRemainingBefore": quote["includedHoursRemainingBefore"],
                 "includedHoursRemainingAfter": quote["includedHoursRemainingAfter"],

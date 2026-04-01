@@ -55,6 +55,13 @@ function deviceTime() {
   }).format(new Date())
 }
 
+function formatSearchSlotTime(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
+
 function vehicleDisplayType(vehicle: Vehicle) {
   const byType: Record<string, string> = {
     SEDAN: 'Standard EV Sedan',
@@ -143,6 +150,25 @@ function HeaderBackIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24">
       <path d="m14.5 5.5-6 6 6 6" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.3" />
+    </svg>
+  )
+}
+
+function CarouselArrowIcon({
+  direction,
+}: {
+  direction: 'previous' | 'next'
+}) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path
+        d={direction === 'previous' ? 'm14.5 5.5-6 6 6 6' : 'm9.5 5.5 6 6-6 6'}
+        fill="none"
+        stroke="#1e5f96"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2.7"
+      />
     </svg>
   )
 }
@@ -248,7 +274,7 @@ export function SearchExperiencePage({
   activeUser: CustomerSummary | null
   busy: boolean
   customerSummary: CustomerSummary | null
-  onReserve: (vehicleId: number) => void
+  onReserve: (vehicle: Vehicle) => void
   onSearch: () => Promise<void>
   onSwitchUser: () => void
   searchForm: SearchFormState
@@ -259,6 +285,7 @@ export function SearchExperiencePage({
 }) {
   const navigate = useNavigate()
   const [selectedStationId, setSelectedStationId] = useState(searchResponse?.selectedStationId ?? searchForm.pickupLocation)
+  const [selectedVehicleIndex, setSelectedVehicleIndex] = useState(0)
   const [filterOpen, setFilterOpen] = useState(false)
   const [clock, setClock] = useState(() => deviceTime())
   const initialSearch = useEffectEvent(() => {
@@ -283,19 +310,29 @@ export function SearchExperiencePage({
     setSelectedStationId(searchResponse.selectedStationId ?? searchForm.pickupLocation)
   }, [searchForm.pickupLocation, searchResponse])
 
+  useEffect(() => {
+    setSelectedVehicleIndex(0)
+  }, [selectedStationId, searchResponse])
+
   const selectedStation =
     searchResponse?.stationList.find((station) => station.stationId === selectedStationId) ??
     searchResponse?.stationList[0] ??
     null
-  const featuredVehicle = selectedStation?.featuredVehicle ?? selectedStation?.vehicleList[0] ?? null
+  const stationVehicles = selectedStation?.vehicleList?.length
+    ? selectedStation.vehicleList
+    : selectedStation?.featuredVehicle
+      ? [selectedStation.featuredVehicle]
+      : []
+  const activeVehicle = stationVehicles[selectedVehicleIndex] ?? stationVehicles[0] ?? null
+  const hasVehicleCarousel = stationVehicles.length > 1
   const selectedLocationId = selectedStation?.stationId ?? searchForm.pickupLocation
   const selectedLocation =
     vehicleFilters.locationOptions?.find((location) => location.id === selectedLocationId) ?? vehicleFilters.locationOptions?.[0] ?? null
   const availabilitySummary = searchResponse?.availabilitySummary ?? (busy ? 'Finding nearby vehicles...' : 'Tap Find to load nearby vehicles')
 
   function selectStation(stationId: string) {
-    setSelectedStationId(stationId)
-    setSearchForm((current) => ({ ...current, pickupLocation: stationId }))
+      setSelectedStationId(stationId)
+      setSearchForm((current) => ({ ...current, pickupLocation: stationId }))
   }
 
   return (
@@ -327,7 +364,7 @@ export function SearchExperiencePage({
             <CalendarIcon />
             <div>
               <span>Pick Up</span>
-              <strong>NOW</strong>
+              <strong>{formatSearchSlotTime(searchForm.startTime)}</strong>
               <small>{formatShortDate(searchForm.startTime)}</small>
             </div>
           </button>
@@ -335,7 +372,7 @@ export function SearchExperiencePage({
             <CalendarIcon />
             <div>
               <span>Return</span>
-              <strong>17:00</strong>
+              <strong>{formatSearchSlotTime(searchForm.endTime)}</strong>
               <small>{formatShortDate(searchForm.endTime)}</small>
             </div>
           </button>
@@ -403,19 +440,49 @@ export function SearchExperiencePage({
 
         {selectedStation ? (
           <section className="station-card">
-            {featuredVehicle ? (
+            {activeVehicle ? (
               <>
-                <div className="station-card__hero">
-                  <div>
-                    <h2>{vehicleDisplayType(featuredVehicle)}</h2>
-                    <p>{featuredVehicle.model} or similar</p>
+                {hasVehicleCarousel ? (
+                  <div className="station-card__carousel">
+                    <div>
+                      <span className="station-card__subheading">Available at this station</span>
+                      <strong>
+                        {selectedVehicleIndex + 1} of {stationVehicles.length}
+                      </strong>
+                    </div>
+                    <div className="station-card__carousel-controls">
+                      <button
+                        aria-label="Show previous vehicle"
+                        className="station-card__carousel-button"
+                        onClick={() => setSelectedVehicleIndex((current) => (current - 1 + stationVehicles.length) % stationVehicles.length)}
+                        type="button"
+                      >
+                        <CarouselArrowIcon direction="previous" />
+                      </button>
+                      <button
+                        aria-label="Show next vehicle"
+                        className="station-card__carousel-button"
+                        onClick={() => setSelectedVehicleIndex((current) => (current + 1) % stationVehicles.length)}
+                        type="button"
+                      >
+                        <CarouselArrowIcon direction="next" />
+                      </button>
+                    </div>
                   </div>
-                  <CarIllustration accent={selectedStation.availableVehicleCount > 0 ? '#f8a53a' : '#9ba6b5'} />
+                ) : null}
+                <div className="station-card__hero">
+                  <div className="station-card__hero-copy">
+                    <h2>{vehicleDisplayType(activeVehicle)}</h2>
+                    <p>{activeVehicle.model} or similar</p>
+                  </div>
+                  <div className="station-card__hero-cta">
+                    <CarIllustration accent={selectedStation.availableVehicleCount > 0 ? '#f8a53a' : '#9ba6b5'} />
+                  </div>
                 </div>
                 <div className="station-card__meta">
                   <span>
                     <MetaIcon kind="distance" />
-                    {featuredVehicle.distanceKm?.toFixed(2) ?? selectedStation.distanceKm.toFixed(2)} km
+                    {activeVehicle.distanceKm?.toFixed(2) ?? selectedStation.distanceKm.toFixed(2)} km
                   </span>
                   <span>
                     <MetaIcon kind="electric" />
@@ -423,27 +490,39 @@ export function SearchExperiencePage({
                   </span>
                   <span>
                     <MetaIcon kind="driver" />
-                    {vehicleBadge(featuredVehicle)}
+                    {vehicleBadge(activeVehicle)}
                   </span>
                 </div>
-                <div className="station-card__divider" />
-                <div className="station-card__footer">
-                  <div>
-                    <span className="station-card__subheading">Next available timing</span>
-                    <strong>{selectedStation.nextAvailableTiming ?? 'Available now'}</strong>
-                  </div>
+                <div className="station-card__action-row">
+                  {hasVehicleCarousel ? (
+                    <div className="station-card__carousel-dots" aria-label={`Vehicle ${selectedVehicleIndex + 1} of ${stationVehicles.length}`}>
+                      {stationVehicles.map((vehicle, index) => (
+                        <button
+                          aria-label={`Show ${vehicle.model}`}
+                          aria-pressed={index === selectedVehicleIndex}
+                          className={`station-card__carousel-dot ${index === selectedVehicleIndex ? 'station-card__carousel-dot--active' : ''}`}
+                          key={vehicle.vehicleId ?? vehicle.id}
+                          onClick={() => setSelectedVehicleIndex(index)}
+                          type="button"
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div />
+                  )}
                   <button
                     className="reserve-button"
                     onClick={() => {
-                      onReserve(featuredVehicle.vehicleId ?? featuredVehicle.id)
-                      navigate('/app/bookings/processing')
+                      onReserve(activeVehicle)
+                      navigate('/app/bookings/review')
                     }}
                     type="button"
                   >
-                    <strong>{formatMoney(featuredVehicle.estimatedPrice ?? 0)}</strong>
+                    <strong>{formatMoney(activeVehicle.estimatedPrice ?? 0)}</strong>
                     <span>Reserve</span>
                   </button>
                 </div>
+                <div className="station-card__divider" />
               </>
             ) : (
               <>

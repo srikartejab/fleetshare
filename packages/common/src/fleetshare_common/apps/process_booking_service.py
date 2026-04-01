@@ -13,6 +13,11 @@ from fleetshare_common.vehicle_grpc import check_availability
 app = create_app("Process Booking Service", "Composite booking and payment orchestration.")
 
 
+def validate_booking_window(start_time: datetime, end_time: datetime) -> None:
+    if end_time <= start_time:
+        raise HTTPException(status_code=400, detail="endTime must be later than startTime")
+
+
 class ReservePayload(BaseModel):
     userId: str
     vehicleId: int
@@ -45,6 +50,7 @@ def search_booking_options(
     vehicleType: str | None = None,
     subscriptionPlanId: str = "STANDARD_MONTHLY",
 ):
+    validate_booking_window(startTime, endTime)
     settings = get_settings()
     params = {
         "userId": userId,
@@ -60,6 +66,7 @@ def search_booking_options(
 
 @app.post("/process-booking/reserve")
 def process_booking(payload: ReservePayload):
+    validate_booking_window(payload.startTime, payload.endTime)
     settings = get_settings()
     grpc_status = check_availability(payload.vehicleId)
     if not grpc_status["available"]:
@@ -90,7 +97,7 @@ def process_booking(payload: ReservePayload):
         f"{settings.booking_service_url}/booking",
         {
             **payload.model_dump(mode="json"),
-            "displayedPrice": quote["estimatedPrice"] or payload.displayedPrice,
+            "displayedPrice": quote["estimatedPrice"],
             "crossCycleBooking": quote["crossCycleBooking"],
             "refundPendingOnRenewal": quote["crossCycleBooking"],
             "pricingSnapshot": quote,

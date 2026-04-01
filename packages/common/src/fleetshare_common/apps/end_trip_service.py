@@ -53,6 +53,7 @@ def process_end_trip(payload: EndTripPayload):
             "userId": payload.userId,
             "startedAt": updated_trip["startedAt"],
             "endedAt": updated_trip["endedAt"],
+            "quotedRenewalDate": booking.get("pricingSnapshot", {}).get("renewalDate"),
             "disrupted": disrupted,
             "endReason": payload.endReason,
         },
@@ -60,6 +61,13 @@ def process_end_trip(payload: EndTripPayload):
     patch_json(
         f"{settings.booking_service_url}/booking/{payload.bookingId}/financials",
         {"finalPrice": pricing_result["finalPrice"]},
+    )
+    patch_json(
+        f"{settings.booking_service_url}/booking/{payload.bookingId}/reconciliation-status",
+        {
+            "refund_pending_on_renewal": pricing_result["renewalPending"],
+            "reconciliationStatus": "PENDING" if pricing_result["renewalPending"] else "NOT_REQUIRED",
+        },
     )
     patch_json(
         f"{settings.booking_service_url}/booking/{payload.bookingId}/status",

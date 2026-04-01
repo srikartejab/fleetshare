@@ -3,21 +3,43 @@ import os
 import json
 import base64
 from typing import Any
-from openai import AzureOpenAI
+
+try:
+    from openai import AzureOpenAI
+except ImportError:  # pragma: no cover - optional dependency for local mock testing
+    AzureOpenAI = None
 
 # Mock fallback tokens
 SEVERE_TOKENS = ("broken", "crack", "cracked", "flat tire", "hazard", "leak", "major dent", "shattered", "severe")
 AMBIGUOUS_DAMAGE_TOKENS = ("dent", "damaged", "damage", "door ding", "mirror", "panel", "scrape")
 MINOR_DAMAGE_TOKENS = ("dirty", "dust", "light scratch", "scratch", "scuff", "stain")
 CLEAR_TOKENS = ("all good", "clean", "looks clean", "no damage", "no visible damage", "nothing found")
+TEXT_ONLY_BLOCK_TOKENS = ("damage", "damaged")
 
 def _normalize(text: str) -> str:
     return " ".join(text.lower().split())
 
+
+def _mock_assessment_from_text(notes: str, *, text_only: bool = False) -> dict[str, Any]:
+    normalized_notes = _normalize(notes)
+    if any(token in normalized_notes for token in SEVERE_TOKENS):
+        return {"severity": "SEVERE", "confidence": 0.92, "detectedDamage": ["major exterior damage"]}
+    if any(token in normalized_notes for token in CLEAR_TOKENS):
+        return {"severity": "MINOR", "confidence": 0.98, "detectedDamage": ["no visible exterior damage"]}
+    if text_only and any(token in normalized_notes for token in TEXT_ONLY_BLOCK_TOKENS):
+        return {"severity": "SEVERE", "confidence": 0.9, "detectedDamage": ["major exterior damage"]}
+    if any(token in normalized_notes for token in MINOR_DAMAGE_TOKENS):
+        return {"severity": "MINOR", "confidence": 0.87, "detectedDamage": ["surface issue"]}
+    if any(token in normalized_notes for token in AMBIGUOUS_DAMAGE_TOKENS):
+        return {"severity": "MODERATE", "confidence": 0.61, "detectedDamage": ["possible body damage"]}
+    if normalized_notes:
+        return {"severity": "MODERATE", "confidence": 0.55, "detectedDamage": ["requires manual review"]}
+    return {"severity": "MODERATE", "confidence": 0.51, "detectedDamage": ["insufficient inspection detail"]}
+
 def assess_damage(notes: str, image_bytes_list: list[bytes] | None = None, mode: str = "mock") -> dict[str, Any]:
     print(f"--- AI START: Mode is set to '{mode}' ---", flush=True)
 
-    if mode == "azure" and image_bytes_list:
+    if mode == "azure" and image_bytes_list and AzureOpenAI is not None:
         try:
             print("--- ANALYZING WITH GPT-4o-MINI ---", flush=True)
             client = AzureOpenAI(
@@ -70,19 +92,12 @@ def assess_damage(notes: str, image_bytes_list: list[bytes] | None = None, mode:
 
         except Exception as e:
             print(f"Azure OpenAI Error: {e}", flush=True)
+    elif mode == "azure" and image_bytes_list and AzureOpenAI is None:
+        print("--- AZURE OPENAI SDK NOT INSTALLED; USING MOCK ---", flush=True)
 
-    # --- MOCK TEXT FALLBACK ---
+    if not image_bytes_list:
+        print("--- USING TEXT-ONLY MOCK FOR TESTING ---", flush=True)
+        return _mock_assessment_from_text(notes, text_only=True)
+
     print("--- FALLING BACK TO TEXT MOCK ---", flush=True)
-    normalized_notes = _normalize(notes)
-    if any(token in normalized_notes for token in SEVERE_TOKENS):
-        return {"severity": "SEVERE", "confidence": 0.92, "detectedDamage": ["major exterior damage"]}
-    if any(token in normalized_notes for token in CLEAR_TOKENS):
-        return {"severity": "MINOR", "confidence": 0.98, "detectedDamage": ["no visible exterior damage"]}
-    if any(token in normalized_notes for token in MINOR_DAMAGE_TOKENS):
-        return {"severity": "MINOR", "confidence": 0.87, "detectedDamage": ["surface issue"]}
-    if any(token in normalized_notes for token in AMBIGUOUS_DAMAGE_TOKENS):
-        return {"severity": "MODERATE", "confidence": 0.61, "detectedDamage": ["possible body damage"]}
-    if normalized_notes:
-        return {"severity": "MODERATE", "confidence": 0.55, "detectedDamage": ["requires manual review"]}
-        
-    return {"severity": "MODERATE", "confidence": 0.51, "detectedDamage": ["insufficient inspection detail"]}
+    return _mock_assessment_from_text(notes)

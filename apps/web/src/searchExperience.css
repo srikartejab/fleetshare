@@ -6,14 +6,15 @@
   --search-text: #1a2c46;
   --search-line: rgba(26, 44, 70, 0.12);
   --search-shadow: 0 20px 40px rgba(18, 45, 82, 0.18);
-  --search-demo-width: 430px;
+  --search-demo-width: var(--app-device-width, 430px);
   --search-safe-top: env(safe-area-inset-top, 0px);
   --search-panel-offset: 6.9rem;
   --search-panel-stack-height: 7.7rem;
   --search-pill-offset: 4.9rem;
-  --search-card-offset: 8.05rem;
+  --search-card-offset: 9.85rem;
   --search-card-pill-offset: 17.4rem;
   position: relative;
+  height: 100svh;
   min-height: 100svh;
   background: #eff5fb;
   color: var(--search-text);
@@ -213,8 +214,8 @@
 .find-button {
   display: grid;
   place-items: center;
-  min-width: 6.5rem;
-  padding: 0.7rem 1rem;
+  min-width: 5.35rem;
+  padding: 0.58rem 0.8rem;
   background: linear-gradient(180deg, var(--search-orange), var(--search-orange-deep));
   color: #fff;
   clip-path: polygon(12% 0, 100% 0, 100% 100%, 0 100%);
@@ -226,7 +227,7 @@
 .find-button span {
   display: block;
   margin-top: 0.1rem;
-  font-size: 1.02rem;
+  font-size: 0.94rem;
 }
 
 .location-bar {
@@ -260,27 +261,33 @@
 }
 
 .search-map-shell {
-  position: relative;
-  padding-top: calc(var(--search-safe-top) + var(--search-panel-offset) + var(--search-panel-stack-height));
-  min-height: calc(100svh - (var(--search-safe-top) + var(--search-panel-offset) + var(--search-panel-stack-height)));
+  position: absolute;
+  inset:
+    calc(var(--search-safe-top) + var(--search-panel-offset) + var(--search-panel-stack-height))
+    0
+    0
+    0;
+  min-height: 0;
 }
 
 .search-map {
-  height: calc(100svh - (var(--search-safe-top) + var(--search-panel-offset) + var(--search-panel-stack-height)));
+  height: 100%;
   width: 100%;
   background: #dce9f6;
 }
 
 .availability-pill {
-  position: absolute;
-  top: calc(var(--search-safe-top) + var(--search-panel-offset) + var(--search-pill-offset));
+  position: fixed;
+  bottom: calc(7.2rem + env(safe-area-inset-bottom, 0px));
   left: 50%;
-  z-index: 550;
+  z-index: 565;
   transform: translateX(-50%);
+  max-width: calc(100% - 8rem);
   padding: 0.32rem 0.85rem;
   background: rgba(58, 64, 73, 0.84);
   color: #fff;
   font-size: 0.92rem;
+  text-align: center;
 }
 
 .availability-pill--loading {
@@ -288,7 +295,7 @@
 }
 
 .search-map-shell--with-card .availability-pill {
-  top: calc(var(--search-safe-top) + var(--search-panel-offset) + var(--search-card-pill-offset));
+  bottom: calc(7.2rem + env(safe-area-inset-bottom, 0px));
 }
 
 .search-marker-icon {
@@ -338,15 +345,16 @@
 }
 
 .map-utility-bar {
-  position: absolute;
+  position: fixed;
   bottom: calc(11rem + env(safe-area-inset-bottom, 0px));
-  left: 0;
-  z-index: 560;
+  left: calc(50% - (var(--search-demo-width) / 2) + 0.75rem);
+  z-index: 565;
   display: inline-flex;
   gap: 0.15rem;
   min-height: 2.8rem;
   padding: 0.2rem;
   background: rgba(255, 255, 255, 0.96);
+  border-radius: 1rem;
   box-shadow: var(--search-shadow);
 }
 
@@ -380,6 +388,72 @@
   align-items: flex-start;
   gap: 0.65rem;
   padding: 0.78rem 0.95rem 0.45rem;
+}
+
+.station-card__hero-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.station-card__hero-cta {
+  display: grid;
+  justify-items: end;
+  min-width: 8.25rem;
+}
+
+.station-card__carousel,
+.station-card__carousel-controls,
+.station-card__carousel-dots {
+  display: flex;
+  align-items: center;
+}
+
+.station-card__carousel {
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.8rem 0.95rem 0;
+}
+
+.station-card__carousel strong {
+  display: block;
+  margin-top: 0.15rem;
+  color: #1d4c7a;
+  font-size: 0.88rem;
+}
+
+.station-card__carousel-controls {
+  gap: 0.45rem;
+}
+
+.station-card__carousel-button,
+.station-card__carousel-dot {
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.station-card__carousel-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  min-width: 2.35rem;
+  height: 2.35rem;
+  min-height: 2.35rem;
+  padding: 0;
+  border-radius: 999px;
+  background: #e3edf8;
+  border: 1px solid rgba(31, 92, 145, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+  color: #1e5f96;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.station-card__carousel-button svg {
+  display: block;
+  width: 1.1rem;
+  height: 1.1rem;
 }
 
 .station-card__hero h2,
@@ -426,6 +500,33 @@
   gap: 0.35rem;
 }
 
+.station-card__carousel-dots {
+  gap: 0.35rem;
+  padding: 0;
+}
+
+.station-card__action-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 0 0.95rem 0.55rem;
+}
+
+.station-card__carousel-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  padding: 0;
+  border-radius: 999px;
+  background: rgba(47, 109, 162, 0.2);
+  cursor: pointer;
+}
+
+.station-card__carousel-dot--active {
+  width: 1.4rem;
+  background: linear-gradient(90deg, var(--search-orange), var(--search-orange-deep));
+}
+
 .station-card__divider {
   height: 1px;
   margin: 0 0.95rem;
@@ -435,6 +536,11 @@
 .station-card__footer {
   gap: 0.75rem;
   padding: 0.65rem 0 0 0.95rem;
+}
+
+.station-card__footer--cta-only {
+  justify-content: flex-end;
+  padding: 0.8rem 0.95rem 0.95rem;
 }
 
 .station-card__footer strong {
@@ -456,9 +562,9 @@
 .reserve-button {
   display: grid;
   place-items: center;
-  min-width: 7.75rem;
-  align-self: stretch;
-  padding: 0.68rem 0.95rem;
+  min-width: 6.35rem;
+  align-self: flex-start;
+  padding: 0.54rem 0.78rem;
   background: linear-gradient(180deg, var(--search-orange), var(--search-orange-deep));
   color: #fff;
   clip-path: polygon(12% 0, 100% 0, 88% 100%, 0 100%);
@@ -466,11 +572,11 @@
 }
 
 .reserve-button strong {
-  font-size: 1rem;
+  font-size: 0.92rem;
 }
 
 .reserve-button span {
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
@@ -658,6 +764,8 @@
 @media (min-width: 720px) {
   .search-experience {
     max-width: var(--search-demo-width);
+    height: var(--app-device-height, 932px);
+    min-height: var(--app-device-height, 932px);
     margin: 0 auto;
     box-shadow: 0 0 0 1px rgba(30, 53, 86, 0.06), 0 28px 70px rgba(21, 42, 74, 0.2);
   }
@@ -686,6 +794,10 @@
   .station-card {
     width: calc(var(--search-demo-width) - 1.5rem);
     top: calc(var(--search-safe-top) + var(--search-panel-offset) + var(--search-card-offset));
+  }
+
+  .map-utility-bar {
+    left: calc(50% - (var(--search-demo-width) / 2) + 0.75rem);
   }
 
   .filter-sheet__panel {

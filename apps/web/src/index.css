@@ -1,4 +1,8 @@
 :root {
+  --app-device-width: 430px;
+  --app-device-height: 932px;
+  --app-frame-gutter: clamp(0px, 3vw, 28px);
+  --app-frame-shadow: 0 30px 80px rgba(5, 12, 24, 0.34);
   color: #f2f5fb;
   background: #08111f;
   font-family: "Avenir Next", "Trebuchet MS", sans-serif;
@@ -23,10 +27,18 @@ body,
 body {
   margin: 0;
   min-width: 320px;
+  display: flex;
+  justify-content: center;
+  padding: var(--app-frame-gutter) 0;
   background:
     radial-gradient(circle at top, rgba(228, 161, 70, 0.12), transparent 24%),
     radial-gradient(circle at bottom right, rgba(62, 117, 173, 0.14), transparent 22%),
     #08111f;
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
 }
 
 h1,
@@ -97,4 +109,10 @@ textarea {
 
 textarea {
   resize: vertical;
+}
+
+@media (max-width: 560px) {
+  body {
+    padding: 0;
+  }
 }

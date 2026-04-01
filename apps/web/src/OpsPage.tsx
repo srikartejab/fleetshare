@@ -375,7 +375,7 @@ export function OpsPage({
                 <div className="ops-list-row" key={booking.bookingId}>
                   <div>
                     <strong>Booking #{booking.bookingId}</strong>
-                    <p>{booking.userId} · Vehicle {booking.vehicleId}</p>
+                    <p>{booking.userId} - Vehicle {booking.vehicleId}</p>
                   </div>
                   <VehicleStatusPill status={booking.status} />
                 </div>
@@ -462,7 +462,7 @@ export function OpsPage({
                 <div className="ops-list-row" key={ticket.ticketId}>
                   <div>
                     <strong>Ticket {ticket.ticketId}</strong>
-                    <p>Vehicle {ticket.vehicleId} · {ticket.damageType}</p>
+                    <p>Vehicle {ticket.vehicleId} - {ticket.damageType}</p>
                   </div>
                   <VehicleStatusPill status={ticket.damageSeverity} />
                 </div>
@@ -483,7 +483,7 @@ export function OpsPage({
                 <div className="ops-list-row" key={record.recordId}>
                   <div>
                     <strong>Record {record.recordId}</strong>
-                    <p>Vehicle {record.vehicleId} · {record.recordType}</p>
+                    <p>Vehicle {record.vehicleId} - {record.recordType}</p>
                   </div>
                   <VehicleStatusPill status={record.severity} />
                 </div>
@@ -504,7 +504,7 @@ export function OpsPage({
                 <div className="ops-list-row" key={record.recordId}>
                   <div>
                     <strong>Record {record.recordId}</strong>
-                    <p>{record.recordType} · Vehicle {record.vehicleId} · {record.reviewState}</p>
+                    <p>{record.recordType} - Vehicle {record.vehicleId} - {record.reviewState}</p>
                   </div>
                   <VehicleStatusPill status={record.severity} />
                 </div>
@@ -528,7 +528,7 @@ export function OpsPage({
                 <div className="ops-list-row" key={payment.paymentId}>
                   <div>
                     <strong>{payment.reason.replaceAll('_', ' ')}</strong>
-                    <p>Booking {payment.bookingId ?? 'N/A'} · {payment.status}</p>
+                    <p>Booking {payment.bookingId ?? 'N/A'} - {payment.status}</p>
                   </div>
                   <strong>{formatMoney(payment.amount)}</strong>
                 </div>
@@ -548,7 +548,7 @@ export function OpsPage({
                 <div className="ops-list-row" key={trip.tripId}>
                   <div>
                     <strong>Trip #{trip.tripId}</strong>
-                    <p>Booking {trip.bookingId} · Vehicle {trip.vehicleId}</p>
+                    <p>Booking {trip.bookingId} - Vehicle {trip.vehicleId}</p>
                   </div>
                   <strong>{formatHours(trip.durationHours)}</strong>
                 </div>
@@ -568,7 +568,7 @@ export function OpsPage({
                 <div className="ops-list-row" key={booking.bookingId}>
                   <div>
                     <strong>Booking #{booking.bookingId}</strong>
-                    <p>{booking.userId} · Vehicle {booking.vehicleId} · {booking.pickupLocation}</p>
+                    <p>{booking.userId} - Vehicle {booking.vehicleId} - {booking.pickupLocation}</p>
                   </div>
                   <VehicleStatusPill status={booking.status} />
                 </div>
@@ -598,7 +598,7 @@ export function OpsPage({
                   <small>{notification.audience}</small>
                 </div>
                 <p>{notification.message}</p>
-                <small>Booking {notification.bookingId ?? 'N/A'} · Trip {notification.tripId ?? 'N/A'}</small>
+                <small>Booking {notification.bookingId ?? 'N/A'} - Trip {notification.tripId ?? 'N/A'}</small>
               </article>
             ))}
             {latestNotifications.length === 0 ? <div className="empty-card"><p>No operations notifications yet.</p></div> : null}

@@ -1,5 +1,5 @@
 import os
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
 from fleetshare_common.ai import assess_damage
@@ -11,8 +11,23 @@ from fleetshare_common.apps import pricing_service
 
 
 def test_booking_quote_detects_cross_cycle():
-    quote = booking_quote(datetime(2026, 3, 31, 23, 0), datetime(2026, 4, 1, 2, 0))
+    quote = booking_quote(
+        datetime(2026, 4, 1, 15, 0, tzinfo=UTC),
+        datetime(2026, 4, 1, 18, 0, tzinfo=UTC),
+        renewal_date=date(2026, 4, 1),
+    )
     assert quote.cross_cycle_booking is True
+    assert quote.provisional_post_midnight_hours == 2.0
+
+
+def test_booking_quote_uses_singapore_midnight_for_naive_utc_values():
+    quote = booking_quote(
+        datetime(2026, 4, 1, 15, 0),
+        datetime(2026, 4, 1, 18, 0),
+        renewal_date=date(2026, 4, 1),
+    )
+    assert quote.cross_cycle_booking is True
+    assert quote.current_cycle_hours == 1.0
     assert quote.provisional_post_midnight_hours == 2.0
 
 

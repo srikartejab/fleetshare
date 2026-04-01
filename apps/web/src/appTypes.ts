@@ -49,7 +49,10 @@ export type Vehicle = {
   distanceKm?: number
   estimatedPrice?: number
   allowanceStatus?: string
+  crossCycleBooking?: boolean
   hourlyRate?: number
+  totalHours?: number
+  currentCycleHours?: number
   includedHoursApplied?: number
   includedHoursRemainingBefore?: number
   includedHoursRemainingAfter?: number
@@ -57,6 +60,14 @@ export type Vehicle = {
   provisionalPostMidnightHours?: number
   provisionalCharge?: number
   renewalDate?: string
+}
+
+export type ReservationDraft = {
+  vehicle: Vehicle
+  pickupLocationLabel: string
+  startTime: string
+  endTime: string
+  pricing: PricingSnapshot
 }
 
 export type LocationOption = {

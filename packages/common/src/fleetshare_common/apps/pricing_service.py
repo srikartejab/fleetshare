@@ -82,6 +82,7 @@ class FinalizeTripPayload(BaseModel):
     userId: str
     startedAt: datetime
     endedAt: datetime
+    quotedRenewalDate: date | None = None
     disrupted: bool = False
     endReason: str | None = None
 
@@ -172,9 +173,13 @@ def summary_from_profile(profile: CustomerProfile) -> dict:
     }
 
 
+def billing_cycle_id_for_renewal_date(renewal_date: date) -> str:
+    return renewal_date.strftime("%Y-%m")
+
+
 def quote_to_dict(user_id: str, quote, profile: CustomerProfile) -> dict:
-    current_cycle_id = profile.renewal_date.strftime("%Y-%m")
-    next_cycle_id = (profile.renewal_date + relativedelta(months=1)).strftime("%Y-%m")
+    current_cycle_id = billing_cycle_id_for_renewal_date(profile.renewal_date)
+    next_cycle_id = billing_cycle_id_for_renewal_date(profile.renewal_date + relativedelta(months=1))
     return {
         "userId": user_id,
         "estimatedPrice": quote.estimated_price,
@@ -271,12 +276,14 @@ def get_customer_ledger(user_id: str, db: Session = Depends(get_db)):
 @app.post("/pricing/customers/{user_id}/renewal")
 def apply_customer_renewal(user_id: str, payload: RenewalPayload, db: Session = Depends(get_db)):
     profile = get_profile_or_404(db, user_id)
+    previous_billing_cycle_id = billing_cycle_id_for_renewal_date(profile.renewal_date)
     profile.hours_used_this_cycle = 0.0
     profile.renewal_date = profile.renewal_date + relativedelta(months=1)
     db.commit()
     return {
         **summary_from_profile(profile),
-        "billingCycleId": payload.newBillingCycleId,
+        "billingCycleId": billing_cycle_id_for_renewal_date(profile.renewal_date),
+        "previousBillingCycleId": previous_billing_cycle_id,
     }
 
 
@@ -315,12 +322,13 @@ def finalize_trip_pricing(payload: FinalizeTripPayload, db: Session = Depends(ge
 
     normalized_start = as_utc_naive(payload.startedAt)
     normalized_end = as_utc_naive(payload.endedAt)
+    renewal_boundary_date = payload.quotedRenewalDate or profile.renewal_date
     quote = booking_quote(
         normalized_start,
         normalized_end,
         monthly_included_hours=profile.monthly_included_hours,
         hours_used_this_cycle=profile.hours_used_this_cycle,
-        renewal_date=profile.renewal_date,
+        renewal_date=renewal_boundary_date,
     )
     adjustment = trip_adjustment(payload.disrupted, quote.total_hours, quote.estimated_price, payload.endReason)
     restored_allowance_hours = refunded_included_hours(
@@ -403,6 +411,20 @@ def disruption_compensation(payload: DisruptionCompensationPayload):
 @app.post("/pricing/re-rate-renewed-booking")
 def rerate(payload: ReRatePayload, db: Session = Depends(get_db)):
     profile = get_profile_or_404(db, payload.userId)
+    ledger = db.query(UsageLedger).filter(UsageLedger.booking_id == payload.bookingId).first()
+    if ledger and ledger.reconciliation_status == "COMPLETED":
+        return {
+            "bookingId": payload.bookingId,
+            "tripId": ledger.trip_id or payload.tripId,
+            "revisedCharge": round(ledger.final_charge, 2),
+            "eligibleIncludedHours": round(ledger.included_hours_after_renewal, 2),
+            "refundAmount": round(ledger.refund_amount, 2),
+            "updatedEntitlementUsage": round(profile.hours_used_this_cycle, 2),
+            "finalPrice": round(ledger.final_charge, 2),
+            "customerSummary": summary_from_profile(profile),
+            "idempotent": True,
+        }
+
     rerate_result = rerate_after_renewal(
         payload.actualPostMidnightHours,
         monthly_included_hours=profile.monthly_included_hours,
@@ -410,7 +432,6 @@ def rerate(payload: ReRatePayload, db: Session = Depends(get_db)):
     )
     profile.hours_used_this_cycle = rerate_result["updatedEntitlementUsage"]
 
-    ledger = db.query(UsageLedger).filter(UsageLedger.booking_id == payload.bookingId).first()
     if not ledger:
         ledger = UsageLedger(
             booking_id=payload.bookingId,
@@ -437,4 +458,5 @@ def rerate(payload: ReRatePayload, db: Session = Depends(get_db)):
         **rerate_result,
         "finalPrice": round(ledger.final_charge, 2),
         "customerSummary": summary_from_profile(profile),
+        "idempotent": False,
     }

@@ -5,15 +5,11 @@ from uuid import uuid4
 from fastapi import File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
-
-import os
-from azure.storage.blob import BlobServiceClient
-
 from fleetshare_common.ai import assess_damage
 from fleetshare_common.app import create_app
 from fleetshare_common.http import get_json, patch_json, post_json
 from fleetshare_common.messaging import publish_event
-from fleetshare_common.object_store import ensure_bucket
+from fleetshare_common.object_store import ensure_bucket, upload_bytes
 from fleetshare_common.settings import get_settings
 from fleetshare_common.vehicle_grpc import update_vehicle_status
 
@@ -35,6 +31,22 @@ class ExternalDamageCancellationPayload(BaseModel):
 #         pass
 
 
+async def _store_uploaded_photos(prefix: str, photos: list[UploadFile]) -> tuple[list[str], list[bytes]]:
+    uploaded_keys: list[str] = []
+    image_bytes_list: list[bytes] = []
+    if not photos:
+        return uploaded_keys, image_bytes_list
+
+    ensure_bucket()
+    for photo in photos:
+        data = await photo.read()
+        image_bytes_list.append(data)
+        filename = photo.filename or "upload.bin"
+        key = f"{prefix}/{uuid4()}-{filename}"
+        uploaded_keys.append(upload_bytes(key, data, content_type=photo.content_type or "application/octet-stream"))
+    return uploaded_keys, image_bytes_list
+
+
 @app.post("/damage-assessment/external")
 async def assess_external_damage(
     bookingId: int = Form(...),
@@ -44,24 +56,7 @@ async def assess_external_damage(
     photos: list[UploadFile] = File(default_factory=list),
 ):
     settings = get_settings()
-    uploaded_keys = []
-    filenames = []
-    image_bytes_list = []  # We will save the raw bytes to send to Azure AI
-    connect_str = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
-    blob_service_client = BlobServiceClient.from_connection_string(connect_str)
-    container_client = blob_service_client.get_container_client("inspections")
-    
-    for photo in photos:
-        data = await photo.read()
-        image_bytes_list.append(data)  # Save bytes for the AI
-        
-        # Upload the bytes to Azure Blob
-        blob_name = f"damage/{bookingId}/{uuid4()}-{photo.filename}"
-        blob_client = container_client.get_blob_client(blob_name)
-        blob_client.upload_blob(data, overwrite=True)
-        
-        # Save the public Azure URL
-        uploaded_keys.append(blob_client.url)
+    uploaded_keys, image_bytes_list = await _store_uploaded_photos(f"damage/{bookingId}", photos)
 
     record = post_json(
         f"{settings.record_service_url}/records",
@@ -131,26 +126,20 @@ async def assess_post_trip_damage(
     photos: list[UploadFile] = File(default_factory=list),
 ):
     settings = get_settings()
-    uploaded_keys = []
-    image_bytes_list = []
-    connect_str = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
-    blob_service_client = BlobServiceClient.from_connection_string(connect_str)
-    container_client = blob_service_client.get_container_client("inspections")
-    
-    for photo in photos:
-        data = await photo.read()
-        image_bytes_list.append(data)
-        
-        # Notice the slightly different folder path for post-trip!
-        blob_name = f"damage/post-trip/{bookingId}/{uuid4()}-{photo.filename}"
-        blob_client = container_client.get_blob_client(blob_name)
-        blob_client.upload_blob(data, overwrite=True)
-        uploaded_keys.append(blob_client.url)
+    uploaded_keys, image_bytes_list = await _store_uploaded_photos(f"damage/post-trip/{bookingId}", photos)
 
-    # ... The record creation post_json stays exactly the same ...
-    
-    # 2. FIX THE AI FUNCTION CALL
-    # Change "filenames" to "image_bytes_list=image_bytes_list"
+    record = post_json(
+        f"{settings.record_service_url}/records",
+        {
+            "bookingId": bookingId,
+            "tripId": tripId,
+            "vehicleId": vehicleId,
+            "recordType": "EXTERNAL_DAMAGE",
+            "notes": notes,
+            "reviewState": "PENDING_EXTERNAL",
+            "evidenceUrls": uploaded_keys,
+        },
+    )
     assessment = assess_damage(notes, image_bytes_list=image_bytes_list, mode=settings.azure_vision_mode)
     review_state = "EXTERNAL_ASSESSED"
     follow_up_required = False

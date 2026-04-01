@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -140,7 +140,8 @@ def submit_minor_inspection(client: httpx.Client, *, booking_id: int, vehicle_id
 def test_scenario_1_booking_trip_and_renewal_reconciliation(client: httpx.Client):
     user_id = "user-1001"
     summary = request_json(client, "GET", f"/pricing/customers/{user_id}/summary")
-    renewal_date = datetime.fromisoformat(summary["renewalDate"]).replace(tzinfo=UTC)
+    singapore = timezone(timedelta(hours=8))
+    renewal_date = datetime.fromisoformat(summary["renewalDate"]).replace(tzinfo=singapore)
     start_time = renewal_date.replace(hour=23, minute=0, second=0, microsecond=0)
     end_time = start_time + timedelta(hours=3)
 

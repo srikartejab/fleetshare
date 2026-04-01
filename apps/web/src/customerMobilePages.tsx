@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import {
@@ -15,8 +15,10 @@ import type {
   InternalDamageResult,
   Notification,
   Payment,
+  PricingSnapshot,
   PostTripInspectionResult,
   RecordItem,
+  ReservationDraft,
   Trip,
   Vehicle,
   WalletLedgerEntry,
@@ -40,8 +42,11 @@ function firstName(displayName?: string | null) {
 }
 
 function pageTitle(pathname: string) {
+  if (pathname === '/app/bookings/review') return 'Booking Review'
   if (pathname.startsWith('/app/bookings/')) return 'Booking Details'
   if (pathname === '/app/bookings/processing') return 'Booking'
+  if (pathname.startsWith('/app/trips/inspection-')) return 'Inspection'
+  if (pathname === '/app/trips/unlock-processing') return 'Unlocking'
   if (pathname.startsWith('/app/trips/end-')) return 'End Trip'
   if (pathname === '/app/trips/report-problem') return 'Report Problem'
   if (pathname === '/app/trips/problem-advisory') return 'Problem Advisory'
@@ -71,6 +76,81 @@ function vehicleTypeLabel(vehicle?: Vehicle | null) {
     default:
       return 'Standard EV Sedan'
   }
+}
+
+function formatRenewalDisplayDate(value?: string | null) {
+  if (!value) return 'N/A'
+  const date = new Date(value)
+  date.setDate(date.getDate() + 1)
+  return formatDate(date.toISOString())
+}
+
+function bookingChargeNotice(
+  pricing: PricingSnapshot,
+  customerSummary: CustomerSummary | null,
+  reconciliationStatus?: string | null,
+) {
+  const renewalDateLabel = formatRenewalDisplayDate(pricing.renewalDate ?? customerSummary?.renewalDate)
+  if (pricing.provisionalPostMidnightHours > 0) {
+    if (reconciliationStatus === 'COMPLETED') {
+      return `This trip crossed your renewal on ${renewalDateLabel}. Eligible after-renewal hours have already been moved into the new cycle allowance, and any refund has been applied automatically.`
+    }
+    return `This trip crosses your renewal on ${renewalDateLabel}. ${formatHours(pricing.provisionalPostMidnightHours)} after renewal is charged now provisionally. If the renewal succeeds, FleetShare automatically re-rates that portion, refunds any overcharge, and deducts the covered hours from the new cycle allowance.`
+  }
+
+  return `This quote uses ${formatHours(pricing.includedHoursApplied)} from the current cycle and bills ${formatHours(pricing.billableHours)} outside the included allowance.`
+}
+
+function BookingPricingBreakdown({
+  pricing,
+  customerSummary,
+  reconciliationStatus,
+}: {
+  pricing: PricingSnapshot
+  customerSummary: CustomerSummary | null
+  reconciliationStatus?: string | null
+}) {
+  return (
+    <>
+      <div className="customer-keyvalue-list">
+        <div className="customer-keyvalue-row">
+          <span>Total trip duration</span>
+          <strong>{formatHours(pricing.totalHours)}</strong>
+        </div>
+        <div className="customer-keyvalue-row">
+          <span>Current-cycle credits used</span>
+          <strong>{formatHours(pricing.includedHoursApplied)}</strong>
+        </div>
+        <div className="customer-keyvalue-row">
+          <span>Current-cycle hours billed now</span>
+          <strong>{formatHours(pricing.billableHours)}</strong>
+        </div>
+        {pricing.provisionalPostMidnightHours > 0 ? (
+          <div className="customer-keyvalue-row">
+            <span>After-renewal hours charged provisionally now</span>
+            <strong>{formatHours(pricing.provisionalPostMidnightHours)}</strong>
+          </div>
+        ) : null}
+        {pricing.provisionalPostMidnightHours > 0 ? (
+          <div className="customer-keyvalue-row">
+            <span>Provisional after-renewal charge</span>
+            <strong>{formatMoney(pricing.provisionalCharge)}</strong>
+          </div>
+        ) : null}
+        <div className="customer-keyvalue-row">
+          <span>Remaining current-cycle credits after this booking</span>
+          <strong>{formatHours(pricing.includedHoursRemainingAfter)}</strong>
+        </div>
+        <div className="customer-keyvalue-row">
+          <span>Renewal date</span>
+          <strong>{formatRenewalDisplayDate(pricing.renewalDate ?? customerSummary?.renewalDate)}</strong>
+        </div>
+      </div>
+      <p className={`customer-inline-notice ${pricing.provisionalPostMidnightHours > 0 ? 'customer-inline-notice--warning' : ''}`}>
+        {bookingChargeNotice(pricing, customerSummary, reconciliationStatus)}
+      </p>
+    </>
+  )
 }
 
 function AccountIcon() {
@@ -280,7 +360,9 @@ function BookingTimeline({
           <strong>{formatDateTime(startTime)}</strong>
         </div>
       </div>
-      <ArrowFlowIcon />
+      <div className="customer-timeline__flow">
+        <ArrowFlowIcon />
+      </div>
       <div className="customer-timeline__item">
         <ClockIcon />
         <div>
@@ -356,7 +438,6 @@ export function LandingPage({
       <section className="customer-entry-hero">
         <p className="customer-page-header__eyebrow">FleetShare Demo</p>
         <h1>Pick a driver and open the mobile customer experience.</h1>
-        <p>The Discover map is already aligned to the reference style. The rest of the app now follows the same mobile-first language.</p>
         <CustomerStatusPill busy={busy} status={status} />
       </section>
       <section className="customer-entry-grid">
@@ -374,7 +455,7 @@ export function LandingPage({
               </div>
               <div>
                 <span>Renewal</span>
-                <strong>{formatDate(customer.renewalDate)}</strong>
+                <strong>{formatRenewalDisplayDate(customer.renewalDate)}</strong>
               </div>
             </div>
             <button
@@ -474,7 +555,7 @@ export function HomePage({
           </div>
           <div>
             <span>Renews</span>
-            <strong>{formatDate(customerSummary?.renewalDate)}</strong>
+            <strong>{formatRenewalDisplayDate(customerSummary?.renewalDate)}</strong>
           </div>
           <div>
             <span>Hourly rate</span>
@@ -535,6 +616,79 @@ export function HomePage({
             </article>
           ))}
           {notifications.length === 0 ? <p className="customer-empty-copy">No notifications yet.</p> : null}
+        </div>
+      </article>
+    </div>
+  )
+}
+
+export function BookingReviewPage({
+  customerSummary,
+  draft,
+  onConfirmBooking,
+}: {
+  customerSummary: CustomerSummary | null
+  draft: ReservationDraft | null
+  onConfirmBooking: () => void
+}) {
+  const navigate = useNavigate()
+
+  if (!draft) {
+    return <EmptyState actionLabel="Back to discover" actionTo="/app/discover" body="Select a vehicle from Discover to review the booking charges first." title="No booking to review" />
+  }
+
+  return (
+    <div className="customer-page-stack">
+      <PageHeader backTo="/app/discover" eyebrow="Reservation" title="Review and confirm booking" />
+
+      <section className="customer-hero-card customer-hero-card--angled">
+        <div>
+          <p className="customer-page-header__eyebrow">Vehicle</p>
+          <h2>{vehicleDisplayName(draft.vehicle, draft.vehicle.vehicleId ?? draft.vehicle.id)} <em>or similar</em></h2>
+          <div className="customer-meta-row">
+            <span><PinIcon /> {draft.vehicle.distanceKm?.toFixed(2) ?? '0.00'} km</span>
+            <span><DriverIcon /> {draft.vehicle.vehicleType === 'LUXURY' ? 'Premium' : draft.vehicle.vehicleType === 'SUV' ? 'Popular' : 'New Driver'}</span>
+            <span><ElectricIcon /> Electric</span>
+          </div>
+          <p>{vehicleTypeLabel(draft.vehicle)}</p>
+        </div>
+        <CarArtwork />
+      </section>
+
+      <article className="customer-card">
+        <div className="customer-card__header">
+          <div>
+            <p className="customer-page-header__eyebrow">Trip status</p>
+            <h2>Pick up and return</h2>
+          </div>
+          <Link to="/app/discover">Edit search</Link>
+        </div>
+        <BookingTimeline endTime={draft.endTime} location={draft.pickupLocationLabel} startTime={draft.startTime} />
+      </article>
+
+      <article className="customer-card">
+        <div className="customer-card__header">
+          <div>
+            <p className="customer-page-header__eyebrow">Rental fees</p>
+            <h2>{formatMoney(draft.pricing.estimatedPrice)}</h2>
+          </div>
+          <span className="customer-status-tag customer-status-tag--info">Due now</span>
+        </div>
+        <BookingPricingBreakdown customerSummary={customerSummary} pricing={draft.pricing} />
+        <div className="customer-action-row">
+          <button
+            className="customer-button customer-button--primary"
+            onClick={() => {
+              onConfirmBooking()
+              navigate('/app/bookings/processing')
+            }}
+            type="button"
+          >
+            Confirm and pay
+          </button>
+          <Link className="customer-button customer-button--secondary link-button" to="/app/discover">
+            Back to discover
+          </Link>
         </div>
       </article>
     </div>
@@ -630,6 +784,49 @@ export function BookingProcessingPage({
   )
 }
 
+function preTripInspectionState(
+  booking: Booking | null,
+  records: RecordItem[],
+  latestInspectionResult: InspectionSubmissionResult | null,
+) {
+  const record = booking
+    ? records.find((item) => item.bookingId === booking.bookingId && item.recordType === 'EXTERNAL_DAMAGE') ?? null
+    : null
+  const latestMatchesBooking = Boolean(booking && latestInspectionResult?.bookingId === booking.bookingId)
+  const severity = latestMatchesBooking
+    ? latestInspectionResult?.assessmentResult.severity ?? record?.severity ?? 'PENDING'
+    : record?.severity ?? 'PENDING'
+  const reviewState = record?.reviewState ?? 'PENDING'
+  const moderate = Boolean(record && reviewState === 'EXTERNAL_ASSESSED' && severity === 'MODERATE')
+  const canUnlock = Boolean(record && reviewState === 'EXTERNAL_ASSESSED' && severity !== 'SEVERE')
+  const manualReview = Boolean((latestMatchesBooking && latestInspectionResult?.manualReview) || reviewState === 'MANUAL_REVIEW')
+  const blocked = Boolean(record && (reviewState === 'EXTERNAL_BLOCKED' || severity === 'SEVERE'))
+  const warningMessage = latestMatchesBooking
+    ? latestInspectionResult?.warningMessage ?? 'Inspection submitted.'
+    : manualReview
+      ? 'Inspection details are incomplete. Add more evidence or request manual review.'
+      : blocked
+        ? 'Severe damage detected. Vehicle blocked.'
+        : moderate
+          ? 'Moderate damage noted. You can still unlock the vehicle or cancel the booking to escalate it to ops.'
+          : canUnlock
+            ? 'Inspection passed'
+            : record
+              ? `Inspection status: ${reviewState}. Unlock stays disabled until the review clears.`
+              : 'Submit the external inspection first. Unlock remains disabled until a cleared result exists.'
+
+  return {
+    blocked,
+    canUnlock,
+    manualReview,
+    moderate,
+    record,
+    reviewState,
+    severity,
+    warningMessage,
+  }
+}
+
 export function BookingDetailsPage({
   bookings,
   customerSummary,
@@ -643,6 +840,12 @@ export function BookingDetailsPage({
   const booking = bookings.find((item) => String(item.bookingId) === bookingId) ?? null
   const vehicle = vehicles.find((item) => item.id === booking?.vehicleId) ?? null
   const pricing = booking?.pricingSnapshot
+  const bookingFeeLabel =
+    booking?.refundPendingOnRenewal
+      ? 'Renewal re-rate pending'
+      : booking?.reconciliationStatus === 'COMPLETED'
+        ? 'Reconciled'
+        : booking?.status ?? 'Booking'
 
   if (!booking) {
     return <EmptyState actionLabel="Back to bookings" actionTo="/app/trips" body="This booking is not loaded in the current session yet." title="Booking not found" />
@@ -711,38 +914,17 @@ export function BookingDetailsPage({
         <div className="customer-card__header">
           <div>
             <p className="customer-page-header__eyebrow">Rental fees</p>
-            <h2>{formatMoney(booking.displayedPrice)}</h2>
+            <h2>{formatMoney(booking.finalPrice || booking.displayedPrice)}</h2>
           </div>
-          <span className="customer-status-tag customer-status-tag--info">{booking.status}</span>
+          <span className="customer-status-tag customer-status-tag--info">{bookingFeeLabel}</span>
         </div>
-        <div className="customer-keyvalue-list">
-          <div className="customer-keyvalue-row">
-            <span>Trip duration</span>
-            <strong>{formatHours(pricing?.totalHours ?? 0)}</strong>
-          </div>
-          <div className="customer-keyvalue-row">
-            <span>Included now</span>
-            <strong>{formatHours(pricing?.includedHoursApplied ?? 0)}</strong>
-          </div>
-          <div className="customer-keyvalue-row">
-            <span>Remaining after booking</span>
-            <strong>{formatHours(pricing?.includedHoursRemainingAfter ?? 0)}</strong>
-          </div>
-          <div className="customer-keyvalue-row">
-            <span>Extra billed hours</span>
-            <strong>{formatHours(pricing?.billableHours ?? 0)}</strong>
-          </div>
-          {pricing?.provisionalPostMidnightHours ? (
-            <div className="customer-keyvalue-row">
-              <span>Overnight provisional charge</span>
-              <strong>{formatMoney(pricing.provisionalCharge)}</strong>
-            </div>
-          ) : null}
-          <div className="customer-keyvalue-row">
-            <span>Renewal date</span>
-            <strong>{customerSummary ? formatDate(customerSummary.renewalDate) : 'N/A'}</strong>
-          </div>
-        </div>
+        {pricing ? (
+          <BookingPricingBreakdown
+            customerSummary={customerSummary}
+            pricing={pricing}
+            reconciliationStatus={booking.reconciliationStatus}
+          />
+        ) : null}
         <div className="customer-action-row">
           <Link className="customer-button customer-button--primary link-button" to="/app/trips">
             Continue to bookings
@@ -758,9 +940,7 @@ export function TripsPage({
   completedTrips,
   historicalBookings,
   latestInspectionResult,
-  onCancelModerateDamage,
-  onStartTrip,
-  onSubmitInspection,
+  onQueueInspection,
   upcomingBookings,
   vehicles,
   records,
@@ -769,26 +949,31 @@ export function TripsPage({
   completedTrips: Trip[]
   historicalBookings: Booking[]
   latestInspectionResult: InspectionSubmissionResult | null
-  onCancelModerateDamage: (bookingId: number, vehicleId: number) => Promise<void>
-  onStartTrip: (bookingId: number, vehicleId: number, notes: string) => Promise<void>
-  onSubmitInspection: (bookingId: number, vehicleId: number, notes: string, photo: File | null) => Promise<void>
+  onQueueInspection: (request: { bookingId: number; vehicleId: number; notes: string; photo: File | null }) => void
   upcomingBookings: Booking[]
   vehicles: Vehicle[]
   records: RecordItem[]
 }) {
+  const navigate = useNavigate()
   const [tab, setTab] = useState<'active' | 'past'>('active')
   const nextBooking = upcomingBookings[0] ?? null
   const nextVehicle = vehicles.find((vehicle) => vehicle.id === nextBooking?.vehicleId) ?? null
-  const inspectionRecord = nextBooking
-    ? records.find((record) => record.bookingId === nextBooking.bookingId && record.recordType === 'EXTERNAL_DAMAGE') ?? null
-    : null
-  const inspectionFeedback = nextBooking && latestInspectionResult?.bookingId === nextBooking.bookingId ? latestInspectionResult : null
-  const inspectionCleared = Boolean(inspectionRecord && inspectionRecord.reviewState === 'EXTERNAL_ASSESSED' && inspectionRecord.severity !== 'SEVERE')
-  const inspectionSeverity = inspectionFeedback?.assessmentResult.severity ?? inspectionRecord?.severity ?? 'PENDING'
-  const moderateInspection = Boolean(inspectionRecord && inspectionRecord.reviewState === 'EXTERNAL_ASSESSED' && inspectionSeverity === 'MODERATE')
+  const inspection = preTripInspectionState(nextBooking, records, latestInspectionResult)
   const [inspectionNotes, setInspectionNotes] = useState('Vehicle exterior looks clean.')
   const [inspectionPhoto, setInspectionPhoto] = useState<File | null>(null)
-  const [startNotes, setStartNotes] = useState('')
+
+  function handleSubmitInspection() {
+    if (!nextBooking) {
+      return
+    }
+    onQueueInspection({
+      bookingId: nextBooking.bookingId,
+      vehicleId: nextBooking.vehicleId,
+      notes: inspectionNotes,
+      photo: inspectionPhoto,
+    })
+    navigate('/app/trips/inspection-processing')
+  }
 
   return (
     <div className="customer-page-stack">
@@ -826,32 +1011,25 @@ export function TripsPage({
                   Optional photo
                   <input accept="image/*" onChange={(event) => setInspectionPhoto(event.target.files?.[0] ?? null)} type="file" />
                 </label>
-                <div className={`customer-inline-notice ${inspectionCleared ? 'customer-inline-notice--success' : inspectionRecord ? 'customer-inline-notice--warning' : ''}`}>
+                <div className={`customer-inline-notice ${inspection.canUnlock ? 'customer-inline-notice--success' : inspection.record ? 'customer-inline-notice--warning' : ''}`}>
                   <strong>Inspection gate</strong>
                   <p>
-                    {inspectionCleared
-                      ? moderateInspection
+                    {inspection.canUnlock
+                      ? inspection.moderate
                         ? 'Moderate damage was logged. You can still unlock the vehicle or cancel the booking to escalate the incident.'
-                        : 'Inspection cleared. You can unlock the vehicle and start the trip.'
-                      : inspectionRecord
-                        ? `Inspection status: ${inspectionRecord.reviewState}. Unlock stays disabled until the review clears.`
+                        : 'Inspection cleared. Open the inspection result to continue to the unlock step.'
+                      : inspection.record
+                        ? `Inspection status: ${inspection.reviewState}. Open the inspection result to see the next step.`
                         : 'Submit the external inspection first. Unlock remains disabled until a cleared result exists.'}
                   </p>
                 </div>
-                <label>
-                  Start notes
-                  <input onChange={(event) => setStartNotes(event.target.value)} placeholder="Optional notes sent with the unlock command" value={startNotes} />
-                </label>
                 <div className="customer-action-row">
-                  <button className="customer-button customer-button--primary" onClick={() => void onSubmitInspection(nextBooking.bookingId, nextBooking.vehicleId, inspectionNotes, inspectionPhoto)} type="button">
+                  <button className="customer-button customer-button--primary" onClick={handleSubmitInspection} type="button">
                     Submit inspection
                   </button>
-                  <button className="customer-button customer-button--secondary" disabled={!inspectionCleared} onClick={() => void onStartTrip(nextBooking.bookingId, nextBooking.vehicleId, startNotes)} type="button">
-                    Unlock vehicle
-                  </button>
-                  {moderateInspection ? (
-                    <button className="customer-button customer-button--ghost" onClick={() => void onCancelModerateDamage(nextBooking.bookingId, nextBooking.vehicleId)} type="button">
-                      Cancel due to damage
+                  {inspection.record ? (
+                    <button className="customer-button customer-button--secondary" onClick={() => navigate('/app/trips/inspection-result')} type="button">
+                      Review inspection
                     </button>
                   ) : null}
                 </div>
@@ -928,6 +1106,319 @@ export function TripsPage({
           {historicalBookings.length === 0 ? <EmptyState body="Once this customer has a completed or cancelled booking, it will appear here." title="No past bookings" /> : null}
         </section>
       )}
+    </div>
+  )
+}
+
+export function PreTripInspectionProcessingPage({
+  latestInspectionResult,
+  request,
+  vehicles,
+  onSubmitInspection,
+}: {
+  latestInspectionResult: InspectionSubmissionResult | null
+  request: { bookingId: number; vehicleId: number; notes: string; photo: File | null } | null
+  vehicles: Vehicle[]
+  onSubmitInspection: (request: { bookingId: number; vehicleId: number; notes: string; photo: File | null }) => Promise<InspectionSubmissionResult>
+}) {
+  const navigate = useNavigate()
+  const vehicle = vehicles.find((item) => item.id === request?.vehicleId) ?? null
+  const [error, setError] = useState<string | null>(null)
+  const startedRequestRef = useRef<string | null>(null)
+  const submitInspection = useEffectEvent(async (pendingRequest: { bookingId: number; vehicleId: number; notes: string; photo: File | null }) => {
+    await onSubmitInspection(pendingRequest)
+  })
+
+  useEffect(() => {
+    if (!request || latestInspectionResult?.bookingId !== request.bookingId) {
+      return
+    }
+    navigate('/app/trips/inspection-result', { replace: true })
+  }, [latestInspectionResult, navigate, request])
+
+  useEffect(() => {
+    if (!request) {
+      return
+    }
+    const requestKey = `${request.bookingId}:${request.vehicleId}:${request.notes}:${request.photo?.name ?? 'none'}:${request.photo?.lastModified ?? 0}`
+    if (startedRequestRef.current === requestKey) {
+      return
+    }
+    startedRequestRef.current = requestKey
+    let active = true
+    void submitInspection(request)
+      .then(() => {
+        if (!active) {
+          return
+        }
+      })
+      .catch((submissionError) => {
+        if (!active) {
+          return
+        }
+        setError(submissionError instanceof Error ? submissionError.message : 'Unable to complete the inspection check.')
+      })
+    return () => {
+      active = false
+    }
+  }, [request, submitInspection])
+
+  if (!request) {
+    return <EmptyState actionLabel="Back to bookings" actionTo="/app/trips" body="Start from the bookings page to submit the pre-trip inspection first." title="No inspection in progress" />
+  }
+
+  return (
+    <div className="customer-page-stack">
+      <PageHeader backTo="/app/trips" eyebrow="Pre-trip step 1 of 3" title={error ? 'Inspection check failed' : 'AI is checking the inspection'} />
+      <section className="customer-hero-card customer-hero-card--angled">
+        <div>
+          <p className="customer-page-header__eyebrow">Vehicle</p>
+          <h2>{vehicleDisplayName(vehicle, request.vehicleId)}</h2>
+          <p>
+            {error
+              ? error
+              : 'Uploading the inspection details and running the damage check now. This page will continue automatically when the result is ready.'}
+          </p>
+        </div>
+        <CarArtwork />
+      </section>
+      <section className="customer-card">
+        <div className="customer-step-list">
+          <div className="customer-step customer-step--done">
+            <strong>Submit inspection details</strong>
+            <span>Completed</span>
+          </div>
+          <div className={`customer-step ${error ? 'customer-step--error' : 'customer-step--active'}`}>
+            <strong>Run AI damage assessment</strong>
+            <span>{error ? 'Failed' : 'In progress'}</span>
+          </div>
+          <div className="customer-step">
+            <strong>Prepare unlock step</strong>
+            <span>Waiting</span>
+          </div>
+        </div>
+        {error ? (
+          <div className="customer-action-row">
+            <Link className="customer-button customer-button--primary link-button" to="/app/trips">
+              Back to bookings
+            </Link>
+          </div>
+        ) : null}
+      </section>
+    </div>
+  )
+}
+
+export function PreTripInspectionResultPage({
+  latestInspectionResult,
+  onCancelModerateDamage,
+  onQueueUnlock,
+  upcomingBookings,
+  vehicles,
+  records,
+}: {
+  latestInspectionResult: InspectionSubmissionResult | null
+  onCancelModerateDamage: (bookingId: number, vehicleId: number) => Promise<void>
+  onQueueUnlock: (request: { bookingId: number; vehicleId: number; notes: string }) => void
+  upcomingBookings: Booking[]
+  vehicles: Vehicle[]
+  records: RecordItem[]
+}) {
+  const navigate = useNavigate()
+  const nextBooking = upcomingBookings[0] ?? null
+  const nextVehicle = vehicles.find((vehicle) => vehicle.id === nextBooking?.vehicleId) ?? null
+  const inspection = preTripInspectionState(nextBooking, records, latestInspectionResult)
+  const [startNotes, setStartNotes] = useState('')
+
+  if (!nextBooking || !inspection.record) {
+    return <EmptyState actionLabel="Back to bookings" actionTo="/app/trips" body="Submit the pre-trip inspection first so the app can show the assessment result." title="No inspection result yet" />
+  }
+
+  const cardTone = inspection.canUnlock ? 'success' : inspection.manualReview || inspection.blocked ? 'danger' : 'warning'
+
+  return (
+    <div className="customer-page-stack">
+      <PageHeader backTo="/app/trips" eyebrow="Pre-trip step 2 of 3" title={inspection.canUnlock ? 'Inspection complete' : 'Inspection result'} />
+      <section className={`customer-card customer-card--${cardTone}`}>
+        <p className="customer-page-header__eyebrow">Assessment</p>
+        <h2>{inspection.canUnlock ? 'You can unlock now' : inspection.manualReview ? 'Manual review required' : inspection.blocked ? 'Vehicle is blocked' : 'Inspection noted an issue'}</h2>
+        <p>{inspection.warningMessage}</p>
+        <div className="customer-pill-row">
+          <span className={`customer-status-tag ${inspection.canUnlock ? 'customer-status-tag--success' : 'customer-status-tag--warning'}`}>
+            {inspection.severity}
+          </span>
+          <strong>{inspection.reviewState}</strong>
+        </div>
+      </section>
+      <article className="customer-card">
+        <div className="customer-card__header">
+          <div>
+            <p className="customer-page-header__eyebrow">Booking</p>
+            <h2>{vehicleDisplayName(nextVehicle, nextBooking.vehicleId)}</h2>
+          </div>
+        </div>
+        <BookingTimeline endTime={nextBooking.endTime} location={nextBooking.pickupLocation} startTime={nextBooking.startTime} />
+      </article>
+      {inspection.canUnlock ? (
+        <article className="customer-card">
+          <label>
+            Start notes
+            <input onChange={(event) => setStartNotes(event.target.value)} placeholder="Optional notes sent with the unlock command" value={startNotes} />
+          </label>
+          <div className="customer-action-row">
+            <button
+              className="customer-button customer-button--primary"
+              onClick={() => {
+                onQueueUnlock({
+                  bookingId: nextBooking.bookingId,
+                  vehicleId: nextBooking.vehicleId,
+                  notes: startNotes,
+                })
+                navigate('/app/trips/unlock-processing')
+              }}
+              type="button"
+            >
+              Unlock vehicle
+            </button>
+            {inspection.moderate ? (
+              <button
+                className="customer-button customer-button--ghost"
+                onClick={() => {
+                  void onCancelModerateDamage(nextBooking.bookingId, nextBooking.vehicleId).then(() => navigate('/app/trips', { replace: true }))
+                }}
+                type="button"
+              >
+                Cancel due to damage
+              </button>
+            ) : (
+              <Link className="customer-button customer-button--secondary link-button" to="/app/trips">
+                Back to bookings
+              </Link>
+            )}
+          </div>
+        </article>
+      ) : (
+        <article className="customer-card">
+          <div className="customer-action-row">
+            <Link className="customer-button customer-button--primary link-button" to="/app/trips">
+              Back to bookings
+            </Link>
+          </div>
+        </article>
+      )}
+    </div>
+  )
+}
+
+export function TripUnlockProcessingPage({
+  activeTrip,
+  request,
+  vehicles,
+  onUnlock,
+}: {
+  activeTrip: Trip | null
+  request: { bookingId: number; vehicleId: number; notes: string } | null
+  vehicles: Vehicle[]
+  onUnlock: (request: { bookingId: number; vehicleId: number; notes: string }) => Promise<void>
+}) {
+  const navigate = useNavigate()
+  const vehicle = vehicles.find((item) => item.id === request?.vehicleId) ?? null
+  const [phase, setPhase] = useState<'processing' | 'success' | 'error'>('processing')
+  const [error, setError] = useState<string | null>(null)
+  const startedRequestRef = useRef<string | null>(null)
+  const redirectTimerRef = useRef<number | undefined>(undefined)
+  const unlockVehicle = useEffectEvent(async (pendingRequest: { bookingId: number; vehicleId: number; notes: string }) => {
+    await onUnlock(pendingRequest)
+  })
+
+  useEffect(() => {
+    if (!request || activeTrip?.bookingId !== request.bookingId || redirectTimerRef.current) {
+      return
+    }
+    setPhase('success')
+    redirectTimerRef.current = window.setTimeout(() => {
+      navigate('/app/trips', { replace: true })
+    }, 1200)
+    return () => {
+      if (redirectTimerRef.current) {
+        window.clearTimeout(redirectTimerRef.current)
+        redirectTimerRef.current = undefined
+      }
+    }
+  }, [activeTrip, navigate, request])
+
+  useEffect(() => {
+    if (!request) {
+      return
+    }
+    const requestKey = `${request.bookingId}:${request.vehicleId}:${request.notes}`
+    if (startedRequestRef.current === requestKey) {
+      return
+    }
+    startedRequestRef.current = requestKey
+    let active = true
+    void unlockVehicle(request)
+      .then(() => {
+        if (!active) {
+          return
+        }
+      })
+      .catch((unlockError) => {
+        if (!active) {
+          return
+        }
+        setPhase('error')
+        setError(unlockError instanceof Error ? unlockError.message : 'Unable to unlock the vehicle.')
+      })
+    return () => {
+      active = false
+    }
+  }, [request, unlockVehicle])
+
+  if (!request) {
+    return <EmptyState actionLabel="Back to inspection" actionTo="/app/trips/inspection-result" body="Open the inspection result first before sending the unlock command." title="No unlock request found" />
+  }
+
+  return (
+    <div className="customer-page-stack">
+      <PageHeader backTo="/app/trips/inspection-result" eyebrow="Pre-trip step 3 of 3" title={phase === 'success' ? 'Vehicle unlocked' : phase === 'error' ? 'Unlock failed' : 'Unlocking vehicle'} />
+      <section className="customer-hero-card customer-hero-card--angled">
+        <div>
+          <p className="customer-page-header__eyebrow">Vehicle</p>
+          <h2>{vehicleDisplayName(vehicle, request.vehicleId)}</h2>
+          <p>
+            {phase === 'success'
+              ? 'The unlock command succeeded. Redirecting to your active bookings now.'
+              : phase === 'error'
+                ? error ?? 'The unlock command could not be completed.'
+                : 'Sending the unlock command and starting the trip now. Please wait.'}
+          </p>
+        </div>
+        <CarArtwork />
+      </section>
+      <section className="customer-card">
+        <div className="customer-step-list">
+          <div className="customer-step customer-step--done">
+            <strong>Inspection cleared</strong>
+            <span>Completed</span>
+          </div>
+          <div className={`customer-step ${phase === 'processing' ? 'customer-step--active' : phase === 'success' ? 'customer-step--done' : 'customer-step--error'}`}>
+            <strong>Send unlock command</strong>
+            <span>{phase === 'processing' ? 'In progress' : phase === 'success' ? 'Completed' : 'Failed'}</span>
+          </div>
+          <div className={`customer-step ${phase === 'success' ? 'customer-step--done' : ''}`}>
+            <strong>Open active bookings</strong>
+            <span>{phase === 'success' ? 'Next' : 'Waiting'}</span>
+          </div>
+        </div>
+        {phase === 'error' ? (
+          <div className="customer-action-row">
+            <Link className="customer-button customer-button--primary link-button" to="/app/trips/inspection-result">
+              Back to inspection result
+            </Link>
+          </div>
+        ) : null}
+      </section>
     </div>
   )
 }
@@ -1388,7 +1879,7 @@ export function WalletPage({
           </div>
           <div>
             <span>Renews</span>
-            <strong>{formatDate(customerSummary?.renewalDate)}</strong>
+            <strong>{formatRenewalDisplayDate(customerSummary?.renewalDate)}</strong>
           </div>
           <div>
             <span>Hourly rate</span>
@@ -1470,7 +1961,7 @@ export function AccountPage({
           </div>
           <div>
             <span>Renews</span>
-            <strong>{formatDate(customerSummary?.renewalDate)}</strong>
+            <strong>{formatRenewalDisplayDate(customerSummary?.renewalDate)}</strong>
           </div>
         </div>
       </section>

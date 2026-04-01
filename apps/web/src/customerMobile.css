@@ -7,7 +7,7 @@
   --customer-text: #1a2c46;
   --customer-line: rgba(26, 44, 70, 0.12);
   --customer-shadow: 0 20px 40px rgba(18, 45, 82, 0.18);
-  --customer-demo-width: 430px;
+  --customer-demo-width: var(--app-device-width, 430px);
   --customer-safe-top: env(safe-area-inset-top, 0px);
   position: relative;
   min-height: 100svh;
@@ -407,6 +407,15 @@
   margin-top: 1rem;
 }
 
+.customer-timeline__flow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 2.1rem;
+  color: #2d6da5;
+}
+
 .customer-timeline__item,
 .customer-timeline__location {
   display: grid;
@@ -669,6 +678,11 @@
   color: #2f7a47;
 }
 
+.customer-status-tag--warning {
+  background: rgba(247, 166, 47, 0.18);
+  color: #9a650f;
+}
+
 .customer-bottomnav {
   position: fixed;
   left: 50%;
@@ -757,10 +771,16 @@
   }
 }
 
+@media (min-width: 561px) {
+  .customer-mobile-shell,
+  .customer-entry-shell {
+    min-height: var(--app-device-height, 932px);
+  }
+}
+
 @media (max-width: 420px) {
   .customer-hero-card,
-  .customer-booking-card__top,
-  .customer-timeline {
+  .customer-booking-card__top {
     grid-template-columns: 1fr;
   }
 
@@ -772,8 +792,7 @@
 
 @media (max-width: 460px) {
   .customer-hero-card,
-  .customer-booking-card__top,
-  .customer-timeline {
+  .customer-booking-card__top {
     grid-template-columns: 1fr;
   }
 
