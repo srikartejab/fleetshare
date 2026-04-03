@@ -18,7 +18,7 @@ from fleetshare_common.pricing import (
     rerate_after_renewal,
     trip_adjustment,
 )
-from fleetshare_common.timeutils import as_utc_naive, utcnow
+from fleetshare_common.timeutils import as_utc_naive, iso, utcnow
 
 app = create_app("Pricing Service", "Atomic pricing and re-rating service.")
 
@@ -82,6 +82,7 @@ class FinalizeTripPayload(BaseModel):
     userId: str
     startedAt: datetime
     endedAt: datetime
+    quotedRenewalDate: date | None = None
     disrupted: bool = False
     endReason: str | None = None
 
@@ -172,9 +173,13 @@ def summary_from_profile(profile: CustomerProfile) -> dict:
     }
 
 
+def billing_cycle_id_for_renewal_date(renewal_date: date) -> str:
+    return renewal_date.strftime("%Y-%m")
+
+
 def quote_to_dict(user_id: str, quote, profile: CustomerProfile) -> dict:
-    current_cycle_id = profile.renewal_date.strftime("%Y-%m")
-    next_cycle_id = (profile.renewal_date + relativedelta(months=1)).strftime("%Y-%m")
+    current_cycle_id = billing_cycle_id_for_renewal_date(profile.renewal_date)
+    next_cycle_id = billing_cycle_id_for_renewal_date(profile.renewal_date + relativedelta(months=1))
     return {
         "userId": user_id,
         "estimatedPrice": quote.estimated_price,
@@ -195,6 +200,8 @@ def quote_to_dict(user_id: str, quote, profile: CustomerProfile) -> dict:
 
 
 def response_from_ledger(ledger: UsageLedger, profile: CustomerProfile, *, idempotent: bool) -> dict:
+    restored_hours = ledger.included_hours_after_renewal if ledger.reconciliation_status == "RESTORED" else 0.0
+    renewal_hours = ledger.included_hours_after_renewal if ledger.reconciliation_status == "COMPLETED" else 0.0
     return {
         "bookingId": ledger.booking_id,
         "tripId": ledger.trip_id,
@@ -206,7 +213,8 @@ def response_from_ledger(ledger: UsageLedger, profile: CustomerProfile, *, idemp
         "renewalPending": ledger.renewal_pending,
         "reconciliationStatus": ledger.reconciliation_status,
         "allowanceHoursApplied": round(ledger.included_hours_applied, 2),
-        "postRenewalIncludedHoursApplied": round(ledger.included_hours_after_renewal or 0.0, 2),
+        "postRenewalIncludedHoursApplied": round(renewal_hours, 2),
+        "restoredIncludedHours": round(restored_hours, 2),
         "provisionalPostMidnightHours": round(ledger.provisional_post_renewal_hours or 0.0, 2),
         "customerSummary": summary_from_profile(profile),
         "idempotent": idempotent,
@@ -220,18 +228,22 @@ def ledger_entry_to_dict(ledger: UsageLedger) -> dict:
     elif ledger.refund_amount > 0 or ledger.included_hours_after_renewal > 0:
         entry_type = "RENEWAL"
 
+    restored_hours = ledger.included_hours_after_renewal if ledger.reconciliation_status == "RESTORED" else 0.0
+    renewal_hours = ledger.included_hours_after_renewal if ledger.reconciliation_status == "COMPLETED" else 0.0
+
     return {
         "ledgerId": ledger.id,
         "bookingId": ledger.booking_id,
         "tripId": ledger.trip_id,
         "userId": ledger.user_id,
         "entryType": entry_type,
-        "startTime": ledger.start_time.isoformat() if ledger.start_time else None,
-        "endTime": ledger.end_time.isoformat() if ledger.end_time else None,
+        "startTime": iso(ledger.start_time),
+        "endTime": iso(ledger.end_time),
         "totalHours": round(ledger.total_hours, 2),
         "currentCycleHours": round(ledger.current_cycle_hours, 2),
         "includedHoursApplied": round(ledger.included_hours_applied, 2),
-        "includedHoursAfterRenewal": round(ledger.included_hours_after_renewal, 2),
+        "includedHoursAfterRenewal": round(renewal_hours, 2),
+        "restoredIncludedHours": round(restored_hours, 2),
         "billableHours": round(ledger.billable_hours, 2),
         "provisionalPostMidnightHours": round(ledger.provisional_post_renewal_hours, 2),
         "provisionalCharge": round(ledger.provisional_charge, 2),
@@ -241,8 +253,8 @@ def ledger_entry_to_dict(ledger: UsageLedger) -> dict:
         "discountAmount": round(ledger.discount_amount, 2),
         "renewalPending": ledger.renewal_pending,
         "reconciliationStatus": ledger.reconciliation_status,
-        "createdAt": ledger.created_at.isoformat() if ledger.created_at else None,
-        "updatedAt": ledger.updated_at.isoformat() if ledger.updated_at else None,
+        "createdAt": iso(ledger.created_at),
+        "updatedAt": iso(ledger.updated_at),
     }
 
 
@@ -271,12 +283,14 @@ def get_customer_ledger(user_id: str, db: Session = Depends(get_db)):
 @app.post("/pricing/customers/{user_id}/renewal")
 def apply_customer_renewal(user_id: str, payload: RenewalPayload, db: Session = Depends(get_db)):
     profile = get_profile_or_404(db, user_id)
+    previous_billing_cycle_id = billing_cycle_id_for_renewal_date(profile.renewal_date)
     profile.hours_used_this_cycle = 0.0
     profile.renewal_date = profile.renewal_date + relativedelta(months=1)
     db.commit()
     return {
         **summary_from_profile(profile),
-        "billingCycleId": payload.newBillingCycleId,
+        "billingCycleId": billing_cycle_id_for_renewal_date(profile.renewal_date),
+        "previousBillingCycleId": previous_billing_cycle_id,
     }
 
 
@@ -315,12 +329,13 @@ def finalize_trip_pricing(payload: FinalizeTripPayload, db: Session = Depends(ge
 
     normalized_start = as_utc_naive(payload.startedAt)
     normalized_end = as_utc_naive(payload.endedAt)
+    renewal_boundary_date = payload.quotedRenewalDate or profile.renewal_date
     quote = booking_quote(
         normalized_start,
         normalized_end,
         monthly_included_hours=profile.monthly_included_hours,
         hours_used_this_cycle=profile.hours_used_this_cycle,
-        renewal_date=profile.renewal_date,
+        renewal_date=renewal_boundary_date,
     )
     adjustment = trip_adjustment(payload.disrupted, quote.total_hours, quote.estimated_price, payload.endReason)
     restored_allowance_hours = refunded_included_hours(
@@ -329,6 +344,7 @@ def finalize_trip_pricing(payload: FinalizeTripPayload, db: Session = Depends(ge
         quote.included_hours_applied,
         payload.endReason,
     )
+    renewal_pending = quote.provisional_post_midnight_hours > 0 and float(adjustment["adjustedFare"]) > 0.0
     profile.hours_used_this_cycle = round(
         max(profile.hours_used_this_cycle + quote.included_hours_applied - restored_allowance_hours, 0.0),
         2,
@@ -351,7 +367,7 @@ def finalize_trip_pricing(payload: FinalizeTripPayload, db: Session = Depends(ge
     existing.total_hours = quote.total_hours
     existing.current_cycle_hours = quote.current_cycle_hours
     existing.included_hours_applied = quote.included_hours_applied
-    existing.included_hours_after_renewal = 0.0
+    existing.included_hours_after_renewal = restored_allowance_hours if restored_allowance_hours > 0 and not renewal_pending else 0.0
     existing.billable_hours = quote.billable_hours
     existing.provisional_post_renewal_hours = quote.provisional_post_midnight_hours
     existing.provisional_charge = quote.provisional_charge
@@ -359,8 +375,8 @@ def finalize_trip_pricing(payload: FinalizeTripPayload, db: Session = Depends(ge
     existing.final_charge = float(adjustment["adjustedFare"])
     existing.refund_amount = float(adjustment["refundAmount"])
     existing.discount_amount = float(adjustment["discountAmount"])
-    existing.renewal_pending = quote.provisional_post_midnight_hours > 0
-    existing.reconciliation_status = "PENDING" if existing.renewal_pending else "NONE"
+    existing.renewal_pending = renewal_pending
+    existing.reconciliation_status = "PENDING" if renewal_pending else "RESTORED" if restored_allowance_hours > 0 else "NONE"
     db.commit()
 
     return response_from_ledger(existing, profile, idempotent=False)
@@ -403,6 +419,20 @@ def disruption_compensation(payload: DisruptionCompensationPayload):
 @app.post("/pricing/re-rate-renewed-booking")
 def rerate(payload: ReRatePayload, db: Session = Depends(get_db)):
     profile = get_profile_or_404(db, payload.userId)
+    ledger = db.query(UsageLedger).filter(UsageLedger.booking_id == payload.bookingId).first()
+    if ledger and ledger.reconciliation_status == "COMPLETED":
+        return {
+            "bookingId": payload.bookingId,
+            "tripId": ledger.trip_id or payload.tripId,
+            "revisedCharge": round(ledger.final_charge, 2),
+            "eligibleIncludedHours": round(ledger.included_hours_after_renewal, 2),
+            "refundAmount": round(ledger.refund_amount, 2),
+            "updatedEntitlementUsage": round(profile.hours_used_this_cycle, 2),
+            "finalPrice": round(ledger.final_charge, 2),
+            "customerSummary": summary_from_profile(profile),
+            "idempotent": True,
+        }
+
     rerate_result = rerate_after_renewal(
         payload.actualPostMidnightHours,
         monthly_included_hours=profile.monthly_included_hours,
@@ -410,7 +440,6 @@ def rerate(payload: ReRatePayload, db: Session = Depends(get_db)):
     )
     profile.hours_used_this_cycle = rerate_result["updatedEntitlementUsage"]
 
-    ledger = db.query(UsageLedger).filter(UsageLedger.booking_id == payload.bookingId).first()
     if not ledger:
         ledger = UsageLedger(
             booking_id=payload.bookingId,
@@ -437,4 +466,5 @@ def rerate(payload: ReRatePayload, db: Session = Depends(get_db)):
         **rerate_result,
         "finalPrice": round(ledger.final_charge, 2),
         "customerSummary": summary_from_profile(profile),
+        "idempotent": False,
     }

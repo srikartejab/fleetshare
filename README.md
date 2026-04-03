@@ -36,6 +36,19 @@ docker compose up --build
    - Kong admin: `http://localhost:8001`
    - RabbitMQ UI: `http://localhost:15672`
    - MinIO console: `http://localhost:9001`
+   - MySQL UI (Adminer): `http://localhost:8080`
+
+Local default access:
+
+- UI: no login
+- Kong proxy: no login
+- Kong admin: no login
+- RabbitMQ UI: username `guest`, password `guest`
+- RabbitMQ AMQP: `amqp://guest:guest@rabbitmq:5672/`
+- MinIO console / S3: username `minioadmin`, password `minioadmin`
+- Adminer: no separate app login
+- MySQL through Adminer: system `MySQL`, server `mysql`, username `root`, password `fleetshare_root`
+- MySQL through Adminer: database can be left blank to browse all schemas, or set to a schema like `pricing_db`
 
 ## Demo Flow
 

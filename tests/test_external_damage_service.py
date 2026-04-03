@@ -12,7 +12,7 @@ from fleetshare_common.apps import external_damage_service
 def test_mock_assessment_ignores_uploaded_filename_keywords():
     result = assess_damage("Vehicle exterior looks clean.", ["dent-fix-cost-estimate.jpg"])
 
-    assert result["severity"] == "MINOR"
+    assert result["severity"] == "NO_DAMAGE"
     assert result["confidence"] >= 0.7
     assert result["detectedDamage"] == ["no visible exterior damage"]
 
@@ -23,6 +23,32 @@ def test_mock_assessment_routes_ambiguous_damage_to_moderate():
     assert result["severity"] == "MODERATE"
     assert result["confidence"] < 0.7
     assert result["detectedDamage"] == ["possible body damage"]
+
+
+def test_mock_assessment_text_only_testing_shortcuts():
+    clean_result = assess_damage("clean", [])
+    damage_result = assess_damage("damage", [])
+
+    assert clean_result == {
+        "severity": "NO_DAMAGE",
+        "confidence": 0.98,
+        "detectedDamage": ["no visible exterior damage"],
+    }
+    assert damage_result == {
+        "severity": "SEVERE",
+        "confidence": 0.9,
+        "detectedDamage": ["major exterior damage"],
+    }
+
+
+def test_mock_assessment_treats_good_condition_as_no_damage():
+    result = assess_damage("Vehicle returned in good condition.", [])
+
+    assert result == {
+        "severity": "NO_DAMAGE",
+        "confidence": 0.98,
+        "detectedDamage": ["no visible exterior damage"],
+    }
 
 
 def test_external_damage_service_keeps_clean_inspection_cleared(monkeypatch):
@@ -60,10 +86,10 @@ def test_external_damage_service_keeps_clean_inspection_cleared(monkeypatch):
     payload = response.json()
     assert payload["tripStatus"] == "CLEARED"
     assert payload["warningMessage"] == "Inspection passed"
-    assert payload["assessmentResult"]["severity"] == "MINOR"
+    assert payload["assessmentResult"]["severity"] == "NO_DAMAGE"
     assert record_updates == [
         {
-            "severity": "MINOR",
+            "severity": "NO_DAMAGE",
             "reviewState": "EXTERNAL_ASSESSED",
             "confidence": 0.98,
             "detectedDamage": ["no visible exterior damage"],
@@ -71,6 +97,81 @@ def test_external_damage_service_keeps_clean_inspection_cleared(monkeypatch):
     ]
     assert published_events == []
     assert vehicle_updates == []
+
+
+def test_external_damage_service_allows_text_only_mock_testing(monkeypatch):
+    record_updates: list[dict] = []
+    published_events: list[tuple[str, dict]] = []
+    vehicle_updates: list[tuple[int, str]] = []
+
+    monkeypatch.setattr(external_damage_service, "post_json", lambda url, payload: {"recordId": 321})
+    monkeypatch.setattr(external_damage_service, "patch_json", lambda url, payload: record_updates.append(payload))
+    monkeypatch.setattr(
+        external_damage_service,
+        "publish_event",
+        lambda event_type, payload: published_events.append((event_type, payload)),
+    )
+    monkeypatch.setattr(
+        external_damage_service,
+        "update_vehicle_status",
+        lambda vehicle_id, status: vehicle_updates.append((vehicle_id, status)),
+    )
+
+    with TestClient(external_damage_service.app) as client:
+        clean_response = client.post(
+            "/damage-assessment/external",
+            data={"bookingId": 111, "vehicleId": 5, "userId": "user-clean", "notes": "clean"},
+        )
+        damage_response = client.post(
+            "/damage-assessment/external",
+            data={"bookingId": 112, "vehicleId": 6, "userId": "user-damage", "notes": "damage"},
+        )
+
+    assert clean_response.status_code == 200
+    assert clean_response.json()["tripStatus"] == "CLEARED"
+    assert clean_response.json()["assessmentResult"] == {
+        "severity": "NO_DAMAGE",
+        "confidence": 0.98,
+        "detectedDamage": ["no visible exterior damage"],
+    }
+
+    assert damage_response.status_code == 200
+    assert damage_response.json()["tripStatus"] == "BLOCKED"
+    assert damage_response.json()["assessmentResult"] == {
+        "severity": "SEVERE",
+        "confidence": 0.9,
+        "detectedDamage": ["major exterior damage"],
+    }
+
+    assert record_updates == [
+        {
+            "severity": "NO_DAMAGE",
+            "reviewState": "EXTERNAL_ASSESSED",
+            "confidence": 0.98,
+            "detectedDamage": ["no visible exterior damage"],
+        },
+        {
+            "severity": "SEVERE",
+            "reviewState": "EXTERNAL_BLOCKED",
+            "confidence": 0.9,
+            "detectedDamage": ["major exterior damage"],
+        },
+    ]
+    assert published_events == [
+        (
+            "incident.external_damage_detected",
+            {
+                "recordId": 321,
+                "bookingId": 112,
+                "vehicleId": 6,
+                "userId": "user-damage",
+                "severity": "SEVERE",
+                "damageType": "major exterior damage",
+                "recommendedAction": "Immediate inspection and customer refund",
+            },
+        )
+    ]
+    assert vehicle_updates == [(6, "UNDER_INSPECTION")]
 
 
 def test_external_damage_service_blocks_severe_damage_and_publishes_incident(monkeypatch):

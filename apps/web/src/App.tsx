@@ -21,6 +21,7 @@ import type {
   PostTripInspectionResult,
   PricingSnapshot,
   RecordItem,
+  ReservationDraft,
   SearchResponse,
   Trip,
   Vehicle,
@@ -31,15 +32,22 @@ import {
   AccountPage,
   BookingDetailsPage,
   BookingProcessingPage,
+  BookingReviewPage,
   CustomerShell,
   EndTripCompletePage,
   EndTripConfirmPage,
   EndTripInspectionPage,
+  EndTripInspectionProcessingPage,
+  EndTripLockProcessingPage,
   EndTripReviewPage,
   HomePage,
   LandingPage,
+  PreTripInspectionProcessingPage,
+  PreTripInspectionResultPage,
   TripProblemPage,
+  TripProblemProcessingPage,
   TripProblemResultPage,
+  TripUnlockProcessingPage,
   TripsPage,
   WalletPage,
 } from './customerMobilePages'
@@ -49,6 +57,36 @@ type PendingBooking = {
   vehicleId: number
   bookingId?: number
   error?: string
+}
+
+type PendingInspectionRequest = {
+  bookingId: number
+  vehicleId: number
+  notes: string
+  photo: File | null
+}
+
+type PendingUnlockRequest = {
+  bookingId: number
+  vehicleId: number
+  notes: string
+}
+
+type PendingProblemRequest = {
+  tripId: number
+  notes: string
+}
+
+type PendingPostTripInspectionRequest = {
+  tripId: number
+  notes: string
+  photo: File | null
+  endReason: string
+}
+
+type PendingEndTripRequest = {
+  tripId: number
+  endReason: string
 }
 
 function App() {
@@ -66,7 +104,13 @@ function App() {
   const [status, setStatus] = useState('Loading FleetShare customer experience.')
   const [busy, setBusy] = useState(false)
   const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null)
+  const [reservationDraft, setReservationDraft] = useState<ReservationDraft | null>(null)
   const [pendingBooking, setPendingBooking] = useState<PendingBooking | null>(null)
+  const [pendingInspectionRequest, setPendingInspectionRequest] = useState<PendingInspectionRequest | null>(null)
+  const [pendingUnlockRequest, setPendingUnlockRequest] = useState<PendingUnlockRequest | null>(null)
+  const [pendingProblemRequest, setPendingProblemRequest] = useState<PendingProblemRequest | null>(null)
+  const [pendingPostTripInspectionRequest, setPendingPostTripInspectionRequest] = useState<PendingPostTripInspectionRequest | null>(null)
+  const [pendingEndTripRequest, setPendingEndTripRequest] = useState<PendingEndTripRequest | null>(null)
   const [latestInspectionResult, setLatestInspectionResult] = useState<InspectionSubmissionResult | null>(null)
   const [reportedProblem, setReportedProblem] = useState<InternalDamageResult | null>(null)
   const [postTripInspectionResult, setPostTripInspectionResult] = useState<PostTripInspectionResult | null>(null)
@@ -135,6 +179,12 @@ function App() {
         setWalletLedger([])
         setNotifications([])
         setRecords([])
+        setReservationDraft(null)
+        setPendingInspectionRequest(null)
+        setPendingUnlockRequest(null)
+        setPendingProblemRequest(null)
+        setPendingPostTripInspectionRequest(null)
+        setPendingEndTripRequest(null)
         setSearchResponse(null)
       })
       return
@@ -227,6 +277,12 @@ function App() {
     setWalletLedger([])
     setNotifications([])
     setRecords([])
+    setReservationDraft(null)
+    setPendingInspectionRequest(null)
+    setPendingUnlockRequest(null)
+    setPendingProblemRequest(null)
+    setPendingPostTripInspectionRequest(null)
+    setPendingEndTripRequest(null)
     setSearchResponse(null)
     setLatestInspectionResult(null)
     setReportedProblem(null)
@@ -238,6 +294,9 @@ function App() {
     localStorage.removeItem(customerStorageKey)
     setActiveUserId('')
     setPendingBooking(null)
+    setReservationDraft(null)
+    setPendingInspectionRequest(null)
+    setPendingUnlockRequest(null)
     setSearchResponse(null)
     setLatestInspectionResult(null)
     setReportedProblem(null)
@@ -246,11 +305,15 @@ function App() {
     setStatus('Choose a customer profile to enter the app.')
   }
 
+  async function refreshCustomerViews(userId = activeUserId) {
+    await Promise.allSettled([loadCustomers(), refreshCustomerData(userId)])
+  }
+
   async function runCustomerAction<T>(action: () => Promise<T>, successMessage: string | ((result: T) => string)) {
     setBusy(true)
     try {
       const result = await action()
-      await Promise.all([loadCustomers(), refreshCustomerData()])
+      await refreshCustomerViews()
       setStatus(typeof successMessage === 'function' ? successMessage(result) : successMessage)
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Unexpected error')
@@ -259,8 +322,50 @@ function App() {
     }
   }
 
-  function startReservation(vehicleId: number) {
+  function beginReservationReview(vehicle: Vehicle) {
+    setPendingBooking(null)
+    const bookingHours = Math.max(
+      (new Date(searchForm.endTime).getTime() - new Date(searchForm.startTime).getTime()) / (1000 * 60 * 60),
+      0,
+    )
+    const pickupLocationLabel =
+      vehicleFilters.locationOptions?.find((location) => location.id === searchForm.pickupLocation)?.label ??
+      vehicle.stationName ??
+      searchForm.pickupLocation
+    setReservationDraft({
+      vehicle,
+      pickupLocationLabel,
+      startTime: searchForm.startTime,
+      endTime: searchForm.endTime,
+      pricing: {
+        estimatedPrice: vehicle.estimatedPrice ?? 0,
+        allowanceStatus: vehicle.allowanceStatus ?? 'Pricing summary unavailable',
+        crossCycleBooking: vehicle.crossCycleBooking ?? false,
+        hourlyRate: vehicle.hourlyRate ?? customerSummary?.hourlyRate ?? 0,
+        totalHours: vehicle.totalHours ?? bookingHours,
+        currentCycleHours: vehicle.currentCycleHours ?? bookingHours,
+        includedHoursRemainingBefore: vehicle.includedHoursRemainingBefore ?? customerSummary?.remainingHoursThisCycle ?? 0,
+        includedHoursApplied: vehicle.includedHoursApplied ?? 0,
+        includedHoursRemainingAfter: vehicle.includedHoursRemainingAfter ?? customerSummary?.remainingHoursThisCycle ?? 0,
+        billableHours: vehicle.billableHours ?? 0,
+        provisionalPostMidnightHours: vehicle.provisionalPostMidnightHours ?? 0,
+        provisionalCharge: vehicle.provisionalCharge ?? 0,
+        renewalDate: vehicle.renewalDate ?? customerSummary?.renewalDate,
+        customerSummary: customerSummary ?? undefined,
+      },
+    })
+    setStatus('Review the booking charges before confirming the reservation.')
+  }
+
+  function confirmReservation() {
+    if (!reservationDraft) {
+      setStatus('Choose a vehicle from Discover before confirming a booking.')
+      return
+    }
+
+    const vehicleId = reservationDraft.vehicle.vehicleId ?? reservationDraft.vehicle.id
     setPendingBooking({ status: 'processing', vehicleId })
+    setReservationDraft(null)
     setBusy(true)
     setStatus('Confirming your reservation...')
     void (async () => {
@@ -272,12 +377,10 @@ function App() {
           body: JSON.stringify({
             userId: activeUserId,
             vehicleId,
-            pickupLocation:
-              vehicleFilters.locationOptions?.find((location) => location.id === searchForm.pickupLocation)?.label ??
-              searchForm.pickupLocation,
-            startTime: new Date(searchForm.startTime).toISOString(),
-            endTime: new Date(searchForm.endTime).toISOString(),
-            displayedPrice: 0,
+            pickupLocation: reservationDraft.pickupLocationLabel,
+            startTime: new Date(reservationDraft.startTime).toISOString(),
+            endTime: new Date(reservationDraft.endTime).toISOString(),
+            displayedPrice: reservationDraft.pricing.estimatedPrice,
             subscriptionPlanId: customerSummary?.planName ?? 'STANDARD_MONTHLY',
           }),
         })
@@ -317,6 +420,7 @@ function App() {
       throw new Error('No active trip found.')
     }
     setBusy(true)
+    setStatus('Assessing the reported issue...')
     try {
       const result = await fetchJson<InternalDamageResult>('/internal-damage/fault-alert', {
         method: 'POST',
@@ -331,12 +435,82 @@ function App() {
         }),
       })
       setReportedProblem(result)
-      await Promise.all([refreshCustomerData(activeUserId), loadCustomers()])
+      await refreshCustomerViews(activeUserId)
       setStatus(result.recommendedAction)
       return result
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to submit the vehicle problem.'
       setStatus(message)
+      throw error
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function queueTripProblem(notes: string) {
+    if (!activeTrip) {
+      throw new Error('No active trip found.')
+    }
+    setReportedProblem(null)
+    setPendingProblemRequest({
+      tripId: activeTrip.tripId,
+      notes,
+    })
+  }
+
+  async function submitQueuedPreTripInspection(request: PendingInspectionRequest) {
+    setBusy(true)
+    setStatus('AI is checking the inspection now...')
+    try {
+      const formData = new FormData()
+      formData.append('bookingId', String(request.bookingId))
+      formData.append('vehicleId', String(request.vehicleId))
+      formData.append('userId', activeUserId)
+      formData.append('notes', request.notes)
+      if (request.photo) {
+        formData.append('photos', request.photo)
+      }
+      const result = await fetchJson<InspectionSubmissionResult>('/damage-assessment/external', {
+        method: 'POST',
+        body: formData,
+      })
+      await refreshCustomerViews()
+      setLatestInspectionResult(result)
+      setStatus(
+        result.tripStatus === 'CLEARED'
+          ? result.warningMessage
+          : `Inspection submitted. ${result.warningMessage}`,
+      )
+      return result
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Unexpected error')
+      throw error
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function startQueuedTripUnlock(request: PendingUnlockRequest) {
+    setBusy(true)
+    setStatus('Unlocking vehicle...')
+    try {
+      setReportedProblem(null)
+      setPostTripInspectionResult(null)
+      setEndTripResult(null)
+      await fetchJson('/trips/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookingId: request.bookingId,
+          vehicleId: request.vehicleId,
+          userId: activeUserId,
+          notes: request.notes,
+        }),
+      })
+      await refreshCustomerViews()
+      setStatus('Trip started successfully.')
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Unexpected error')
       throw error
     } finally {
       setBusy(false)
@@ -362,8 +536,8 @@ function App() {
         method: 'POST',
         body: formData,
       })
+      await refreshCustomerViews(activeUserId)
       setPostTripInspectionResult(result)
-      await Promise.all([refreshCustomerData(activeUserId), loadCustomers()])
       setStatus(result.warningMessage)
       return result
     } catch (error) {
@@ -373,6 +547,20 @@ function App() {
     } finally {
       setBusy(false)
     }
+  }
+
+  function queuePostTripInspection(notes: string, photo: File | null, endReason: string) {
+    if (!activeTrip) {
+      throw new Error('No active trip found.')
+    }
+    setPostTripInspectionResult(null)
+    setEndTripResult(null)
+    setPendingPostTripInspectionRequest({
+      tripId: activeTrip.tripId,
+      notes,
+      photo,
+      endReason,
+    })
   }
 
   async function completeEndTrip(endReason: string) {
@@ -392,8 +580,8 @@ function App() {
           endReason,
         }),
       })
+      await refreshCustomerViews(activeUserId)
       setEndTripResult(result)
-      await Promise.all([refreshCustomerData(activeUserId), loadCustomers()])
       setStatus('Trip ended and pricing finalized.')
       return result
     } catch (error) {
@@ -403,6 +591,17 @@ function App() {
     } finally {
       setBusy(false)
     }
+  }
+
+  function queueEndTrip(endReason: string) {
+    if (!activeTrip) {
+      throw new Error('No active trip found.')
+    }
+    setEndTripResult(null)
+    setPendingEndTripRequest({
+      tripId: activeTrip.tripId,
+      endReason,
+    })
   }
 
   const customerProfiles = customers.filter((customer) => customer.role === 'CUSTOMER')
@@ -447,7 +646,7 @@ function App() {
                 activeUser={selectedProfile}
                 busy={busy}
                 customerSummary={customerSummary ?? selectedProfile}
-                onReserve={startReservation}
+                onReserve={beginReservationReview}
                 onSearch={async () => {
                   const params = new URLSearchParams({
                     userId: activeUserId,
@@ -471,6 +670,22 @@ function App() {
                 status={status}
                 vehicleFilters={vehicleFilters}
               />
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/app/bookings/review"
+          element={
+            activeUserId ? (
+              <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
+                <BookingReviewPage
+                  customerSummary={customerSummary ?? selectedProfile}
+                  draft={reservationDraft}
+                  onConfirmBooking={confirmReservation}
+                />
+              </CustomerShell>
             ) : (
               <Navigate to="/" replace />
             )
@@ -509,6 +724,46 @@ function App() {
                   activeTrip={activeTrip}
                   completedTrips={completedTrips}
                   historicalBookings={historicalBookings}
+                  onQueueInspection={(request) => {
+                    setPendingInspectionRequest(request)
+                    setLatestInspectionResult(null)
+                  }}
+                  upcomingBookings={upcomingBookings}
+                  vehicles={vehicles}
+                  records={records}
+                  latestInspectionResult={latestInspectionResult}
+                />
+              </CustomerShell>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/app/trips/inspection-processing"
+          element={
+            activeUserId ? (
+              <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
+                <PreTripInspectionProcessingPage
+                  latestInspectionResult={latestInspectionResult}
+                  records={records}
+                  request={pendingInspectionRequest}
+                  vehicles={vehicles}
+                  onSubmitInspection={submitQueuedPreTripInspection}
+                />
+              </CustomerShell>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/app/trips/inspection-result"
+          element={
+            activeUserId ? (
+              <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
+                <PreTripInspectionResultPage
+                  latestInspectionResult={latestInspectionResult}
                   onCancelModerateDamage={(bookingId, vehicleId) =>
                     runCustomerAction(async () => {
                       const result = await fetchJson<InspectionCancellationResult>('/damage-assessment/external/customer-cancel', {
@@ -523,49 +778,27 @@ function App() {
                       return result
                     }, (result) => result.message)
                   }
-                  onStartTrip={(bookingId, vehicleId, notes) =>
-                    runCustomerAction(async () => {
-                      setReportedProblem(null)
-                      setPostTripInspectionResult(null)
-                      setEndTripResult(null)
-                      await fetchJson('/trips/start', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          bookingId,
-                          vehicleId,
-                          userId: activeUserId,
-                          notes,
-                        }),
-                      })
-                    }, 'Trip started successfully.')
-                  }
-                  onSubmitInspection={(bookingId, vehicleId, notes, photo) =>
-                    runCustomerAction(async () => {
-                      const formData = new FormData()
-                      formData.append('bookingId', String(bookingId))
-                      formData.append('vehicleId', String(vehicleId))
-                      formData.append('userId', activeUserId)
-                      formData.append('notes', notes)
-                      if (photo) {
-                        formData.append('photos', photo)
-                      }
-                      const result = await fetchJson<InspectionSubmissionResult>('/damage-assessment/external', {
-                        method: 'POST',
-                        body: formData,
-                      })
-                      setLatestInspectionResult(result)
-                      return result
-                    }, (result) =>
-                      result.tripStatus === 'CLEARED'
-                        ? result.warningMessage
-                        : `Inspection submitted. ${result.warningMessage}`
-                    )
-                  }
+                  onQueueUnlock={(request) => setPendingUnlockRequest(request)}
                   upcomingBookings={upcomingBookings}
                   vehicles={vehicles}
                   records={records}
-                  latestInspectionResult={latestInspectionResult}
+                />
+              </CustomerShell>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/app/trips/unlock-processing"
+          element={
+            activeUserId ? (
+              <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
+                <TripUnlockProcessingPage
+                  activeTrip={activeTrip}
+                  request={pendingUnlockRequest}
+                  vehicles={vehicles}
+                  onUnlock={startQueuedTripUnlock}
                 />
               </CustomerShell>
             ) : (
@@ -578,7 +811,24 @@ function App() {
           element={
             activeUserId ? (
               <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
-                <TripProblemPage activeTrip={activeTrip} onSubmitProblem={submitTripProblem} />
+                <TripProblemPage activeTrip={activeTrip} onQueueProblem={queueTripProblem} />
+              </CustomerShell>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/app/trips/problem-processing"
+          element={
+            activeUserId ? (
+              <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
+                <TripProblemProcessingPage
+                  activeTrip={activeTrip}
+                  onSubmitProblem={submitTripProblem}
+                  reportedProblem={reportedProblem}
+                  request={pendingProblemRequest}
+                />
               </CustomerShell>
             ) : (
               <Navigate to="/" replace />
@@ -602,7 +852,25 @@ function App() {
           element={
             activeUserId ? (
               <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
-                <EndTripInspectionPage activeTrip={activeTrip} onSubmitInspection={submitPostTripInspection} vehicles={vehicles} />
+                <EndTripInspectionPage activeTrip={activeTrip} onQueueInspection={queuePostTripInspection} vehicles={vehicles} />
+              </CustomerShell>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/app/trips/end-inspection-processing"
+          element={
+            activeUserId ? (
+              <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
+                <EndTripInspectionProcessingPage
+                  activeTrip={activeTrip}
+                  onSubmitInspection={submitPostTripInspection}
+                  postTripInspectionResult={postTripInspectionResult}
+                  request={pendingPostTripInspectionRequest}
+                  vehicles={vehicles}
+                />
               </CustomerShell>
             ) : (
               <Navigate to="/" replace />
@@ -628,8 +896,26 @@ function App() {
               <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
                 <EndTripConfirmPage
                   activeTrip={activeTrip}
-                  onConfirmEndTrip={completeEndTrip}
+                  onQueueEndTrip={queueEndTrip}
                   postTripInspectionResult={postTripInspectionResult}
+                  vehicles={vehicles}
+                />
+              </CustomerShell>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/app/trips/end-lock-processing"
+          element={
+            activeUserId ? (
+              <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
+                <EndTripLockProcessingPage
+                  activeTrip={activeTrip}
+                  endTripResult={endTripResult}
+                  onConfirmEndTrip={completeEndTrip}
+                  request={pendingEndTripRequest}
                   vehicles={vehicles}
                 />
               </CustomerShell>
@@ -681,7 +967,7 @@ function App() {
         />
         <Route
           path="/ops"
-          element={<OpsPage activeUserId={activeUserId} onCustomerDataChanged={() => Promise.all([loadCustomers(), refreshCustomerData()]).then(() => undefined)} />}
+          element={<OpsPage activeUserId={activeUserId} onCustomerDataChanged={() => refreshCustomerViews().then(() => undefined)} />}
         />
         <Route path="*" element={<Navigate to={activeUserId ? '/app/home' : '/'} replace />} />
       </Routes>

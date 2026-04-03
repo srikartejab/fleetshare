@@ -33,6 +33,7 @@ class TripStatus(StrEnum):
 
 
 class RecordSeverity(StrEnum):
+    NO_DAMAGE = "NO_DAMAGE"
     MINOR = "MINOR"
     MODERATE = "MODERATE"
     SEVERE = "SEVERE"

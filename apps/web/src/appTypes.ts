@@ -49,7 +49,10 @@ export type Vehicle = {
   distanceKm?: number
   estimatedPrice?: number
   allowanceStatus?: string
+  crossCycleBooking?: boolean
   hourlyRate?: number
+  totalHours?: number
+  currentCycleHours?: number
   includedHoursApplied?: number
   includedHoursRemainingBefore?: number
   includedHoursRemainingAfter?: number
@@ -57,6 +60,14 @@ export type Vehicle = {
   provisionalPostMidnightHours?: number
   provisionalCharge?: number
   renewalDate?: string
+}
+
+export type ReservationDraft = {
+  vehicle: Vehicle
+  pickupLocationLabel: string
+  startTime: string
+  endTime: string
+  pricing: PricingSnapshot
 }
 
 export type LocationOption = {
@@ -151,6 +162,7 @@ export type WalletLedgerEntry = {
   currentCycleHours: number
   includedHoursApplied: number
   includedHoursAfterRenewal: number
+  restoredIncludedHours?: number
   billableHours: number
   provisionalPostMidnightHours: number
   provisionalCharge: number
@@ -263,8 +275,10 @@ export type EndTripResult = {
   vehicleLocked: boolean
   adjustedFare: number
   refundPending: boolean
+  renewalReconciliationPending?: boolean
   discountAmount: number
   allowanceHoursApplied: number
+  allowanceHoursRestored?: number
   customerSummary: CustomerSummary
 }
 
@@ -308,6 +322,11 @@ export function formatMoney(value: number) {
 
 export function formatHours(value: number) {
   return `${value.toFixed(1)}h`
+}
+
+export function formatSeverityLabel(value?: string | null) {
+  if (!value) return 'N/A'
+  return value.replaceAll('_', ' ')
 }
 
 export function formatDate(value?: string | null) {

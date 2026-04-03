@@ -22,13 +22,29 @@ class ExternalDamageCancellationPayload(BaseModel):
     userId: str
 
 
-@app.on_event("startup")
-def startup_event():
-    try:
-        ensure_bucket()
-    except Exception:
-        # MinIO may still be starting when the service boots; uploads re-check lazily.
-        pass
+# @app.on_event("startup")
+# def startup_event():
+#     try:
+#         ensure_bucket()
+#     except Exception:
+#         # MinIO may still be starting when the service boots; uploads re-check lazily.
+#         pass
+
+
+async def _store_uploaded_photos(prefix: str, photos: list[UploadFile]) -> tuple[list[str], list[bytes]]:
+    uploaded_keys: list[str] = []
+    image_bytes_list: list[bytes] = []
+    if not photos:
+        return uploaded_keys, image_bytes_list
+
+    ensure_bucket()
+    for photo in photos:
+        data = await photo.read()
+        image_bytes_list.append(data)
+        filename = photo.filename or "upload.bin"
+        key = f"{prefix}/{uuid4()}-{filename}"
+        uploaded_keys.append(upload_bytes(key, data, content_type=photo.content_type or "application/octet-stream"))
+    return uploaded_keys, image_bytes_list
 
 
 @app.post("/damage-assessment/external")
@@ -40,13 +56,7 @@ async def assess_external_damage(
     photos: list[UploadFile] = File(default_factory=list),
 ):
     settings = get_settings()
-    uploaded_keys = []
-    filenames = []
-    for photo in photos:
-        data = await photo.read()
-        key = upload_bytes(f"damage/{bookingId}/{uuid4()}-{photo.filename}", data, photo.content_type or "image/jpeg")
-        uploaded_keys.append(key)
-        filenames.append(photo.filename)
+    uploaded_keys, image_bytes_list = await _store_uploaded_photos(f"damage/{bookingId}", photos)
 
     record = post_json(
         f"{settings.record_service_url}/records",
@@ -55,11 +65,12 @@ async def assess_external_damage(
             "vehicleId": vehicleId,
             "recordType": "EXTERNAL_DAMAGE",
             "notes": notes,
+            "severity": "PENDING",
             "reviewState": "PENDING_EXTERNAL",
             "evidenceUrls": uploaded_keys,
         },
     )
-    assessment = assess_damage(notes, filenames, mode=settings.azure_vision_mode)
+    assessment = assess_damage(notes, image_bytes_list=image_bytes_list, mode=settings.azure_vision_mode)
     review_state = "EXTERNAL_ASSESSED"
     blocked = False
     warning = "Inspection passed"
@@ -116,17 +127,7 @@ async def assess_post_trip_damage(
     photos: list[UploadFile] = File(default_factory=list),
 ):
     settings = get_settings()
-    uploaded_keys = []
-    filenames = []
-    for photo in photos:
-        data = await photo.read()
-        key = upload_bytes(
-            f"damage/post-trip/{bookingId}/{uuid4()}-{photo.filename}",
-            data,
-            photo.content_type or "image/jpeg",
-        )
-        uploaded_keys.append(key)
-        filenames.append(photo.filename)
+    uploaded_keys, image_bytes_list = await _store_uploaded_photos(f"damage/post-trip/{bookingId}", photos)
 
     record = post_json(
         f"{settings.record_service_url}/records",
@@ -134,13 +135,14 @@ async def assess_post_trip_damage(
             "bookingId": bookingId,
             "tripId": tripId,
             "vehicleId": vehicleId,
-            "recordType": "POST_TRIP_EXTERNAL_DAMAGE",
+            "recordType": "EXTERNAL_DAMAGE",
             "notes": notes,
+            "severity": "PENDING",
             "reviewState": "PENDING_EXTERNAL",
             "evidenceUrls": uploaded_keys,
         },
     )
-    assessment = assess_damage(notes, filenames, mode=settings.azure_vision_mode)
+    assessment = assess_damage(notes, image_bytes_list=image_bytes_list, mode=settings.azure_vision_mode)
     review_state = "EXTERNAL_ASSESSED"
     follow_up_required = False
     warning = "Post-trip inspection recorded. You can now review and lock the car."

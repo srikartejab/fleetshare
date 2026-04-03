@@ -5,8 +5,9 @@ import {
   fetchJson,
   formatHours,
   formatMoney,
+  formatSeverityLabel,
 } from './appTypes'
-import type { Booking, Notification, Payment, RecordItem, Ticket, Trip, Vehicle } from './appTypes'
+import type { Booking, CustomerSummary, Notification, Payment, RecordItem, Ticket, Trip, Vehicle } from './appTypes'
 
 type OpsTab = 'overview' | 'fleet' | 'incidents' | 'billing' | 'inbox'
 
@@ -33,7 +34,7 @@ function OpsTabButton({
   return (
     <button className={`ops-tab ${active ? 'ops-tab--active' : ''}`} onClick={onClick} type="button">
       <span>{label}</span>
-      {count !== undefined ? <small>{count}</small> : null}
+      {count !== undefined ? <small className="ops-tab__count">{count}</small> : null}
     </button>
   )
 }
@@ -58,12 +59,12 @@ function MetricCard({
 function VehicleStatusPill({ status }: { status: string }) {
   const normalized = status.toLowerCase()
   const tone =
-    normalized === 'available'
+    normalized === 'available' || normalized === 'no_damage'
       ? 'good'
-      : normalized === 'booked' || normalized === 'in_use'
+      : normalized === 'booked' || normalized === 'in_use' || normalized === 'pending'
         ? 'neutral'
         : 'attention'
-  return <span className={`ops-status-pill ops-status-pill--${tone}`}>{status}</span>
+  return <span className={`ops-status-pill ops-status-pill--${tone}`}>{formatSeverityLabel(status)}</span>
 }
 
 export function OpsPage({
@@ -79,6 +80,7 @@ export function OpsPage({
   const [busy, setBusy] = useState(false)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [vehicleStatusDrafts, setVehicleStatusDrafts] = useState<Record<number, string>>({})
+  const [customers, setCustomers] = useState<CustomerSummary[]>([])
   const [bookings, setBookings] = useState<Booking[]>([])
   const [trips, setTrips] = useState<Trip[]>([])
   const [tickets, setTickets] = useState<Ticket[]>([])
@@ -96,8 +98,9 @@ export function OpsPage({
   const [renewalUserId, setRenewalUserId] = useState(activeUserId || 'user-1001')
 
   async function refresh() {
-    const [vehicleData, bookingData, tripData, ticketData, recordData, queueData, paymentData, notificationData] = await Promise.all([
+    const [vehicleData, customerData, bookingData, tripData, ticketData, recordData, queueData, paymentData, notificationData] = await Promise.all([
       fetchJson<Vehicle[]>('/vehicles'),
+      fetchJson<CustomerSummary[]>('/pricing/customers'),
       fetchJson<Booking[]>('/bookings'),
       fetchJson<Trip[]>('/trips'),
       fetchJson<Ticket[]>('/maintenance/tickets'),
@@ -109,6 +112,7 @@ export function OpsPage({
     startTransition(() => {
       setVehicles(vehicleData)
       setVehicleStatusDrafts(Object.fromEntries(vehicleData.map((vehicle) => [vehicle.id, vehicle.status])))
+      setCustomers(customerData)
       setBookings(bookingData)
       setTrips(tripData)
       setTickets(ticketData)
@@ -188,6 +192,32 @@ export function OpsPage({
     () => [...opsNotifications].sort((left, right) => right.notificationId - left.notificationId).slice(0, 10),
     [opsNotifications],
   )
+  const customerOptions = useMemo(
+    () => customers
+      .filter((customer) => customer.role === 'CUSTOMER')
+      .map((customer) => customer.userId)
+      .sort(),
+    [customers],
+  )
+
+  useEffect(() => {
+    if (customerOptions.length === 0) {
+      return
+    }
+    if (!customerOptions.includes(renewalUserId)) {
+      setRenewalUserId(customerOptions[0])
+    }
+  }, [customerOptions, renewalUserId])
+
+  useEffect(() => {
+    const vehicleIds = vehicles.map((vehicle) => String(vehicle.id))
+    if (vehicleIds.length === 0) {
+      return
+    }
+    if (!vehicleIds.includes(telemetryForm.vehicleId)) {
+      setTelemetryForm((current) => ({ ...current, vehicleId: vehicleIds[0] }))
+    }
+  }, [telemetryForm.vehicleId, vehicles])
 
   return (
     <div className="ops-shell ops-shell--dashboard">
@@ -220,17 +250,39 @@ export function OpsPage({
         <OpsTabButton active={activeTab === 'inbox'} count={opsNotifications.length} label="Inbox" onClick={() => setActiveTab('inbox')} />
       </section>
 
-      <section className="ops-metric-grid">
-        <MetricCard label="Fleet size" value={vehicles.length} />
-        <MetricCard label="Unavailable vehicles" value={unavailableVehicles.length} tone={unavailableVehicles.length ? 'attention' : 'good'} />
-        <MetricCard label="Active trips" value={activeTrips.length} />
-        <MetricCard label="Open tickets" value={openTickets.length} tone={openTickets.length ? 'attention' : 'good'} />
-        <MetricCard label="Manual review queue" value={reviewQueue.length} tone={reviewQueue.length ? 'attention' : 'good'} />
-        <MetricCard label="Ops inbox" value={opsNotifications.length} />
-      </section>
-
       {activeTab === 'overview' ? (
-        <div className="ops-dashboard-grid">
+        <>
+          <section className="ops-metric-grid">
+            <MetricCard label="Fleet size" value={vehicles.length} />
+            <MetricCard label="Unavailable vehicles" value={unavailableVehicles.length} tone={unavailableVehicles.length ? 'attention' : 'good'} />
+            <MetricCard label="Open tickets" value={openTickets.length} tone={openTickets.length ? 'attention' : 'good'} />
+            <MetricCard label="Ops inbox" value={opsNotifications.length} />
+          </section>
+
+          <section className="panel-card ops-overview-snapshot">
+            <div className="panel-card__header">
+              <div>
+                <p className="mini-label">Current shift</p>
+                <h2>Operational snapshot</h2>
+              </div>
+            </div>
+            <div className="ops-snapshot-grid">
+              <div className="ops-snapshot-pill">
+                <span>Active trips</span>
+                <strong>{activeTrips.length}</strong>
+              </div>
+              <div className="ops-snapshot-pill">
+                <span>Disrupted bookings</span>
+                <strong>{disruptedBookings.length}</strong>
+              </div>
+              <div className="ops-snapshot-pill">
+                <span>Manual review queue</span>
+                <strong>{reviewQueue.length}</strong>
+              </div>
+            </div>
+          </section>
+
+          <div className="ops-dashboard-grid">
           <article className="panel-card">
             <div className="panel-card__header">
               <div>
@@ -245,7 +297,13 @@ export function OpsPage({
                 <div className="form-grid">
                   <label>
                     Vehicle ID
-                    <input value={telemetryForm.vehicleId} onChange={(event) => setTelemetryForm((current) => ({ ...current, vehicleId: event.target.value }))} />
+                    <select value={telemetryForm.vehicleId} onChange={(event) => setTelemetryForm((current) => ({ ...current, vehicleId: event.target.value }))}>
+                      {vehicles.map((vehicle) => (
+                        <option key={vehicle.id} value={String(vehicle.id)}>
+                          {vehicle.id} - {vehicle.model}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label>
                     Battery
@@ -300,7 +358,13 @@ export function OpsPage({
                 <h3>Publish reconciliation event</h3>
                 <label>
                   Customer user ID
-                  <input value={renewalUserId} onChange={(event) => setRenewalUserId(event.target.value)} />
+                  <select value={renewalUserId} onChange={(event) => setRenewalUserId(event.target.value)}>
+                    {customerOptions.map((userId) => (
+                      <option key={userId} value={userId}>
+                        {userId}
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 <button
                   className="primary"
@@ -375,7 +439,7 @@ export function OpsPage({
                 <div className="ops-list-row" key={booking.bookingId}>
                   <div>
                     <strong>Booking #{booking.bookingId}</strong>
-                    <p>{booking.userId} · Vehicle {booking.vehicleId}</p>
+                    <p>{booking.userId} - Vehicle {booking.vehicleId}</p>
                   </div>
                   <VehicleStatusPill status={booking.status} />
                 </div>
@@ -383,7 +447,8 @@ export function OpsPage({
               {disruptedBookings.length === 0 ? <div className="empty-card"><p>No disrupted bookings right now.</p></div> : null}
             </div>
           </article>
-        </div>
+          </div>
+        </>
       ) : null}
 
       {activeTab === 'fleet' ? (
@@ -462,7 +527,7 @@ export function OpsPage({
                 <div className="ops-list-row" key={ticket.ticketId}>
                   <div>
                     <strong>Ticket {ticket.ticketId}</strong>
-                    <p>Vehicle {ticket.vehicleId} · {ticket.damageType}</p>
+                    <p>Vehicle {ticket.vehicleId} - {ticket.damageType}</p>
                   </div>
                   <VehicleStatusPill status={ticket.damageSeverity} />
                 </div>
@@ -483,7 +548,7 @@ export function OpsPage({
                 <div className="ops-list-row" key={record.recordId}>
                   <div>
                     <strong>Record {record.recordId}</strong>
-                    <p>Vehicle {record.vehicleId} · {record.recordType}</p>
+                    <p>Vehicle {record.vehicleId} - {record.recordType}</p>
                   </div>
                   <VehicleStatusPill status={record.severity} />
                 </div>
@@ -504,7 +569,7 @@ export function OpsPage({
                 <div className="ops-list-row" key={record.recordId}>
                   <div>
                     <strong>Record {record.recordId}</strong>
-                    <p>{record.recordType} · Vehicle {record.vehicleId} · {record.reviewState}</p>
+                    <p>{record.recordType} - Vehicle {record.vehicleId} - {record.reviewState}</p>
                   </div>
                   <VehicleStatusPill status={record.severity} />
                 </div>
@@ -528,7 +593,7 @@ export function OpsPage({
                 <div className="ops-list-row" key={payment.paymentId}>
                   <div>
                     <strong>{payment.reason.replaceAll('_', ' ')}</strong>
-                    <p>Booking {payment.bookingId ?? 'N/A'} · {payment.status}</p>
+                    <p>Booking {payment.bookingId ?? 'N/A'} - {payment.status}</p>
                   </div>
                   <strong>{formatMoney(payment.amount)}</strong>
                 </div>
@@ -548,7 +613,7 @@ export function OpsPage({
                 <div className="ops-list-row" key={trip.tripId}>
                   <div>
                     <strong>Trip #{trip.tripId}</strong>
-                    <p>Booking {trip.bookingId} · Vehicle {trip.vehicleId}</p>
+                    <p>Booking {trip.bookingId} - Vehicle {trip.vehicleId}</p>
                   </div>
                   <strong>{formatHours(trip.durationHours)}</strong>
                 </div>
@@ -568,7 +633,7 @@ export function OpsPage({
                 <div className="ops-list-row" key={booking.bookingId}>
                   <div>
                     <strong>Booking #{booking.bookingId}</strong>
-                    <p>{booking.userId} · Vehicle {booking.vehicleId} · {booking.pickupLocation}</p>
+                    <p>{booking.userId} - Vehicle {booking.vehicleId} - {booking.pickupLocation}</p>
                   </div>
                   <VehicleStatusPill status={booking.status} />
                 </div>
@@ -598,7 +663,7 @@ export function OpsPage({
                   <small>{notification.audience}</small>
                 </div>
                 <p>{notification.message}</p>
-                <small>Booking {notification.bookingId ?? 'N/A'} · Trip {notification.tripId ?? 'N/A'}</small>
+                <small>Booking {notification.bookingId ?? 'N/A'} - Trip {notification.tripId ?? 'N/A'}</small>
               </article>
             ))}
             {latestNotifications.length === 0 ? <div className="empty-card"><p>No operations notifications yet.</p></div> : null}

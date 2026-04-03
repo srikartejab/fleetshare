@@ -53,6 +53,7 @@ def process_end_trip(payload: EndTripPayload):
             "userId": payload.userId,
             "startedAt": updated_trip["startedAt"],
             "endedAt": updated_trip["endedAt"],
+            "quotedRenewalDate": booking.get("pricingSnapshot", {}).get("renewalDate"),
             "disrupted": disrupted,
             "endReason": payload.endReason,
         },
@@ -60,6 +61,13 @@ def process_end_trip(payload: EndTripPayload):
     patch_json(
         f"{settings.booking_service_url}/booking/{payload.bookingId}/financials",
         {"finalPrice": pricing_result["finalPrice"]},
+    )
+    patch_json(
+        f"{settings.booking_service_url}/booking/{payload.bookingId}/reconciliation-status",
+        {
+            "refund_pending_on_renewal": pricing_result["renewalPending"],
+            "reconciliationStatus": "PENDING" if pricing_result["renewalPending"] else "NOT_REQUIRED",
+        },
     )
     patch_json(
         f"{settings.booking_service_url}/booking/{payload.bookingId}/status",
@@ -91,9 +99,11 @@ def process_end_trip(payload: EndTripPayload):
         "tripStatus": trip_result["status"],
         "vehicleLocked": lock_success,
         "adjustedFare": pricing_result["finalPrice"],
-        "refundPending": pricing_result["renewalPending"] or pricing_result["refundAmount"] > 0,
+        "refundPending": pricing_result["refundAmount"] > 0,
+        "renewalReconciliationPending": pricing_result["renewalPending"],
         "discountAmount": pricing_result["discountAmount"],
         "allowanceHoursApplied": pricing_result["allowanceHoursApplied"],
+        "allowanceHoursRestored": pricing_result.get("restoredIncludedHours", 0.0),
         "customerSummary": pricing_result["customerSummary"],
     }
 

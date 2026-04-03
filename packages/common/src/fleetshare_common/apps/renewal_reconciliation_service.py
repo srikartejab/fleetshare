@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
+from dateutil.relativedelta import relativedelta
 from fastapi import Depends
 from pydantic import BaseModel
 from sqlalchemy import DateTime, Integer, String, Text, func
@@ -30,14 +31,14 @@ class ProcessedRenewal(Base):
 class RenewalPayload(BaseModel):
     userId: str
     subscriptionPlanId: str = "STANDARD_MONTHLY"
-    newBillingCycleId: str = "2026-04"
+    newBillingCycleId: str = "next"
     renewalStatus: str = "SUCCESS"
 
 
 @app.on_event("startup")
 def startup_event():
     initialize_schema_with_retry(Base.metadata)
-    start_consumer("renewal-reconciliation-service", ["subscription.renewed"], handle_renewal_event)
+    start_consumer("renewal-reconciliation-service", ["subscription.renewed", "trip.ended"], handle_event)
 
 
 @app.get("/renewal-reconciliation/events")
@@ -56,8 +57,15 @@ def list_processed(db: Session = Depends(get_db)):
 
 @app.post("/renewal-reconciliation/simulate")
 def simulate_renewal(payload: RenewalPayload):
-    publish_event("subscription.renewed", payload.model_dump())
-    return {"published": True}
+    settings = get_settings()
+    summary = get_json(f"{settings.pricing_service_url}/pricing/customers/{payload.userId}/summary")
+    concrete_cycle_id = (
+        payload.newBillingCycleId
+        if payload.newBillingCycleId not in {"", "next"}
+        else billing_cycle_id_for_date(date.fromisoformat(summary["renewalDate"]) + relativedelta(months=1))
+    )
+    publish_event("subscription.renewed", {**payload.model_dump(), "newBillingCycleId": concrete_cycle_id})
+    return {"published": True, "newBillingCycleId": concrete_cycle_id}
 
 
 def mark_renewal_processing(event: dict):
@@ -89,6 +97,111 @@ def mark_renewal_outcome(event_id: str, *, status: str, last_error: str | None =
         existing.last_error = last_error
 
 
+def billing_cycle_id_for_date(value: date) -> str:
+    return value.strftime("%Y-%m")
+
+
+def active_billing_cycle_id_from_summary(summary: dict) -> str:
+    return billing_cycle_id_for_date(date.fromisoformat(summary["renewalDate"]))
+
+
+def fetch_customer_summary(settings, user_id: str) -> dict:
+    return get_json(f"{settings.pricing_service_url}/pricing/customers/{user_id}/summary")
+
+
+def sorted_candidates(candidates: list[dict]) -> list[dict]:
+    return sorted(
+        candidates,
+        key=lambda candidate: (
+            candidate.get("startTime") or "",
+            candidate.get("bookingId") or 0,
+        ),
+    )
+
+
+def build_completion_message(candidate: dict, rerate: dict) -> str:
+    message_parts = []
+    if float(rerate.get("eligibleIncludedHours", 0)) > 0:
+        message_parts.append(
+            f"{float(rerate['eligibleIncludedHours']):.1f}h moved into the new cycle allowance"
+        )
+    if float(rerate.get("refundAmount", 0)) > 0:
+        message_parts.append(f"SGD {float(rerate['refundAmount']):.2f} refunded")
+    if not message_parts:
+        message_parts.append("No additional refund was required after re-rating")
+    return f"Booking {candidate['bookingId']} was re-rated after renewal. {'; '.join(message_parts)}."
+
+
+def process_pending_reconciliations(settings, user_id: str, active_billing_cycle_id: str) -> int:
+    pending = get_json(
+        f"{settings.booking_service_url}/bookings/reconciliation-pending",
+        {"userId": user_id, "billingCycleId": active_billing_cycle_id},
+    )
+    processed = 0
+    for candidate in sorted_candidates(pending.get("reconciliationCandidates", [])):
+        latest_booking = get_json(f"{settings.booking_service_url}/booking/{candidate['bookingId']}")
+        if not latest_booking.get("refundPendingOnRenewal"):
+            continue
+
+        trip_id = latest_booking.get("tripId")
+        if not trip_id:
+            continue
+
+        trip = get_json(f"{settings.trip_service_url}/trips/{trip_id}")
+        if trip.get("status") != "ENDED" or not trip.get("endedAt"):
+            continue
+
+        usage = get_json(f"{settings.trip_service_url}/trips/{trip_id}/post-midnight-usage")
+        rerate = post_json(
+            f"{settings.pricing_service_url}/pricing/re-rate-renewed-booking",
+            {
+                "bookingId": latest_booking["bookingId"],
+                "tripId": trip_id,
+                "userId": user_id,
+                "newBillingCycleId": active_billing_cycle_id,
+                "actualPostMidnightHours": usage["actualPostMidnightHours"],
+            },
+        )
+
+        if float(rerate.get("refundAmount", 0)) > 0:
+            publish_event(
+                "payment.refund_required",
+                {
+                    "bookingId": latest_booking["bookingId"],
+                    "tripId": trip_id,
+                    "userId": user_id,
+                    "refundAmount": rerate["refundAmount"],
+                    "reason": "RENEWAL_RECONCILIATION",
+                },
+            )
+
+        patch_json(
+            f"{settings.booking_service_url}/booking/{latest_booking['bookingId']}/financials",
+            {"finalPrice": rerate["finalPrice"]},
+        )
+        patch_json(
+            f"{settings.booking_service_url}/booking/{latest_booking['bookingId']}/reconciliation-status",
+            {
+                "refund_pending_on_renewal": False,
+                "reconciliationStatus": "COMPLETED",
+            },
+        )
+
+        if float(rerate.get("refundAmount", 0)) > 0 or float(rerate.get("eligibleIncludedHours", 0)) > 0:
+            publish_event(
+                "billing.refund_adjustment_completed",
+                {
+                    "bookingId": latest_booking["bookingId"],
+                    "tripId": trip_id,
+                    "userId": user_id,
+                    "subject": "Billing adjustment completed",
+                    "message": build_completion_message(latest_booking, rerate),
+                },
+            )
+        processed += 1
+    return processed
+
+
 def handle_renewal_event(event: dict):
     settings = get_settings()
     payload = event["payload"]
@@ -96,65 +209,47 @@ def handle_renewal_event(event: dict):
         return
 
     try:
-        post_json(
-            f"{settings.pricing_service_url}/pricing/customers/{payload['userId']}/renewal",
-            {"newBillingCycleId": payload.get("newBillingCycleId", "next")},
-        )
-        pending = get_json(
-            f"{settings.booking_service_url}/bookings/reconciliation-pending",
-            {"userId": payload["userId"], "billingCycleId": payload.get("newBillingCycleId", "next")},
-        )
-        for candidate in pending["reconciliationCandidates"]:
-            trip_id = candidate.get("tripId")
-            if not trip_id:
-                continue
-            usage = get_json(f"{settings.trip_service_url}/trips/{trip_id}/post-midnight-usage")
-            rerate = post_json(
-                f"{settings.pricing_service_url}/pricing/re-rate-renewed-booking",
-                {
-                    "bookingId": candidate["bookingId"],
-                    "tripId": trip_id,
-                    "userId": payload["userId"],
-                    "newBillingCycleId": payload.get("newBillingCycleId", "next"),
-                    "actualPostMidnightHours": usage["actualPostMidnightHours"],
-                },
+        current_summary = fetch_customer_summary(settings, payload["userId"])
+        target_billing_cycle_id = payload.get("newBillingCycleId")
+        if not target_billing_cycle_id or target_billing_cycle_id == "next":
+            target_billing_cycle_id = billing_cycle_id_for_date(
+                date.fromisoformat(current_summary["renewalDate"]) + relativedelta(months=1)
             )
-            if rerate["refundAmount"] > 0:
-                publish_event(
-                    "payment.refund_required",
-                    {
-                        "bookingId": candidate["bookingId"],
-                        "tripId": trip_id,
-                        "userId": payload["userId"],
-                        "refundAmount": rerate["refundAmount"],
-                        "reason": "RENEWAL_RECONCILIATION",
-                    },
-                )
-            patch_json(
-                f"{settings.booking_service_url}/booking/{candidate['bookingId']}/financials",
-                {"finalPrice": rerate["finalPrice"]},
+
+        if active_billing_cycle_id_from_summary(current_summary) != target_billing_cycle_id:
+            renewal_result = post_json(
+                f"{settings.pricing_service_url}/pricing/customers/{payload['userId']}/renewal",
+                {"newBillingCycleId": target_billing_cycle_id},
             )
-            patch_json(
-                f"{settings.booking_service_url}/booking/{candidate['bookingId']}/reconciliation-status",
-                {
-                    "refund_pending_on_renewal": False,
-                    "reconciliationStatus": "COMPLETED",
-                },
-            )
-            publish_event(
-                "billing.refund_adjustment_completed",
-                {
-                    "bookingId": candidate["bookingId"],
-                    "tripId": trip_id,
-                    "userId": payload["userId"],
-                    "subject": "Billing adjustment completed",
-                    "message": (
-                        f"Booking {candidate['bookingId']} was re-rated after renewal. "
-                        f"Refund: SGD {rerate['refundAmount']:.2f}"
-                    ),
-                },
-            )
+            active_billing_cycle_id = renewal_result.get("billingCycleId", target_billing_cycle_id)
+        else:
+            active_billing_cycle_id = target_billing_cycle_id
+
+        process_pending_reconciliations(settings, payload["userId"], active_billing_cycle_id)
     except Exception as exc:
         mark_renewal_outcome(event["event_id"], status="FAILED", last_error=str(exc))
         raise
     mark_renewal_outcome(event["event_id"], status="COMPLETED")
+
+
+def handle_trip_ended_event(event: dict):
+    settings = get_settings()
+    payload = event["payload"]
+    booking = get_json(f"{settings.booking_service_url}/booking/{payload['bookingId']}")
+    if not booking.get("refundPendingOnRenewal"):
+        return
+
+    current_summary = fetch_customer_summary(settings, payload["userId"])
+    active_billing_cycle_id = active_billing_cycle_id_from_summary(current_summary)
+    if booking.get("pricingSnapshot", {}).get("nextBillingCycleId") != active_billing_cycle_id:
+        return
+
+    process_pending_reconciliations(settings, payload["userId"], active_billing_cycle_id)
+
+
+def handle_event(event: dict):
+    if event.get("event_type") == "subscription.renewed":
+        handle_renewal_event(event)
+        return
+    if event.get("event_type") == "trip.ended":
+        handle_trip_ended_event(event)

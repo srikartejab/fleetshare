@@ -29,6 +29,16 @@ services:
       - "9000:9000"
       - "9001:9001"
 
+  adminer:
+    image: adminer:4
+    environment:
+      ADMINER_DEFAULT_SERVER: mysql
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
   kong:
     image: kong:3.6
     environment:
@@ -86,8 +96,10 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
       MINIO_BUCKET: ${MINIO_BUCKET:-fleetshare-evidence}
       AZURE_VISION_MODE: ${AZURE_VISION_MODE:-mock}
-      AZURE_VISION_ENDPOINT: ${AZURE_VISION_ENDPOINT:-}
-      AZURE_VISION_KEY: ${AZURE_VISION_KEY:-}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_KEY: ${AZURE_OPENAI_KEY:-}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-gpt-4o-mini}
+      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING:-}
       VEHICLE_SERVICE_URL: http://vehicle-service:8000
       VEHICLE_GRPC_TARGET: vehicle-service:50051
       BOOKING_SERVICE_URL: http://booking-service:8000
@@ -243,7 +255,7 @@ services:
       <<: *backend-env
       SERVICE_NAME: external-damage-service
       DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/external_damage_db
-    depends_on: [record-service, vehicle-service, minio, rabbitmq]
+    depends_on: [record-service, vehicle-service,  rabbitmq]
 
   start-trip-service:
     build:

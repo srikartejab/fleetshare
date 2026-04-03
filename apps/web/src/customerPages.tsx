@@ -6,6 +6,7 @@ import {
   formatDateTime,
   formatHours,
   formatMoney,
+  formatSeverityLabel,
 } from './appTypes'
 import type {
   Booking,
@@ -653,7 +654,7 @@ export function TripsPage({
                 <div className={`notice-card ${inspectionCleared ? 'notice-card--success' : inspectionRecord.reviewState === 'MANUAL_REVIEW' || inspectionRecord.reviewState === 'EXTERNAL_BLOCKED' ? 'notice-card--error' : ''}`}>
                   <strong>Latest inspection result</strong>
                   <p>
-                    Severity: {inspectionSeverity}. Review state: {inspectionRecord.reviewState}.
+                    Severity: {formatSeverityLabel(inspectionSeverity)}. Review state: {inspectionRecord.reviewState}.
                   </p>
                   <p>
                     {inspectionCleared
@@ -686,6 +687,11 @@ export function TripsPage({
                 <input value={startNotes} onChange={(event) => setStartNotes(event.target.value)} placeholder="Optional notes sent with the unlock/start request" />
               </label>
             </>
+          ) : activeTrip ? (
+            <div className="notice-card notice-card--success">
+              <strong>Current booking is already in progress</strong>
+              <p>Booking #{activeTrip.bookingId} has already moved into the live trip flow, so there is no separate upcoming booking card to show here.</p>
+            </div>
           ) : (
             <div className="empty-card"><p>No upcoming bookings. Reserve a car first.</p></div>
           )}
@@ -828,7 +834,7 @@ export function TripProblemResultPage({
       <p className="eyebrow">Problem assessment</p>
       <h1>{reportedProblem.blocked ? 'Stop safely and end the trip.' : 'The report has been recorded.'}</h1>
       <div className={`notice-card ${reportedProblem.blocked ? 'notice-card--error' : 'notice-card--success'}`}>
-        <strong>Severity: {reportedProblem.severity}</strong>
+        <strong>Severity: {formatSeverityLabel(reportedProblem.severity)}</strong>
         <p>{reportedProblem.recommendedAction}</p>
         {reportedProblem.duplicateSuppressed ? <p>FleetShare detected an existing matching incident and avoided repeating the downstream recovery cycle.</p> : null}
       </div>
@@ -939,7 +945,7 @@ export function EndTripReviewPage({
       <h1>Review the post-trip inspection result.</h1>
       <div className={`notice-card ${postTripInspectionResult.followUpRequired ? 'notice-card--error' : 'notice-card--success'}`}>
         <strong>{vehicle?.model ?? `Vehicle #${postTripInspectionResult.vehicleId}`}</strong>
-        <p>Severity: {postTripInspectionResult.assessmentResult.severity}</p>
+        <p>Severity: {formatSeverityLabel(postTripInspectionResult.assessmentResult.severity)}</p>
         <p>{postTripInspectionResult.warningMessage}</p>
       </div>
       {endReason === 'SEVERE_INTERNAL_FAULT' ? (
@@ -1030,6 +1036,9 @@ export function EndTripCompletePage({
     )
   }
 
+  const settlementLabel = endTripResult.renewalReconciliationPending ? 'Renewal reconciliation' : 'Refund queued'
+  const settlementValue = endTripResult.renewalReconciliationPending ? 'Pending' : endTripResult.refundPending ? 'Yes' : 'No'
+
   return (
     <div className="stack">
       <section className="booking-hero">
@@ -1069,12 +1078,12 @@ export function EndTripCompletePage({
               <strong>{formatMoney(endTripResult.discountAmount)}</strong>
             </div>
             <div>
-              <span>Allowance used</span>
-              <strong>{formatHours(endTripResult.allowanceHoursApplied)}</strong>
+              <span>{(endTripResult.allowanceHoursRestored ?? 0) > 0 ? 'Allowance restored' : 'Allowance used'}</span>
+              <strong>{formatHours((endTripResult.allowanceHoursRestored ?? 0) > 0 ? endTripResult.allowanceHoursRestored ?? 0 : endTripResult.allowanceHoursApplied)}</strong>
             </div>
             <div>
-              <span>Refund pending</span>
-              <strong>{endTripResult.refundPending ? 'Yes' : 'No'}</strong>
+              <span>{settlementLabel}</span>
+              <strong>{settlementValue}</strong>
             </div>
           </div>
         </article>
@@ -1083,7 +1092,7 @@ export function EndTripCompletePage({
           <h2>Post-trip evidence</h2>
           {postTripInspectionResult ? (
             <>
-              <p>Severity: {postTripInspectionResult.assessmentResult.severity}</p>
+              <p>Severity: {formatSeverityLabel(postTripInspectionResult.assessmentResult.severity)}</p>
               <p>{postTripInspectionResult.warningMessage}</p>
             </>
           ) : (
