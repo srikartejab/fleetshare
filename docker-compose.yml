@@ -55,22 +55,9 @@ services:
     volumes:
       - ./infrastructure/kong:/kong/declarative
     depends_on:
-      - vehicle-service
-      - booking-service
-      - trip-service
-      - record-service
-      - maintenance-service
-      - pricing-service
-      - payment-service
-      - notification-service
-      - search-available-vehicles-service
       - process-booking-service
-      - external-damage-service
-      - start-trip-service
-      - internal-damage-service
-      - end-trip-service
-      - handle-damage-service
-      - renewal-reconciliation-service
+      - trip-experience-service
+      - ops-console-service
 
   web:
     build:
@@ -95,6 +82,7 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
       MINIO_BUCKET: ${MINIO_BUCKET:-fleetshare-evidence}
+      DAMAGE_BOOKING_LOOKAHEAD_HOURS: ${DAMAGE_BOOKING_LOOKAHEAD_HOURS:-336}
       AZURE_VISION_MODE: ${AZURE_VISION_MODE:-mock}
       AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
       AZURE_OPENAI_KEY: ${AZURE_OPENAI_KEY:-}
@@ -117,6 +105,8 @@ services:
       END_TRIP_SERVICE_URL: http://end-trip-service:8000
       HANDLE_DAMAGE_SERVICE_URL: http://handle-damage-service:8000
       RENEWAL_RECONCILIATION_SERVICE_URL: http://renewal-reconciliation-service:8000
+      TRIP_EXPERIENCE_SERVICE_URL: http://trip-experience-service:8000
+      OPS_CONSOLE_SERVICE_URL: http://ops-console-service:8000
       SERVICE_NAME: vehicle-service
       DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/vehicle_db
     depends_on:
@@ -246,6 +236,25 @@ services:
       DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/process_booking_db
     depends_on: [vehicle-service, booking-service, pricing-service, payment-service]
 
+  trip-experience-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: python -m uvicorn fleetshare_common.apps.trip_experience_service:app --host 0.0.0.0 --port 8000
+    environment:
+      <<: *backend-env
+      SERVICE_NAME: trip-experience-service
+      DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/trip_experience_db
+    depends_on:
+      - vehicle-service
+      - booking-service
+      - trip-service
+      - record-service
+      - external-damage-service
+      - start-trip-service
+      - internal-damage-service
+      - end-trip-service
+
   external-damage-service:
     build:
       context: .
@@ -329,3 +338,23 @@ services:
         condition: service_started
       pricing-service:
         condition: service_started
+
+  ops-console-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: python -m uvicorn fleetshare_common.apps.ops_console_service:app --host 0.0.0.0 --port 8000
+    environment:
+      <<: *backend-env
+      SERVICE_NAME: ops-console-service
+      DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/ops_console_db
+    depends_on:
+      - vehicle-service
+      - booking-service
+      - trip-service
+      - record-service
+      - maintenance-service
+      - pricing-service
+      - payment-service
+      - notification-service
+      - renewal-reconciliation-service

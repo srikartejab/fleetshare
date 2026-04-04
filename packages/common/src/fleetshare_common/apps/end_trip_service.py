@@ -73,18 +73,29 @@ def process_end_trip(payload: EndTripPayload):
         f"{settings.booking_service_url}/booking/{payload.bookingId}/status",
         {"status": "COMPLETED"},
     )
-    if pricing_result["refundAmount"] > 0 or pricing_result["discountAmount"] > 0:
+    if pricing_result["refundAmount"] > 0:
+        publish_event(
+            "payment.refund_required",
+            {
+                "bookingId": payload.bookingId,
+                "tripId": payload.tripId,
+                "userId": payload.userId,
+                "refundAmount": pricing_result["refundAmount"],
+                "reason": payload.endReason,
+            },
+        )
+    if pricing_result["discountAmount"] > 0:
         publish_event(
             "payment.adjustment_required",
             {
                 "bookingId": payload.bookingId,
                 "tripId": payload.tripId,
                 "userId": payload.userId,
-                "refundAmount": pricing_result["refundAmount"],
                 "discountAmount": pricing_result["discountAmount"],
                 "reason": payload.endReason,
             },
         )
+    if pricing_result["refundAmount"] > 0 or pricing_result["discountAmount"] > 0:
         publish_event(
             "booking.disruption_notification",
             {

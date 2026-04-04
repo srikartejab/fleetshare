@@ -21,6 +21,9 @@
   --search-utility-bottom: calc(11rem + env(safe-area-inset-bottom, 0px));
   --search-utility-bottom-with-card: calc(19.2rem + env(safe-area-inset-bottom, 0px));
   position: relative;
+  width: 100%;
+  max-width: var(--search-demo-width);
+  margin: 0 auto;
   height: 100svh;
   min-height: 100svh;
   background: #eff5fb;
@@ -289,7 +292,8 @@
   left: 50%;
   z-index: 565;
   transform: translateX(-50%);
-  max-width: calc(100% - 8rem);
+  width: max-content;
+  max-width: calc(100% - 2rem);
   padding: 0.32rem 0.85rem;
   background: rgba(58, 64, 73, 0.84);
   color: #fff;
@@ -354,7 +358,7 @@
 .map-utility-bar {
   position: fixed;
   bottom: var(--search-utility-bottom);
-  left: calc(50% - (var(--search-demo-width) / 2) + 0.75rem);
+  left: 0.75rem;
   z-index: 565;
   display: inline-flex;
   gap: 0.15rem;
@@ -826,5 +830,102 @@
 
   .filter-sheet--open .filter-sheet__panel {
     transform: translateY(0);
+  }
+}
+
+@media (max-width: 390px) {
+  .search-header {
+    padding-left: 0.85rem;
+    padding-right: 0.85rem;
+  }
+
+  .search-panel {
+    padding-left: 0.6rem;
+    padding-right: 0.6rem;
+  }
+
+  .search-bar {
+    flex-wrap: wrap;
+    border-radius: 1.2rem;
+  }
+
+  .search-slot {
+    min-width: calc(50% - 0.1rem);
+    padding: 0.72rem 0.72rem;
+  }
+
+  .find-button {
+    width: 100%;
+    min-width: 0;
+    min-height: 3.25rem;
+    clip-path: none;
+    border-radius: 0 0 1.2rem 1.2rem;
+  }
+
+  .location-bar {
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    min-height: auto;
+    padding: 0.7rem 0.8rem;
+  }
+
+  .filter-trigger {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .availability-pill {
+    max-width: calc(100% - 1.4rem);
+    font-size: 0.84rem;
+  }
+
+  .station-card {
+    left: 0.6rem;
+    right: 0.6rem;
+  }
+
+  .station-card__hero,
+  .station-card__action-row,
+  .station-card__footer,
+  .filter-sheet__dates {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .station-card__hero-cta {
+    width: 100%;
+    min-width: 0;
+    justify-items: start;
+  }
+
+  .station-card__carousel {
+    gap: 0.6rem;
+  }
+
+  .station-card__carousel strong,
+  .station-card__footer strong {
+    font-size: 0.84rem;
+  }
+
+  .station-card__meta {
+    flex-wrap: wrap;
+    gap: 0.55rem;
+  }
+
+  .reserve-button {
+    width: 100%;
+    min-width: 0;
+    min-height: 3.2rem;
+    clip-path: none;
+    border-radius: 999px;
+  }
+
+  .map-utility-bar {
+    left: 0.6rem;
+  }
+
+  .search-bottomnav a,
+  .search-bottomnav button {
+    font-size: 0.68rem;
   }
 }

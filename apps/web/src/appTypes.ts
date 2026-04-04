@@ -125,6 +125,12 @@ export type Booking = {
   bookingNote?: string | null
   cancellationReason?: string | null
   pricingSnapshot?: PricingSnapshot
+  bookingCode?: string | null
+  customerName?: string | null
+  vehicleName?: string | null
+  stationName?: string | null
+  stationAddress?: string | null
+  zone?: string | null
 }
 
 export type Trip = {
@@ -184,6 +190,16 @@ export type Notification = {
   audience: string
   subject: string
   message: string
+  payload?: Record<string, unknown>
+  createdAt?: string | null
+  bookingCode?: string | null
+  customerName?: string | null
+  vehicleId?: number | null
+  vehicleName?: string | null
+  stationName?: string | null
+  stationAddress?: string | null
+  zone?: string | null
+  severity?: string | null
 }
 
 export type Ticket = {
@@ -191,8 +207,24 @@ export type Ticket = {
   vehicleId: number
   damageSeverity: string
   damageType: string
+  recommendedAction?: string
   estimatedDurationHours: number
   status: string
+  recordId?: number | null
+  bookingId?: number | null
+  tripId?: number | null
+  openedByEventType?: string | null
+  createdAt?: string | null
+  bookingCode?: string | null
+  userId?: string | null
+  customerName?: string | null
+  vehicleName?: string | null
+  stationName?: string | null
+  stationAddress?: string | null
+  zone?: string | null
+  recordSummary?: string | null
+  evidenceCount?: number
+  hasEvidence?: boolean
 }
 
 export type RecordItem = {
@@ -205,7 +237,33 @@ export type RecordItem = {
   severity: string
   reviewState: string
   confidence: number
+  evidenceUrls?: string[]
   detectedDamage: string[]
+  createdAt?: string | null
+  updatedAt?: string | null
+  bookingCode?: string | null
+  userId?: string | null
+  customerName?: string | null
+  vehicleName?: string | null
+  stationName?: string | null
+  stationAddress?: string | null
+  zone?: string | null
+  evidenceCount?: number
+  hasEvidence?: boolean
+}
+
+export type TripDisruptionAdvisory = {
+  notificationId: number
+  createdAt?: string | null
+  bookingId?: number | null
+  tripId?: number | null
+  vehicleId?: number | null
+  vehicleName: string
+  severity: string
+  subject: string
+  message: string
+  requiresImmediateEndTrip: boolean
+  endReason: string
 }
 
 export type SearchResponse = {
@@ -215,6 +273,95 @@ export type SearchResponse = {
   selectedStationId?: string
   mapCenter?: MapCenter
   stationList: SearchStation[]
+}
+
+export type DiscoveryMetadata = {
+  vehicles: Vehicle[]
+  filters: VehicleFilters
+}
+
+export type CustomerHomeResponse = {
+  customerSummary: CustomerSummary
+  bookings: Booking[]
+  notifications: Notification[]
+}
+
+export type BookingListResponse = {
+  customerSummary: CustomerSummary
+  bookings: Booking[]
+}
+
+export type BookingDetailResponse = {
+  booking: Booking
+  vehicle: Vehicle
+  customerSummary: CustomerSummary
+}
+
+export type CustomerWalletResponse = {
+  customerSummary: CustomerSummary
+  bookings: Booking[]
+  payments: Payment[]
+  ledgerEntries: WalletLedgerEntry[]
+}
+
+export type CustomerAccountResponse = {
+  customerSummary: CustomerSummary
+  notifications: Notification[]
+}
+
+export type TripExperienceStatusResponse = {
+  bookings: Booking[]
+  trips: Trip[]
+  vehicles: Vehicle[]
+  records: RecordItem[]
+  notifications: Notification[]
+  liveTripAdvisory?: TripDisruptionAdvisory | null
+}
+
+export type OpsDashboardResponse = {
+  vehicles: Vehicle[]
+  customers: CustomerSummary[]
+  bookings: Booking[]
+  trips: Trip[]
+  tickets: Ticket[]
+  records: RecordItem[]
+  reviewQueue: RecordItem[]
+  payments: Payment[]
+  notifications: Notification[]
+}
+
+export type OpsIncidentsResponse = {
+  tickets: Ticket[]
+  records: RecordItem[]
+  reviewQueue: RecordItem[]
+}
+
+export type OpsBillingResponse = {
+  customers: CustomerSummary[]
+  bookings: Booking[]
+  trips: Trip[]
+  payments: Payment[]
+}
+
+export type OpsInboxResponse = {
+  notifications: Notification[]
+}
+
+export type OpsTicketDetailResponse = {
+  ticket: Ticket
+  vehicle?: Vehicle | null
+  customer?: CustomerSummary | null
+  booking?: Booking | null
+  trip?: Trip | null
+  record?: RecordItem | null
+  evidenceUrls: string[]
+}
+
+export type WalletSettlement = {
+  cashRefundAmount: number
+  restoredIncludedHours: number
+  discountAmount: number
+  reconciliationStatus: string
 }
 
 export type InspectionSubmissionResult = {
@@ -229,14 +376,38 @@ export type InspectionSubmissionResult = {
   tripStatus: 'CLEARED' | 'BLOCKED'
   warningMessage: string
   manualReview: boolean
+  reviewState: string
+  bookingStatus?: string | null
+  bookingCancelled: boolean
+  resolutionCompleted: boolean
+  booking?: Booking | null
+  vehicle?: Vehicle | null
+  walletSettlement: WalletSettlement
+  maintenanceTicketId?: number | null
 }
 
 export type InspectionCancellationResult = {
   bookingId: number
   vehicleId: number
   recordId: number
+  assessmentResult: {
+    severity: string
+    confidence: number
+    detectedDamage: string[]
+  }
+  tripStatus: 'BLOCKED'
+  warningMessage: string
+  manualReview: boolean
+  reviewState: string
   status: string
   message: string
+  bookingStatus?: string | null
+  bookingCancelled: boolean
+  resolutionCompleted: boolean
+  booking?: Booking | null
+  vehicle?: Vehicle | null
+  walletSettlement: WalletSettlement
+  maintenanceTicketId?: number | null
 }
 
 export type InternalDamageResult = {

@@ -63,6 +63,8 @@ def test_end_trip_service_separates_renewal_reconciliation_from_refund_queue(mon
 
 
 def test_end_trip_service_marks_cash_refund_as_pending_when_adjustment_is_queued(monkeypatch):
+    published_events = []
+
     monkeypatch.setattr(
         end_trip_service,
         "get_json",
@@ -93,7 +95,7 @@ def test_end_trip_service_marks_cash_refund_as_pending_when_adjustment_is_queued
         },
     )
     monkeypatch.setattr(end_trip_service, "lock_vehicle", lambda vehicle_id, booking_ref, user_id: {"success": True})
-    monkeypatch.setattr(end_trip_service, "publish_event", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(end_trip_service, "publish_event", lambda event_type, payload: published_events.append((event_type, payload)))
 
     payload = end_trip_service.EndTripPayload(
         tripId=202,
@@ -107,3 +109,23 @@ def test_end_trip_service_marks_cash_refund_as_pending_when_adjustment_is_queued
 
     assert result["refundPending"] is True
     assert result["renewalReconciliationPending"] is False
+    assert (
+        "payment.refund_required",
+        {
+            "bookingId": 102,
+            "tripId": 202,
+            "userId": "user-1002",
+            "refundAmount": 30.0,
+            "reason": "SEVERE_INTERNAL_FAULT",
+        },
+    ) in published_events
+    assert (
+        "payment.adjustment_required",
+        {
+            "bookingId": 102,
+            "tripId": 202,
+            "userId": "user-1002",
+            "discountAmount": 8.0,
+            "reason": "SEVERE_INTERNAL_FAULT",
+        },
+    ) in published_events

@@ -71,7 +71,7 @@ class _FakeQuery:
         return self
 
     def first(self):
-        return None
+        return self.items[0] if self.items else None
 
     def all(self):
         return self.items
@@ -254,6 +254,45 @@ def test_get_customer_ledger_returns_wallet_entries(monkeypatch):
             "updatedAt": "2026-03-20T01:10:00Z",
         }
     ]
+
+
+def test_pre_trip_cancellation_compensation_restores_hours_and_refunds_cash():
+    db = _FakeDb()
+
+    payload = pricing_service.PreTripCancellationCompensationPayload(
+        affectedBookings=[
+            pricing_service.PreTripCancellationBooking(
+                bookingId=15,
+                userId="user-1002",
+                startTime=datetime(2026, 4, 4, 23, 0),
+                endTime=datetime(2026, 4, 5, 1, 0),
+                displayedPrice=24.0,
+                capturedCashAmount=24.0,
+                includedHoursApplied=1.0,
+                provisionalPostMidnightHours=0.0,
+            )
+        ],
+        reason="SEVERE_EXTERNAL_DAMAGE",
+    )
+
+    result = pricing_service.pre_trip_cancellation_compensation(payload, db)
+
+    assert db.committed is True
+    assert result["settlements"] == [
+        {
+            "bookingId": 15,
+            "userId": "user-1002",
+            "cashRefundAmount": 24.0,
+            "restoredIncludedHours": 1.0,
+            "discountAmount": 8.0,
+            "reconciliationStatus": "RESTORED",
+            "ledgerCreated": True,
+        }
+    ]
+    assert result["totalRefundAmount"] == 24.0
+    assert result["totalRestoredIncludedHours"] == 1.0
+    assert len(result["ledgerEntries"]) == 1
+    assert result["ledgerEntries"][0]["restoredIncludedHours"] == 1.0
 
 
 def test_mock_ai_detects_severe_damage_keywords():

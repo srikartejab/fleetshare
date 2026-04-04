@@ -45,10 +45,22 @@ def startup_event():
 
 
 @app.get("/payments")
-def list_payments(userId: str | None = None, db: Session = Depends(get_db)):
+def list_payments(
+    userId: str | None = None,
+    bookingId: int | None = None,
+    status: str | None = None,
+    reason: str | None = None,
+    db: Session = Depends(get_db),
+):
     query = db.query(PaymentRecord)
     if userId:
         query = query.filter(PaymentRecord.user_id == userId)
+    if bookingId is not None:
+        query = query.filter(PaymentRecord.booking_id == bookingId)
+    if status:
+        query = query.filter(PaymentRecord.status == status)
+    if reason:
+        query = query.filter(PaymentRecord.reason == reason)
     return [
         {
             "paymentId": payment.id,
@@ -87,12 +99,13 @@ def handle_payment_event(event: dict):
         if existing:
             return
         booking_ids = payload.get("affectedBookingIds")
+        amount = float(payload.get("refundAmount", 0)) if event["event_type"] == "payment.refund_required" else float(payload.get("discountAmount", 0))
         db.add(
             PaymentRecord(
                 booking_id=payload.get("bookingId") or (booking_ids[0] if booking_ids else None),
                 trip_id=payload.get("tripId"),
                 user_id=payload.get("userId", "ops"),
-                amount=float(payload.get("refundAmount", 0)) + float(payload.get("discountAmount", 0)),
+                amount=amount,
                 reason=payload.get("reason", event["event_type"]),
                 status="ADJUSTED" if event["event_type"] == "payment.adjustment_required" else "REFUNDED",
                 event_id=event["event_id"],

@@ -14,4 +14,5 @@ CREATE DATABASE IF NOT EXISTS internal_damage_db;
 CREATE DATABASE IF NOT EXISTS end_trip_db;
 CREATE DATABASE IF NOT EXISTS handle_damage_db;
 CREATE DATABASE IF NOT EXISTS renewal_reconciliation_db;
-
+CREATE DATABASE IF NOT EXISTS trip_experience_db;
+CREATE DATABASE IF NOT EXISTS ops_console_db;

@@ -310,6 +310,9 @@ def cancel_affected(payload: CancelAffectedPayload, db: Session = Depends(get_db
                 "pickupLocation": booking.pickup_location,
                 "startTime": iso(booking.start_time),
                 "endTime": iso(booking.end_time),
+                "pricingSnapshot": booking.metadata_json or {},
+                "reconciliationStatus": booking.reconciliation_status,
+                "cancellationReason": booking.cancellation_reason,
             }
         )
     db.commit()

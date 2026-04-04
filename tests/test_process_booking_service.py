@@ -1,0 +1,63 @@
+import pytest
+
+TestClient = pytest.importorskip("fastapi.testclient").TestClient
+
+from fleetshare_common.apps import process_booking_service
+
+
+def test_process_booking_home_and_wallet_routes_aggregate_customer_views(monkeypatch):
+    def fake_get_json(url, params=None):
+        if url.endswith("/pricing/customers/user-1001/summary"):
+            return {"userId": "user-1001", "displayName": "Alicia Tan", "role": "CUSTOMER"}
+        if url.endswith("/bookings"):
+            return [{"bookingId": 10, "userId": "user-1001"}]
+        if url.endswith("/notifications"):
+            return [{"notificationId": 20, "userId": "user-1001", "subject": "Ready", "message": "Hi", "audience": "CUSTOMER"}]
+        if url.endswith("/payments"):
+            return [{"paymentId": 30, "userId": "user-1001", "amount": 12.5, "reason": "BOOKING", "status": "SUCCESS"}]
+        if url.endswith("/pricing/customers/user-1001/ledger"):
+            return [{"ledgerId": 40, "bookingId": 10, "userId": "user-1001"}]
+        raise AssertionError(f"Unexpected URL {url}")
+
+    monkeypatch.setattr(process_booking_service, "get_json", fake_get_json)
+
+    with TestClient(process_booking_service.app) as client:
+        home = client.get("/process-booking/customers/user-1001/home")
+        wallet = client.get("/process-booking/customers/user-1001/wallet")
+
+    assert home.status_code == 200
+    assert wallet.status_code == 200
+    assert home.json() == {
+        "customerSummary": {"userId": "user-1001", "displayName": "Alicia Tan", "role": "CUSTOMER"},
+        "bookings": [{"bookingId": 10, "userId": "user-1001"}],
+        "notifications": [{"notificationId": 20, "userId": "user-1001", "subject": "Ready", "message": "Hi", "audience": "CUSTOMER"}],
+    }
+    assert wallet.json() == {
+        "customerSummary": {"userId": "user-1001", "displayName": "Alicia Tan", "role": "CUSTOMER"},
+        "bookings": [{"bookingId": 10, "userId": "user-1001"}],
+        "payments": [{"paymentId": 30, "userId": "user-1001", "amount": 12.5, "reason": "BOOKING", "status": "SUCCESS"}],
+        "ledgerEntries": [{"ledgerId": 40, "bookingId": 10, "userId": "user-1001"}],
+    }
+
+
+def test_process_booking_detail_aggregates_booking_vehicle_and_customer(monkeypatch):
+    def fake_get_json(url, params=None):
+        if "/booking/" in url:
+            return {"bookingId": 11, "vehicleId": 5, "userId": "user-1002"}
+        if url.endswith("/vehicles/5"):
+            return {"vehicleId": 5, "model": "BYD Atto 3"}
+        if url.endswith("/pricing/customers/user-1002/summary"):
+            return {"userId": "user-1002", "displayName": "Marcus Lee", "role": "CUSTOMER"}
+        raise AssertionError(f"Unexpected URL {url}")
+
+    monkeypatch.setattr(process_booking_service, "get_json", fake_get_json)
+
+    with TestClient(process_booking_service.app) as client:
+        response = client.get("/process-booking/bookings/11")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "booking": {"bookingId": 11, "vehicleId": 5, "userId": "user-1002"},
+        "vehicle": {"vehicleId": 5, "model": "BYD Atto 3"},
+        "customerSummary": {"userId": "user-1002", "displayName": "Marcus Lee", "role": "CUSTOMER"},
+    }

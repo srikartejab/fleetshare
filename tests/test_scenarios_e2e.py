@@ -56,8 +56,36 @@ def poll_until(description: str, predicate, *, timeout: float = 40.0, interval: 
 @pytest.fixture(scope="module")
 def client():
     with httpx.Client(base_url=BASE_URL, timeout=30.0) as session:
-        request_json(session, "GET", "/vehicles")
+        request_json(session, "GET", "/process-booking/customer-profiles")
         yield session
+
+
+def customer_home(client: httpx.Client, user_id: str) -> dict:
+    return request_json(client, "GET", f"/process-booking/customers/{user_id}/home")
+
+
+def customer_bookings(client: httpx.Client, user_id: str) -> list[dict]:
+    return request_json(client, "GET", f"/process-booking/customers/{user_id}/bookings")["bookings"]
+
+
+def customer_wallet(client: httpx.Client, user_id: str) -> dict:
+    return request_json(client, "GET", f"/process-booking/customers/{user_id}/wallet")
+
+
+def customer_account(client: httpx.Client, user_id: str) -> dict:
+    return request_json(client, "GET", f"/process-booking/customers/{user_id}/account")
+
+
+def trip_status(client: httpx.Client, user_id: str) -> dict:
+    return request_json(client, "GET", f"/trip-experience/customers/{user_id}/status")
+
+
+def ops_incidents(client: httpx.Client) -> dict:
+    return request_json(client, "GET", "/ops-console/incidents")
+
+
+def ops_inbox(client: httpx.Client) -> dict:
+    return request_json(client, "GET", "/ops-console/inbox")
 
 
 def reserve_and_confirm(
@@ -68,6 +96,7 @@ def reserve_and_confirm(
     vehicle_type: str,
     start_time: datetime,
     end_time: datetime,
+    preferred_vehicle_id: int | None = None,
 ):
     search = request_json(
         client,
@@ -83,7 +112,10 @@ def reserve_and_confirm(
         },
     )
     assert search["vehicleList"], f"No vehicles found for {user_id}"
-    vehicle = search["vehicleList"][0]
+    vehicle = next(
+        (item for item in search["vehicleList"] if preferred_vehicle_id is not None and item["vehicleId"] == preferred_vehicle_id),
+        search["vehicleList"][0],
+    )
     log(f"search completed for {user_id}; vehicle selected {vehicle['vehicleId']} in {pickup_location}")
 
     reserve = request_json(
@@ -115,15 +147,15 @@ def reserve_and_confirm(
     assert payment["status"] == "CONFIRMED"
     log(f"booking confirmed; booking id {reserve['bookingId']}, payment id {payment['paymentId']}")
 
-    booking = request_json(client, "GET", f"/booking/{reserve['bookingId']}")
-    return reserve, booking, vehicle
+    booking_detail = request_json(client, "GET", f"/process-booking/bookings/{reserve['bookingId']}")
+    return reserve, booking_detail["booking"], vehicle
 
 
 def submit_minor_inspection(client: httpx.Client, *, booking_id: int, vehicle_id: int, user_id: str):
     inspection = request_json(
         client,
         "POST",
-        "/damage-assessment/external",
+        "/trip-experience/pre-trip-inspection",
         data={
             "bookingId": str(booking_id),
             "vehicleId": str(vehicle_id),
@@ -139,7 +171,7 @@ def submit_minor_inspection(client: httpx.Client, *, booking_id: int, vehicle_id
 
 def test_scenario_1_booking_trip_and_renewal_reconciliation(client: httpx.Client):
     user_id = "user-1001"
-    summary = request_json(client, "GET", f"/pricing/customers/{user_id}/summary")
+    summary = customer_home(client, user_id)["customerSummary"]
     singapore = timezone(timedelta(hours=8))
     renewal_date = datetime.fromisoformat(summary["renewalDate"]).replace(tzinfo=singapore)
     start_time = renewal_date.replace(hour=23, minute=0, second=0, microsecond=0)
@@ -155,14 +187,14 @@ def test_scenario_1_booking_trip_and_renewal_reconciliation(client: httpx.Client
     )
     assert booking["refundPendingOnRenewal"] is True
     submit_minor_inspection(client, booking_id=reserve["bookingId"], vehicle_id=vehicle["vehicleId"], user_id=user_id)
-    trips_before_start = request_json(client, "GET", "/trips", params={"userId": user_id})
+    trips_before_start = trip_status(client, user_id)["trips"]
     assert trips_before_start == []
     log("inspection cleared; no trip created before unlock/start, as expected")
 
     started = request_json(
         client,
         "POST",
-        "/trips/start",
+        "/trip-experience/start",
         json={"bookingId": reserve["bookingId"], "vehicleId": vehicle["vehicleId"], "userId": user_id, "notes": ""},
     )
     log(f"unlock command accepted and trip started; trip id {started['tripId']}")
@@ -170,7 +202,7 @@ def test_scenario_1_booking_trip_and_renewal_reconciliation(client: httpx.Client
     ended = request_json(
         client,
         "POST",
-        "/end-trip/request",
+        "/trip-experience/end",
         json={
             "tripId": started["tripId"],
             "bookingId": reserve["bookingId"],
@@ -186,7 +218,7 @@ def test_scenario_1_booking_trip_and_renewal_reconciliation(client: httpx.Client
     request_json(
         client,
         "POST",
-        "/renewal-reconciliation/simulate",
+        "/ops-console/renewal/simulate",
         json={"userId": user_id, "newBillingCycleId": next_billing_cycle_id},
     )
     log(f"renewal event published for {user_id}; target cycle {next_billing_cycle_id}")
@@ -196,7 +228,7 @@ def test_scenario_1_booking_trip_and_renewal_reconciliation(client: httpx.Client
         lambda: next(
             (
                 item
-                for item in request_json(client, "GET", "/bookings", params={"userId": user_id})
+                for item in customer_bookings(client, user_id)
                 if item["bookingId"] == reserve["bookingId"] and item["status"] == "RECONCILED"
             ),
             None,
@@ -210,7 +242,7 @@ def test_scenario_1_booking_trip_and_renewal_reconciliation(client: httpx.Client
         lambda: next(
             (
                 item
-                for item in request_json(client, "GET", "/payments", params={"userId": user_id})
+                for item in customer_wallet(client, user_id)["payments"]
                 if item["status"] == "REFUNDED" and item["bookingId"] == reserve["bookingId"]
             ),
             None,
@@ -223,7 +255,7 @@ def test_scenario_1_booking_trip_and_renewal_reconciliation(client: httpx.Client
         lambda: next(
             (
                 item
-                for item in request_json(client, "GET", "/notifications", params={"userId": user_id})
+                for item in customer_account(client, user_id)["notifications"]
                 if item["bookingId"] == reserve["bookingId"] and "Billing adjustment completed" in item["subject"]
             ),
             None,
@@ -249,7 +281,7 @@ def test_scenario_2_external_damage_recovery_flow(client: httpx.Client):
     inspection = request_json(
         client,
         "POST",
-        "/damage-assessment/external",
+        "/trip-experience/pre-trip-inspection",
         data={
             "bookingId": str(reserve["bookingId"]),
             "vehicleId": str(vehicle["vehicleId"]),
@@ -259,19 +291,20 @@ def test_scenario_2_external_damage_recovery_flow(client: httpx.Client):
         files={"photos": ("damage.jpg", b"fake-image-data", "image/jpeg")},
     )
     assert inspection["tripStatus"] == "BLOCKED"
+    assert inspection["bookingCancelled"] is True
+    assert inspection["bookingStatus"] == "CANCELLED"
+    assert inspection["resolutionCompleted"] is True
     log(f"severe external damage detected; record id {inspection['recordId']}")
 
-    cancelled_booking = poll_until(
-        "affected booking cancelled after external damage",
-        lambda: next(
-            (
-                item
-                for item in request_json(client, "GET", "/bookings", params={"userId": user_id})
-                if item["bookingId"] == reserve["bookingId"] and item["status"] == "CANCELLED"
-            ),
-            None,
+    cancelled_booking = next(
+        (
+            item
+            for item in customer_bookings(client, user_id)
+            if item["bookingId"] == reserve["bookingId"] and item["status"] == "CANCELLED"
         ),
+        None,
     )
+    assert cancelled_booking is not None
     log(f"booking cancelled; booking id {cancelled_booking['bookingId']}")
 
     ticket = poll_until(
@@ -279,7 +312,7 @@ def test_scenario_2_external_damage_recovery_flow(client: httpx.Client):
         lambda: next(
             (
                 item
-                for item in request_json(client, "GET", "/maintenance/tickets")
+                for item in ops_incidents(client)["tickets"]
                 if item["vehicleId"] == vehicle["vehicleId"]
             ),
             None,
@@ -287,25 +320,51 @@ def test_scenario_2_external_damage_recovery_flow(client: httpx.Client):
     )
     log(f"maintenance ticket created; ticket id {ticket['ticketId']}")
 
-    payment = poll_until(
-        "customer compensation recorded after external damage",
+    refund = poll_until(
+        "customer refund recorded after external damage",
         lambda: next(
             (
                 item
-                for item in request_json(client, "GET", "/payments", params={"userId": user_id})
+                for item in customer_wallet(client, user_id)["payments"]
+                if item["bookingId"] == reserve["bookingId"] and item["status"] == "REFUNDED"
+            ),
+            None,
+        ),
+    )
+    log(f"refund created; payment id {refund['paymentId']} amount {refund['amount']}")
+
+    credit = poll_until(
+        "customer apology credit recorded after external damage",
+        lambda: next(
+            (
+                item
+                for item in customer_wallet(client, user_id)["payments"]
                 if item["bookingId"] == reserve["bookingId"] and item["status"] == "ADJUSTED"
             ),
             None,
         ),
     )
-    log(f"payment adjustment created; payment id {payment['paymentId']} amount {payment['amount']}")
+    log(f"apology credit created; payment id {credit['paymentId']} amount {credit['amount']}")
+
+    restored_hours = poll_until(
+        "allowance restoration recorded after external damage",
+        lambda: next(
+            (
+                item
+                for item in customer_wallet(client, user_id)["ledgerEntries"]
+                if item["bookingId"] == reserve["bookingId"] and item["restoredIncludedHours"] > 0
+            ),
+            None,
+        ),
+    )
+    log(f"allowance restoration recorded; ledger id {restored_hours['ledgerId']} restored {restored_hours['restoredIncludedHours']}h")
 
     customer_notification = poll_until(
         "customer notified after external damage",
         lambda: next(
             (
                 item
-                for item in request_json(client, "GET", "/notifications", params={"userId": user_id})
+                for item in customer_account(client, user_id)["notifications"]
                 if item["bookingId"] == reserve["bookingId"] and "cancelled" in item["message"].lower()
             ),
             None,
@@ -318,8 +377,8 @@ def test_scenario_2_external_damage_recovery_flow(client: httpx.Client):
         lambda: next(
             (
                 item
-                for item in request_json(client, "GET", "/notifications", params={"userId": "ops-maint-1"})
-                if item["bookingId"] == booking["bookingId"]
+                for item in ops_inbox(client)["notifications"]
+                if item["userId"] == "ops-maint-1" and item["bookingId"] == booking["bookingId"]
             ),
             None,
         ),
@@ -328,24 +387,47 @@ def test_scenario_2_external_damage_recovery_flow(client: httpx.Client):
 
 
 def test_scenario_3_telemetry_fault_recovery_flow(client: httpx.Client):
-    user_id = "user-1003"
+    active_user_id = "user-1003"
+    impacted_user_id = "user-1001"
     start_time = datetime.now(UTC) + timedelta(hours=14)
     end_time = start_time + timedelta(hours=3)
 
     reserve, booking, vehicle = reserve_and_confirm(
         client,
-        user_id=user_id,
+        user_id=active_user_id,
         pickup_location="TAMPINES",
         vehicle_type="SEDAN",
         start_time=start_time,
         end_time=end_time,
     )
-    submit_minor_inspection(client, booking_id=reserve["bookingId"], vehicle_id=vehicle["vehicleId"], user_id=user_id)
+    submit_minor_inspection(client, booking_id=reserve["bookingId"], vehicle_id=vehicle["vehicleId"], user_id=active_user_id)
+
+    started = request_json(
+        client,
+        "POST",
+        "/trip-experience/start",
+        json={"bookingId": reserve["bookingId"], "vehicleId": vehicle["vehicleId"], "userId": active_user_id, "notes": "start trip"},
+    )
+    log(f"active trip started; trip id {started['tripId']}")
+
+    impacted_start = end_time + timedelta(hours=2)
+    impacted_end = impacted_start + timedelta(hours=2)
+    impacted_reserve, _, _ = reserve_and_confirm(
+        client,
+        user_id=impacted_user_id,
+        pickup_location="TAMPINES",
+        vehicle_type="SEDAN",
+        start_time=impacted_start,
+        end_time=impacted_end,
+        preferred_vehicle_id=vehicle["vehicleId"],
+    )
+    assert impacted_reserve["vehicleId"] == vehicle["vehicleId"]
+    log(f"future booking confirmed on same vehicle; booking id {impacted_reserve['bookingId']}")
 
     request_json(
         client,
         "POST",
-        "/vehicles/telemetry",
+        "/ops-console/fleet/telemetry",
         json={
             "vehicleId": vehicle["vehicleId"],
             "batteryLevel": 12,
@@ -356,19 +438,12 @@ def test_scenario_3_telemetry_fault_recovery_flow(client: httpx.Client):
     )
     log(f"telemetry injected; vehicle id {vehicle['vehicleId']}")
 
-    blocked = client.post(
-        "/trips/start",
-        json={"bookingId": reserve["bookingId"], "vehicleId": vehicle["vehicleId"], "userId": user_id, "notes": "battery warning"},
-    )
-    assert blocked.status_code == 409, blocked.text
-    log(f"trip start blocked as expected; response {blocked.text}")
-
     ticket = poll_until(
         "maintenance ticket created after telemetry fault",
         lambda: next(
             (
                 item
-                for item in request_json(client, "GET", "/maintenance/tickets")
+                for item in ops_incidents(client)["tickets"]
                 if item["vehicleId"] == vehicle["vehicleId"]
             ),
             None,
@@ -376,39 +451,73 @@ def test_scenario_3_telemetry_fault_recovery_flow(client: httpx.Client):
     )
     log(f"maintenance ticket created; ticket id {ticket['ticketId']}")
 
-    cancelled_booking = poll_until(
-        "booking cancelled after telemetry fault",
-        lambda: next(
-            (
-                item
-                for item in request_json(client, "GET", "/bookings", params={"userId": user_id})
-                if item["bookingId"] == reserve["bookingId"] and item["status"] == "CANCELLED"
-            ),
-            None,
-        ),
+    live_trip_advisory = poll_until(
+        "active customer disruption advisory delivered",
+        lambda: trip_status(client, active_user_id).get("liveTripAdvisory"),
     )
-    log(f"booking cancelled after telemetry fault; booking id {cancelled_booking['bookingId']}")
+    assert live_trip_advisory["tripId"] == started["tripId"]
+    assert live_trip_advisory["requiresImmediateEndTrip"] is True
+    log(f"live trip advisory delivered; notification id {live_trip_advisory['notificationId']}")
 
-    payment = poll_until(
-        "compensation recorded after telemetry fault",
+    active_trip = poll_until(
+        "active trip remains in progress after telemetry fault",
         lambda: next(
             (
                 item
-                for item in request_json(client, "GET", "/payments", params={"userId": user_id})
-                if item["bookingId"] == reserve["bookingId"] and item["status"] == "ADJUSTED"
+                for item in trip_status(client, active_user_id)["trips"]
+                if item["tripId"] == started["tripId"] and item["status"] == "STARTED"
             ),
             None,
         ),
     )
-    log(f"payment adjustment created; payment id {payment['paymentId']} amount {payment['amount']}")
+    log(f"active trip still running; trip id {active_trip['tripId']}")
+
+    cancelled_booking = poll_until(
+        "future booking cancelled after telemetry fault",
+        lambda: next(
+            (
+                item
+                for item in customer_bookings(client, impacted_user_id)
+                if item["bookingId"] == impacted_reserve["bookingId"] and item["status"] == "CANCELLED"
+            ),
+            None,
+        ),
+    )
+    log(f"future booking cancelled after telemetry fault; booking id {cancelled_booking['bookingId']}")
+
+    refund = poll_until(
+        "refund recorded after telemetry fault",
+        lambda: next(
+            (
+                item
+                for item in customer_wallet(client, impacted_user_id)["payments"]
+                if item["bookingId"] == impacted_reserve["bookingId"] and item["status"] == "REFUNDED"
+            ),
+            None,
+        ),
+    )
+    log(f"refund created after telemetry fault; payment id {refund['paymentId']} amount {refund['amount']}")
+
+    credit = poll_until(
+        "apology credit recorded after telemetry fault",
+        lambda: next(
+            (
+                item
+                for item in customer_wallet(client, impacted_user_id)["payments"]
+                if item["bookingId"] == impacted_reserve["bookingId"] and item["status"] == "ADJUSTED"
+            ),
+            None,
+        ),
+    )
+    log(f"apology credit created after telemetry fault; payment id {credit['paymentId']} amount {credit['amount']}")
 
     customer_notification = poll_until(
         "customer notified after telemetry fault",
         lambda: next(
             (
                 item
-                for item in request_json(client, "GET", "/notifications", params={"userId": user_id})
-                if item["bookingId"] == reserve["bookingId"] and "cancelled" in item["message"].lower()
+                for item in customer_account(client, impacted_user_id)["notifications"]
+                if item["bookingId"] == impacted_reserve["bookingId"] and "cancelled" in item["message"].lower()
             ),
             None,
         ),
@@ -420,8 +529,8 @@ def test_scenario_3_telemetry_fault_recovery_flow(client: httpx.Client):
         lambda: next(
             (
                 item
-                for item in request_json(client, "GET", "/notifications", params={"userId": "ops-maint-1"})
-                if item["bookingId"] == booking["bookingId"]
+                for item in ops_inbox(client)["notifications"]
+                if item["userId"] == "ops-maint-1" and item["bookingId"] == booking["bookingId"]
             ),
             None,
         ),

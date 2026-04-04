@@ -21,6 +21,7 @@ import type {
   RecordItem,
   ReservationDraft,
   Trip,
+  TripDisruptionAdvisory,
   Vehicle,
   WalletLedgerEntry,
 } from './appTypes'
@@ -800,11 +801,11 @@ function preTripInspectionState(
   const severity = latestMatchesBooking
     ? latestInspectionResult?.assessmentResult.severity ?? record?.severity ?? 'PENDING'
     : record?.severity ?? 'PENDING'
-  const reviewState = record?.reviewState ?? 'PENDING'
-  const moderate = Boolean(record && reviewState === 'EXTERNAL_ASSESSED' && severity === 'MODERATE')
-  const canUnlock = Boolean(record && reviewState === 'EXTERNAL_ASSESSED' && severity !== 'SEVERE')
+  const reviewState = latestMatchesBooking ? latestInspectionResult?.reviewState ?? record?.reviewState ?? 'PENDING' : record?.reviewState ?? 'PENDING'
+  const moderate = Boolean((record || latestMatchesBooking) && reviewState === 'EXTERNAL_ASSESSED' && severity === 'MODERATE')
+  const canUnlock = Boolean((record || latestMatchesBooking) && reviewState === 'EXTERNAL_ASSESSED' && severity !== 'SEVERE')
   const manualReview = Boolean((latestMatchesBooking && latestInspectionResult?.manualReview) || reviewState === 'MANUAL_REVIEW')
-  const blocked = Boolean(record && (reviewState === 'EXTERNAL_BLOCKED' || severity === 'SEVERE'))
+  const blocked = Boolean((record || latestMatchesBooking) && (reviewState === 'EXTERNAL_BLOCKED' || severity === 'SEVERE'))
   const warningMessage = latestMatchesBooking
     ? latestInspectionResult?.warningMessage ?? 'Inspection submitted.'
     : manualReview
@@ -944,6 +945,8 @@ export function TripsPage({
   completedTrips,
   historicalBookings,
   latestInspectionResult,
+  liveTripAdvisory,
+  onAcknowledgeTripAdvisory,
   onQueueInspection,
   upcomingBookings,
   vehicles,
@@ -953,6 +956,8 @@ export function TripsPage({
   completedTrips: Trip[]
   historicalBookings: Booking[]
   latestInspectionResult: InspectionSubmissionResult | null
+  liveTripAdvisory: TripDisruptionAdvisory | null
+  onAcknowledgeTripAdvisory: (notificationId: number) => void
   onQueueInspection: (request: { bookingId: number; vehicleId: number; notes: string; photo: File | null }) => void
   upcomingBookings: Booking[]
   vehicles: Vehicle[]
@@ -1058,6 +1063,47 @@ export function TripsPage({
             </div>
             {activeTrip ? (
               <>
+                {liveTripAdvisory ? (
+                  <article className="customer-card customer-card--warning">
+                    <div className="customer-card__header">
+                      <div>
+                        <p className="customer-page-header__eyebrow">Live advisory</p>
+                        <h2>{liveTripAdvisory.subject}</h2>
+                      </div>
+                      <span className="customer-status-tag customer-status-tag--warning">{formatSeverityLabel(liveTripAdvisory.severity)}</span>
+                    </div>
+                    <p>{liveTripAdvisory.message}</p>
+                    <div className="customer-keyvalue-list">
+                      <div className="customer-keyvalue-row">
+                        <span>Vehicle</span>
+                        <strong>{liveTripAdvisory.vehicleName}</strong>
+                      </div>
+                      <div className="customer-keyvalue-row">
+                        <span>Detected</span>
+                        <strong>{formatDateTime(liveTripAdvisory.createdAt)}</strong>
+                      </div>
+                    </div>
+                    <div className="customer-action-row">
+                      <button
+                        className="customer-button customer-button--primary"
+                        onClick={() => {
+                          onAcknowledgeTripAdvisory(liveTripAdvisory.notificationId)
+                          navigate(`/app/trips/end-inspection?reason=${encodeURIComponent(liveTripAdvisory.endReason)}`)
+                        }}
+                        type="button"
+                      >
+                        End trip now
+                      </button>
+                      <button
+                        className="customer-button customer-button--ghost"
+                        onClick={() => onAcknowledgeTripAdvisory(liveTripAdvisory.notificationId)}
+                        type="button"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </article>
+                ) : null}
                 <div className="customer-pill-row">
                   <span className="customer-status-tag customer-status-tag--success">{activeTrip.status}</span>
                   <strong>Trip #{activeTrip.tripId}</strong>
@@ -1242,12 +1288,12 @@ export function PreTripInspectionResultPage({
   records: RecordItem[]
 }) {
   const navigate = useNavigate()
-  const nextBooking = upcomingBookings[0] ?? null
-  const nextVehicle = vehicles.find((vehicle) => vehicle.id === nextBooking?.vehicleId) ?? null
-  const inspection = preTripInspectionState(nextBooking, records, latestInspectionResult)
+  const displayedBooking = latestInspectionResult?.booking ?? upcomingBookings[0] ?? null
+  const displayedVehicle = latestInspectionResult?.vehicle ?? vehicles.find((vehicle) => vehicle.id === displayedBooking?.vehicleId) ?? null
+  const inspection = preTripInspectionState(displayedBooking, records, latestInspectionResult)
   const [startNotes, setStartNotes] = useState('')
 
-  if (!nextBooking || !inspection.record) {
+  if (!displayedBooking || (!inspection.record && !latestInspectionResult)) {
     return <EmptyState actionLabel="Back to bookings" actionTo="/app/trips" body="Submit the pre-trip inspection first so the app can show the assessment result." title="No inspection result yet" />
   }
 
@@ -1271,10 +1317,36 @@ export function PreTripInspectionResultPage({
         <div className="customer-card__header">
           <div>
             <p className="customer-page-header__eyebrow">Booking</p>
-            <h2>{vehicleDisplayName(nextVehicle, nextBooking.vehicleId)}</h2>
+            <h2>{vehicleDisplayName(displayedVehicle, displayedBooking.vehicleId)}</h2>
           </div>
         </div>
-        <BookingTimeline endTime={nextBooking.endTime} location={nextBooking.pickupLocation} startTime={nextBooking.startTime} />
+        <BookingTimeline endTime={displayedBooking.endTime} location={displayedBooking.pickupLocation} startTime={displayedBooking.startTime} />
+        {latestInspectionResult?.bookingCancelled ? (
+          <div className="customer-keyvalue-list">
+            <div className="customer-keyvalue-row">
+              <span>Booking status</span>
+              <strong>{latestInspectionResult.bookingStatus ?? 'CANCELLED'}</strong>
+            </div>
+            {latestInspectionResult.maintenanceTicketId ? (
+              <div className="customer-keyvalue-row">
+                <span>Maintenance ticket</span>
+                <strong>#{latestInspectionResult.maintenanceTicketId}</strong>
+              </div>
+            ) : null}
+            <div className="customer-keyvalue-row">
+              <span>Cash refund</span>
+              <strong>{formatMoney(latestInspectionResult.walletSettlement.cashRefundAmount)}</strong>
+            </div>
+            <div className="customer-keyvalue-row">
+              <span>Restored hours</span>
+              <strong>{formatHours(latestInspectionResult.walletSettlement.restoredIncludedHours)}</strong>
+            </div>
+            <div className="customer-keyvalue-row">
+              <span>Apology credit</span>
+              <strong>{formatMoney(latestInspectionResult.walletSettlement.discountAmount)}</strong>
+            </div>
+          </div>
+        ) : null}
       </article>
       {inspection.canUnlock ? (
         <article className="customer-card">
@@ -1287,8 +1359,8 @@ export function PreTripInspectionResultPage({
               className="customer-button customer-button--primary"
               onClick={() => {
                 onQueueUnlock({
-                  bookingId: nextBooking.bookingId,
-                  vehicleId: nextBooking.vehicleId,
+                  bookingId: displayedBooking.bookingId,
+                  vehicleId: displayedBooking.vehicleId,
                   notes: startNotes,
                 })
                 navigate('/app/trips/unlock-processing')
@@ -1301,7 +1373,7 @@ export function PreTripInspectionResultPage({
               <button
                 className="customer-button customer-button--ghost"
                 onClick={() => {
-                  void onCancelModerateDamage(nextBooking.bookingId, nextBooking.vehicleId).then(() => navigate('/app/trips', { replace: true }))
+                  void onCancelModerateDamage(displayedBooking.bookingId, displayedBooking.vehicleId).then(() => navigate('/app/trips', { replace: true }))
                 }}
                 type="button"
               >
@@ -2044,6 +2116,20 @@ function titleCaseWords(value: string) {
     .replace(/\b\w/g, (character) => character.toUpperCase())
 }
 
+function outstandingAllowanceHold(bookings: Booking[], ledgerEntries: WalletLedgerEntry[]) {
+  const ledgerBookingIds = new Set(ledgerEntries.map((entry) => entry.bookingId))
+  return bookings.reduce((total, booking) => {
+    const includedHoursApplied = booking.pricingSnapshot?.includedHoursApplied ?? 0
+    if (includedHoursApplied <= 0 || ledgerBookingIds.has(booking.bookingId)) {
+      return total
+    }
+    if (booking.status === 'CANCELLED' || booking.status === 'RECONCILED') {
+      return total
+    }
+    return total + includedHoursApplied
+  }, 0)
+}
+
 export function WalletPage({
   customerSummary,
   bookings,
@@ -2058,6 +2144,8 @@ export function WalletPage({
   const bookingsById = new Map(bookings.map((booking) => [booking.bookingId, booking]))
   const paymentsByBookingId = new Map<number, Payment[]>()
   const ledgerBookingIds = new Set(ledgerEntries.map((entry) => entry.bookingId))
+  const allowanceHoldHours = outstandingAllowanceHold(bookings, ledgerEntries)
+  const walletRemainingHours = Math.max((customerSummary?.remainingHoursThisCycle ?? 0) - allowanceHoldHours, 0)
 
   for (const payment of payments) {
     if (!payment.bookingId) continue
@@ -2165,6 +2253,8 @@ export function WalletPage({
         detail:
           entry.entryType === 'RENEWAL'
             ? `Final fare ${formatMoney(entry.finalPrice)} after renewal recalculation`
+            : booking?.status === 'CANCELLED' && restoredHours > 0
+              ? `Allowance restored after booking cancellation before trip start. Cash refund ${formatMoney(entry.refundAmount)}.`
             : restoredHours > 0
               ? `Allowance restored after trip disruption. Final fare ${formatMoney(entry.finalPrice)} for ${formatHours(entry.totalHours)} reserved`
               : `Final fare ${formatMoney(entry.finalPrice)} for ${formatHours(entry.totalHours)} reserved`,
@@ -2185,7 +2275,7 @@ export function WalletPage({
         <div className="customer-stat-grid">
           <div>
             <span>Remaining</span>
-            <strong>{formatHours(customerSummary?.remainingHoursThisCycle ?? 0)}</strong>
+            <strong>{formatHours(walletRemainingHours)}</strong>
           </div>
           <div>
             <span>Renews</span>
