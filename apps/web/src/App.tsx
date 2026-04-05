@@ -782,7 +782,7 @@ function App() {
                   if (searchForm.vehicleType) {
                     params.set('vehicleType', searchForm.vehicleType)
                   }
-                  const result = await fetchJson<SearchResponse>(`/process-booking/search?${params.toString()}`)
+                  const result = await fetchJson<SearchResponse>(`/search-vehicles/search?${params.toString()}`)
                   startTransition(() => {
                     setSearchResponse(result)
                   })

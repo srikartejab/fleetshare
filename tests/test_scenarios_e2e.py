@@ -101,7 +101,7 @@ def reserve_and_confirm(
     search = request_json(
         client,
         "GET",
-        "/process-booking/search",
+        "/search-vehicles/search",
         params={
             "userId": user_id,
             "pickupLocation": pickup_location,

@@ -1,6 +1,12 @@
 _format_version: "3.0"
 
 services:
+  - name: search-available-vehicles-service
+    url: http://search-available-vehicles-service:8000
+    routes:
+      - name: search-available-routes
+        paths: ["/search-vehicles"]
+        strip_path: false
   - name: process-booking-service
     url: http://process-booking-service:8000
     routes:

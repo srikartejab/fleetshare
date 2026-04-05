@@ -135,6 +135,7 @@ def search_booking_options(
     vehicleType: str | None = None,
     subscriptionPlanId: str = "STANDARD_MONTHLY",
 ):
+    # Compatibility shim: the customer UI should call /search-vehicles/search directly.
     validate_booking_window(startTime, endTime)
     settings = get_settings()
     params = {
