@@ -2,6 +2,8 @@ import os
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
+import pytest
+
 from fleetshare_common.ai import assess_damage
 from fleetshare_common.pricing import booking_quote, refunded_included_hours, rerate_after_renewal, trip_adjustment
 
@@ -293,6 +295,151 @@ def test_pre_trip_cancellation_compensation_restores_hours_and_refunds_cash():
     assert result["totalRestoredIncludedHours"] == 1.0
     assert len(result["ledgerEntries"]) == 1
     assert result["ledgerEntries"][0]["restoredIncludedHours"] == 1.0
+
+
+def test_apply_customer_renewal_is_idempotent_for_current_cycle(monkeypatch):
+    profile = SimpleNamespace(
+        user_id="user-1001",
+        display_name="Alicia Tan",
+        role="CUSTOMER",
+        demo_badge="Renews tonight",
+        plan_name="STANDARD_MONTHLY",
+        monthly_included_hours=6.0,
+        hours_used_this_cycle=5.0,
+        renewal_date=date(2026, 4, 1),
+    )
+    db = _FakeDb()
+
+    monkeypatch.setattr(pricing_service, "get_profile_or_404", lambda _db, _user_id: profile)
+
+    result = pricing_service.apply_customer_renewal(
+        "user-1001",
+        pricing_service.RenewalPayload(newBillingCycleId="2026-04"),
+        db,
+    )
+
+    assert db.committed is False
+    assert result["billingCycleId"] == "2026-04"
+    assert result["idempotent"] is True
+    assert profile.hours_used_this_cycle == 5.0
+    assert profile.renewal_date == date(2026, 4, 1)
+
+
+def test_apply_customer_renewal_rejects_inconsistent_target_cycle(monkeypatch):
+    profile = SimpleNamespace(
+        user_id="user-1001",
+        display_name="Alicia Tan",
+        role="CUSTOMER",
+        demo_badge="Renews tonight",
+        plan_name="STANDARD_MONTHLY",
+        monthly_included_hours=6.0,
+        hours_used_this_cycle=5.0,
+        renewal_date=date(2026, 4, 1),
+    )
+    db = _FakeDb()
+
+    monkeypatch.setattr(pricing_service, "get_profile_or_404", lambda _db, _user_id: profile)
+
+    with pytest.raises(pricing_service.HTTPException) as exc:
+        pricing_service.apply_customer_renewal(
+            "user-1001",
+            pricing_service.RenewalPayload(newBillingCycleId="2026-06"),
+            db,
+        )
+
+    assert exc.value.status_code == 400
+
+
+def test_rerate_returns_existing_completed_result_idempotently(monkeypatch):
+    profile = SimpleNamespace(
+        user_id="user-1001",
+        display_name="Alicia Tan",
+        role="CUSTOMER",
+        demo_badge="Renews tonight",
+        plan_name="STANDARD_MONTHLY",
+        monthly_included_hours=6.0,
+        hours_used_this_cycle=1.5,
+        renewal_date=date(2026, 4, 1),
+    )
+    ledger = SimpleNamespace(
+        booking_id=15,
+        trip_id=25,
+        user_id="user-1001",
+        included_hours_after_renewal=1.0,
+        refund_amount=12.5,
+        reconciliation_status="COMPLETED",
+        final_charge=7.5,
+    )
+    db = _FakeDb([ledger])
+
+    monkeypatch.setattr(pricing_service, "get_profile_or_404", lambda _db, _user_id: profile)
+
+    result = pricing_service.rerate(
+        pricing_service.ReRatePayload(
+            bookingId=15,
+            tripId=25,
+            userId="user-1001",
+            newBillingCycleId="2026-05",
+            actualPostMidnightHours=1.0,
+        ),
+        db,
+    )
+
+    assert result["idempotent"] is True
+    assert result["finalPrice"] == 7.5
+    assert result["refundAmount"] == 12.5
+    assert result["eligibleIncludedHours"] == 1.0
+
+
+def test_rerate_consumes_new_cycle_allowance_after_reconciliation(monkeypatch):
+    profile = SimpleNamespace(
+        user_id="user-1001",
+        display_name="Alicia Tan",
+        role="CUSTOMER",
+        demo_badge="Renews tonight",
+        plan_name="STANDARD_MONTHLY",
+        monthly_included_hours=6.0,
+        hours_used_this_cycle=0.0,
+        renewal_date=date(2026, 5, 1),
+    )
+    ledger = SimpleNamespace(
+        booking_id=1,
+        trip_id=1,
+        user_id="user-1001",
+        provisional_post_renewal_hours=1.95,
+        included_hours_after_renewal=0.0,
+        refund_amount=0.0,
+        renewal_pending=True,
+        reconciliation_status="PENDING",
+        final_charge=40.0,
+        start_time=datetime(2026, 4, 5, 14, 57),
+        end_time=datetime(2026, 4, 5, 17, 57),
+    )
+    db = _FakeDb([ledger])
+
+    monkeypatch.setattr(pricing_service, "get_profile_or_404", lambda _db, _user_id: profile)
+
+    result = pricing_service.rerate(
+        pricing_service.ReRatePayload(
+            bookingId=1,
+            tripId=1,
+            userId="user-1001",
+            newBillingCycleId="2026-05",
+            actualPostMidnightHours=1.95,
+        ),
+        db,
+    )
+
+    assert db.committed is True
+    assert result["eligibleIncludedHours"] == 1.95
+    assert result["refundAmount"] == 39.0
+    assert result["finalPrice"] == 1.0
+    assert result["customerSummary"]["remainingHoursThisCycle"] == 4.05
+    assert result["customerSummary"]["remainingHoursThisCycle"] == round(
+        profile.monthly_included_hours - result["eligibleIncludedHours"],
+        2,
+    )
+    assert profile.hours_used_this_cycle == 1.95
 
 
 def test_mock_ai_detects_severe_damage_keywords():

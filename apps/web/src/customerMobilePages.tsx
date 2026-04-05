@@ -123,27 +123,27 @@ function BookingPricingBreakdown({
           <strong>{formatHours(pricing.totalHours)}</strong>
         </div>
         <div className="customer-keyvalue-row">
-          <span>Current-cycle credits used</span>
+          <span>Current-cycle allowance used</span>
           <strong>{formatHours(pricing.includedHoursApplied)}</strong>
         </div>
         <div className="customer-keyvalue-row">
-          <span>Current-cycle hours billed now</span>
+          <span>Current-cycle hours billed</span>
           <strong>{formatHours(pricing.billableHours)}</strong>
         </div>
         {pricing.provisionalPostMidnightHours > 0 ? (
           <div className="customer-keyvalue-row">
-            <span>After-renewal hours charged provisionally now</span>
+            <span>After-midnight hours held for new cycle</span>
             <strong>{formatHours(pricing.provisionalPostMidnightHours)}</strong>
           </div>
         ) : null}
         {pricing.provisionalPostMidnightHours > 0 ? (
           <div className="customer-keyvalue-row">
-            <span>Provisional after-renewal charge</span>
+            <span>Temporary after-midnight charge</span>
             <strong>{formatMoney(pricing.provisionalCharge)}</strong>
           </div>
         ) : null}
         <div className="customer-keyvalue-row">
-          <span>Remaining current-cycle credits after this booking</span>
+          <span>Remaining current-cycle allowance after this booking</span>
           <strong>{formatHours(pricing.includedHoursRemainingAfter)}</strong>
         </div>
         <div className="customer-keyvalue-row">
@@ -154,8 +154,44 @@ function BookingPricingBreakdown({
       <p className={`customer-inline-notice ${pricing.provisionalPostMidnightHours > 0 ? 'customer-inline-notice--warning' : ''}`}>
         {bookingChargeNotice(pricing, customerSummary, reconciliationStatus)}
       </p>
+      {pricing.provisionalPostMidnightHours > 0 ? (
+        <p className="customer-inline-notice customer-inline-notice--warning">
+          After midnight, hours may be moved into your renewed allowance and any temporary charge will be refunded after reconciliation.
+        </p>
+      ) : null}
     </>
   )
+}
+
+function walletLedgerPresentation(entry: WalletLedgerEntry) {
+  const restoredHours = entry.restoredIncludedHours ?? 0
+
+  if (entry.entryType === 'RENEWAL' && entry.includedHoursAfterRenewal > 0) {
+    return {
+      title: 'After-midnight hours moved to new cycle',
+      tone: 'hours' as const,
+      amountLabel: `${formatHours(entry.includedHoursAfterRenewal)} used`,
+      detail: `${formatHours(entry.includedHoursAfterRenewal)} after midnight was charged to your renewed monthly allowance. Final fare ${formatMoney(entry.finalPrice)}.`,
+    }
+  }
+
+  if (restoredHours > 0) {
+    return {
+      title: 'Included hours restored',
+      tone: 'credit' as const,
+      amountLabel: `${formatHours(restoredHours)} restored`,
+      detail:
+        `Allowance restored after ${entry.tripId ? 'trip disruption' : 'booking cancellation'}. ` +
+        `Final fare ${formatMoney(entry.finalPrice)} for ${formatHours(entry.totalHours)} reserved.`,
+    }
+  }
+
+  return {
+    title: 'Included hours used',
+    tone: 'hours' as const,
+    amountLabel: `${formatHours(entry.includedHoursApplied)} used`,
+    detail: `Final fare ${formatMoney(entry.finalPrice)} for ${formatHours(entry.totalHours)} reserved.`,
+  }
 }
 
 function AccountIcon() {
@@ -2246,34 +2282,36 @@ export function WalletPage({
     ...ledgerEntries.map((entry) => {
       const booking = bookingsById.get(entry.bookingId) ?? null
       const restoredHours = entry.restoredIncludedHours ?? 0
-      const positiveHours = restoredHours > 0 || entry.includedHoursAfterRenewal > 0
-      const hoursValue = restoredHours > 0 ? restoredHours : positiveHours ? entry.includedHoursAfterRenewal : entry.includedHoursApplied
-      const amountLabel = `${positiveHours ? '+' : '-'}${formatHours(hoursValue)}`
+      const presentation = walletLedgerPresentation(entry)
       const chips = []
 
       if (entry.billableHours > 0) chips.push(`Billable ${formatHours(entry.billableHours)}`)
       if (entry.refundAmount > 0) chips.push(`Refund ${formatMoney(entry.refundAmount)}`)
-      if (entry.provisionalPostMidnightHours > 0) chips.push(`Overnight ${formatHours(entry.provisionalPostMidnightHours)}`)
+      if (entry.provisionalPostMidnightHours > 0) {
+        chips.push(
+          entry.entryType === 'RENEWAL'
+            ? `Charged to new cycle ${formatHours(entry.provisionalPostMidnightHours)}`
+            : `After midnight ${formatHours(entry.provisionalPostMidnightHours)}`,
+        )
+      }
       if (entry.reconciliationStatus !== 'NONE') chips.push(titleCaseWords(entry.reconciliationStatus))
 
       return {
         id: `ledger-${entry.ledgerId}`,
         postedAt: entry.updatedAt ?? entry.endTime ?? entry.createdAt ?? null,
         category: entry.entryType,
-        title: entry.entryType === 'RENEWAL' ? 'Renewal reconciliation' : restoredHours > 0 ? 'Included hours restored' : 'Included hours settled',
-        tone: positiveHours ? 'credit' : 'hours',
-        amountLabel,
+        title: presentation.title,
+        tone: presentation.tone,
+        amountLabel: presentation.amountLabel,
         subtitle: booking
           ? `Booking #${booking.bookingId} - ${booking.pickupLocation}`
           : `Trip settlement #${entry.tripId ?? entry.bookingId}`,
         detail:
-          entry.entryType === 'RENEWAL'
-            ? `Final fare ${formatMoney(entry.finalPrice)} after renewal recalculation`
-            : booking?.status === 'CANCELLED' && restoredHours > 0
+          booking?.status === 'CANCELLED' && restoredHours > 0 && entry.entryType !== 'RENEWAL'
               ? `Allowance restored after booking cancellation before trip start. Cash refund ${formatMoney(entry.refundAmount)}.`
-            : restoredHours > 0
+            : restoredHours > 0 && entry.entryType !== 'RENEWAL'
               ? `Allowance restored after trip disruption. Final fare ${formatMoney(entry.finalPrice)} for ${formatHours(entry.totalHours)} reserved`
-              : `Final fare ${formatMoney(entry.finalPrice)} for ${formatHours(entry.totalHours)} reserved`,
+              : presentation.detail,
         chips,
       }
     }),

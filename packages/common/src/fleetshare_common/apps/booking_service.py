@@ -74,6 +74,12 @@ class BookingFinancialsPayload(BaseModel):
     finalPrice: float
 
 
+class ReconciliationCompletePayload(BaseModel):
+    finalPrice: float
+    refund_pending_on_renewal: bool = False
+    reconciliationStatus: str = "COMPLETED"
+
+
 class CancelAffectedPayload(BaseModel):
     vehicleId: int
     maintenanceStart: datetime
@@ -181,14 +187,22 @@ def booking_availability(
 
 
 @app.get("/bookings/reconciliation-pending")
-def reconciliation_pending(userId: str, billingCycleId: str | None = None, db: Session = Depends(get_db)):
+def reconciliation_pending(
+    userId: str,
+    billingCycleId: str | None = None,
+    bookingId: int | None = None,
+    db: Session = Depends(get_db),
+):
     bookings = db.query(Booking).filter(Booking.user_id == userId, Booking.refund_pending_on_renewal.is_(True)).all()
+    if bookingId is not None:
+        bookings = [booking for booking in bookings if booking.id == bookingId]
     if billingCycleId:
         bookings = [
             booking
             for booking in bookings
             if (booking.metadata_json or {}).get("nextBillingCycleId") == billingCycleId
         ]
+    bookings = sorted(bookings, key=lambda booking: (booking.start_time, booking.id))
     return {
         "bookingIds": [booking.id for booking in bookings],
         "tripIds": [booking.trip_id for booking in bookings if booking.trip_id is not None],
@@ -276,6 +290,36 @@ def patch_reconciliation_status(booking_id: int, payload: ReconciliationPayload,
         booking.status = BookingStatus.RECONCILED.value
     db.commit()
     return {"reconciliationStatus": booking.reconciliation_status}
+
+
+@app.patch("/booking/{booking_id}/reconciliation-complete")
+def patch_reconciliation_complete(booking_id: int, payload: ReconciliationCompletePayload, db: Session = Depends(get_db)):
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    already_reconciled = (
+        booking.reconciliation_status == payload.reconciliationStatus
+        and booking.status == BookingStatus.RECONCILED.value
+        and round(booking.final_price, 2) == round(payload.finalPrice, 2)
+        and booking.refund_pending_on_renewal == payload.refund_pending_on_renewal
+    )
+    if not already_reconciled:
+        booking.final_price = payload.finalPrice
+        booking.refund_pending_on_renewal = payload.refund_pending_on_renewal
+        booking.reconciliation_status = payload.reconciliationStatus
+        if payload.reconciliationStatus == "COMPLETED":
+            booking.status = BookingStatus.RECONCILED.value
+        db.commit()
+
+    return {
+        "bookingId": booking.id,
+        "finalPrice": booking.final_price,
+        "refundPendingOnRenewal": booking.refund_pending_on_renewal,
+        "reconciliationStatus": booking.reconciliation_status,
+        "status": booking.status,
+        "idempotent": already_reconciled,
+    }
 
 
 @app.put("/bookings/cancel-affected")

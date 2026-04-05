@@ -55,6 +55,12 @@ def startup_event():
 
 
 def trip_to_dict(trip: Trip) -> dict:
+    actual_post_midnight_hours = None
+    trip_usage_summary = None
+    if trip.ended_at:
+        actual_post_midnight_hours = round(post_midnight_hours(trip.started_at, trip.ended_at), 2)
+        trip_usage_summary = f"{actual_post_midnight_hours} hours after midnight"
+
     return {
         "tripId": trip.id,
         "bookingId": trip.booking_id,
@@ -67,6 +73,8 @@ def trip_to_dict(trip: Trip) -> dict:
         "disruptionReason": trip.disruption_reason,
         "durationHours": round(trip.duration_hours, 2),
         "subscriptionSnapshot": trip.subscription_snapshot,
+        "actualPostMidnightHours": actual_post_midnight_hours,
+        "tripUsageSummary": trip_usage_summary,
     }
 
 

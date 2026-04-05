@@ -194,9 +194,13 @@ def billing_cycle_id_for_renewal_date(renewal_date: date) -> str:
     return renewal_date.strftime("%Y-%m")
 
 
+def next_billing_cycle_id_for_renewal_date(renewal_date: date) -> str:
+    return billing_cycle_id_for_renewal_date(renewal_date + relativedelta(months=1))
+
+
 def quote_to_dict(user_id: str, quote, profile: CustomerProfile) -> dict:
     current_cycle_id = billing_cycle_id_for_renewal_date(profile.renewal_date)
-    next_cycle_id = billing_cycle_id_for_renewal_date(profile.renewal_date + relativedelta(months=1))
+    next_cycle_id = next_billing_cycle_id_for_renewal_date(profile.renewal_date)
     return {
         "userId": user_id,
         "estimatedPrice": quote.estimated_price,
@@ -304,7 +308,21 @@ def get_customer_ledger(user_id: str, db: Session = Depends(get_db)):
 @app.post("/pricing/customers/{user_id}/renewal")
 def apply_customer_renewal(user_id: str, payload: RenewalPayload, db: Session = Depends(get_db)):
     profile = get_profile_or_404(db, user_id)
-    previous_billing_cycle_id = billing_cycle_id_for_renewal_date(profile.renewal_date)
+    current_billing_cycle_id = billing_cycle_id_for_renewal_date(profile.renewal_date)
+    next_billing_cycle_id = next_billing_cycle_id_for_renewal_date(profile.renewal_date)
+    target_billing_cycle_id = payload.newBillingCycleId if payload.newBillingCycleId not in {"", "next"} else next_billing_cycle_id
+
+    if target_billing_cycle_id == current_billing_cycle_id:
+        return {
+            **summary_from_profile(profile),
+            "billingCycleId": current_billing_cycle_id,
+            "previousBillingCycleId": current_billing_cycle_id,
+            "idempotent": True,
+        }
+    if target_billing_cycle_id != next_billing_cycle_id:
+        raise HTTPException(status_code=400, detail="Requested billing cycle is inconsistent with the active renewal window")
+
+    previous_billing_cycle_id = current_billing_cycle_id
     profile.hours_used_this_cycle = 0.0
     profile.renewal_date = profile.renewal_date + relativedelta(months=1)
     db.commit()
@@ -312,6 +330,7 @@ def apply_customer_renewal(user_id: str, payload: RenewalPayload, db: Session = 
         **summary_from_profile(profile),
         "billingCycleId": billing_cycle_id_for_renewal_date(profile.renewal_date),
         "previousBillingCycleId": previous_billing_cycle_id,
+        "idempotent": False,
     }
 
 
