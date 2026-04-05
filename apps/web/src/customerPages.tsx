@@ -15,6 +15,7 @@ import type {
   InspectionSubmissionResult,
   InternalDamageResult,
   Notification,
+  Payment,
   PostTripInspectionResult,
   RecordItem,
   Trip,
@@ -480,16 +481,31 @@ export function BookingProcessingPage({
 export function BookingDetailsPage({
   bookings,
   customerSummary,
+  notifications,
+  payments,
+  trips,
   vehicles,
 }: {
   bookings: Booking[]
   customerSummary: CustomerSummary | null
+  notifications: Notification[]
+  payments: Payment[]
+  trips: Trip[]
   vehicles: Vehicle[]
 }) {
   const { bookingId } = useParams()
   const booking = bookings.find((item) => String(item.bookingId) === bookingId) ?? null
   const vehicle = vehicles.find((item) => item.id === booking?.vehicleId) ?? null
   const pricing = booking?.pricingSnapshot
+  const trip = booking ? trips.find((item) => item.bookingId === booking.bookingId) ?? null : null
+  const relatedPayments = booking ? payments.filter((item) => item.bookingId === booking.bookingId) : []
+  const refundPayment = relatedPayments.find((item) => item.status === 'REFUNDED') ?? null
+  const apologyCreditPayment = relatedPayments.find((item) => item.status === 'ADJUSTED') ?? null
+  const disruptionReason = trip?.disruptionReason ?? refundPayment?.reason ?? apologyCreditPayment?.reason ?? null
+  const disruptionNotification = booking
+    ? notifications.find((item) => item.bookingId === booking.bookingId && /disruption|issue|compensation|refund|cancelled/i.test(`${item.subject} ${item.message}`)) ?? null
+    : null
+  const disruptedBooking = booking?.status === 'DISRUPTED' || Boolean(disruptionReason)
 
   if (!booking) {
     return (
@@ -504,16 +520,18 @@ export function BookingDetailsPage({
     <div className="stack">
       <section className="booking-hero">
         <div>
-          <p className="eyebrow">Booking confirmed</p>
-          <h1>Reservation #{booking.bookingId} is ready for the next step.</h1>
+          <p className="eyebrow">{disruptedBooking ? 'Disrupted booking' : booking.tripId ? 'Past booking' : 'Booking confirmed'}</p>
+          <h1>{disruptedBooking ? `Booking #${booking.bookingId} ended early.` : `Reservation #${booking.bookingId} is ready for the next step.`}</h1>
           <p className="hero-copy">
-            Your booking is stored in the booking service while the pricing snapshot below shows exactly how allowance and provisional renewal charges were calculated at reservation time.
+            {disruptedBooking
+              ? disruptionNotification?.message ?? `FleetShare marked this booking as disrupted because of ${titleCaseWords(disruptionReason ?? 'trip disruption')}.`
+              : 'Your booking is stored in the booking service while the pricing snapshot below shows exactly how allowance and provisional renewal charges were calculated at reservation time.'}
           </p>
         </div>
         <div className="summary-panel">
           <div>
-            <span>Due now</span>
-            <strong>{formatMoney(booking.displayedPrice)}</strong>
+            <span>{disruptedBooking ? 'Final fare' : 'Due now'}</span>
+            <strong>{formatMoney(disruptedBooking ? booking.finalPrice : booking.displayedPrice)}</strong>
           </div>
           <div>
             <span>Status</span>
@@ -534,6 +552,31 @@ export function BookingDetailsPage({
           <p>{booking.pickupLocation} pick-up & return</p>
           <p>{formatDateTime(booking.startTime)} to {formatDateTime(booking.endTime)}</p>
         </article>
+
+        {disruptedBooking ? (
+          <article className="panel-card">
+            <p className="mini-label">Disruption outcome</p>
+            <h2>Refund and credit status</h2>
+            <div className="quote-grid">
+              <div>
+                <span>End reason</span>
+                <strong>{titleCaseWords(disruptionReason ?? 'Trip disruption')}</strong>
+              </div>
+              <div>
+                <span>Cash refund</span>
+                <strong>{refundPayment ? formatMoney(refundPayment.amount) : 'Queued'}</strong>
+              </div>
+              <div>
+                <span>Apology credit</span>
+                <strong>{apologyCreditPayment ? formatMoney(apologyCreditPayment.amount) : 'Queued'}</strong>
+              </div>
+              <div>
+                <span>Compensation status</span>
+                <strong>{refundPayment || apologyCreditPayment ? 'Recorded' : 'Queued'}</strong>
+              </div>
+            </div>
+          </article>
+        ) : null}
 
         <article className="panel-card">
           <p className="mini-label">Pricing snapshot</p>
@@ -577,6 +620,15 @@ export function BookingDetailsPage({
       </div>
     </div>
   )
+}
+
+function titleCaseWords(value: string) {
+  return value
+    .toLowerCase()
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
 }
 
 export function TripsPage({
@@ -1019,10 +1071,8 @@ export function EndTripConfirmPage({
 
 export function EndTripCompletePage({
   endTripResult,
-  postTripInspectionResult,
 }: {
   endTripResult: EndTripResult | null
-  postTripInspectionResult: PostTripInspectionResult | null
 }) {
   if (!endTripResult) {
     return (
@@ -1074,7 +1124,7 @@ export function EndTripCompletePage({
               <strong>{formatMoney(endTripResult.adjustedFare)}</strong>
             </div>
             <div>
-              <span>Discount applied</span>
+              <span>Apology credit</span>
               <strong>{formatMoney(endTripResult.discountAmount)}</strong>
             </div>
             <div>
@@ -1086,18 +1136,6 @@ export function EndTripCompletePage({
               <strong>{settlementValue}</strong>
             </div>
           </div>
-        </article>
-        <article className="panel-card">
-          <p className="mini-label">Inspection outcome</p>
-          <h2>Post-trip evidence</h2>
-          {postTripInspectionResult ? (
-            <>
-              <p>Severity: {formatSeverityLabel(postTripInspectionResult.assessmentResult.severity)}</p>
-              <p>{postTripInspectionResult.warningMessage}</p>
-            </>
-          ) : (
-            <p>No post-trip inspection record was stored in this session.</p>
-          )}
         </article>
       </section>
       <div className="button-strip">

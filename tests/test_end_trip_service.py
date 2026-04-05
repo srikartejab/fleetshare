@@ -64,6 +64,7 @@ def test_end_trip_service_separates_renewal_reconciliation_from_refund_queue(mon
 
 def test_end_trip_service_marks_cash_refund_as_pending_when_adjustment_is_queued(monkeypatch):
     published_events = []
+    booking_updates: list[tuple[str, dict]] = []
 
     monkeypatch.setattr(
         end_trip_service,
@@ -81,7 +82,11 @@ def test_end_trip_service_marks_cash_refund_as_pending_when_adjustment_is_queued
             "endedAt": "2026-04-01T12:00:00Z",
         },
     )
-    monkeypatch.setattr(end_trip_service, "patch_json", lambda url, payload: {"ok": True})
+    monkeypatch.setattr(
+        end_trip_service,
+        "patch_json",
+        lambda url, payload: booking_updates.append((url, payload)) or {"ok": True},
+    )
     monkeypatch.setattr(
         end_trip_service,
         "post_json",
@@ -129,3 +134,4 @@ def test_end_trip_service_marks_cash_refund_as_pending_when_adjustment_is_queued
             "reason": "SEVERE_INTERNAL_FAULT",
         },
     ) in published_events
+    assert any(url.endswith("/booking/102/status") and payload == {"status": "DISRUPTED"} for url, payload in booking_updates)

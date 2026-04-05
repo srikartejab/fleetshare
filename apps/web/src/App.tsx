@@ -119,6 +119,10 @@ function mergeNotifications(...sources: Notification[][]) {
   })
 }
 
+function shouldPollTripStatus(pathname: string) {
+  return pathname.startsWith('/app/trips') && pathname !== '/app/trips/unlock-processing'
+}
+
 function TripStatusPoller({
   activeTripId,
   activeUserId,
@@ -137,7 +141,7 @@ function TripStatusPoller({
   })
 
   useEffect(() => {
-    if (!activeUserId || !activeTripId || !location.pathname.startsWith('/app/trips')) {
+    if (!activeUserId || !activeTripId || !shouldPollTripStatus(location.pathname)) {
       return
     }
     pollTripStatus()
@@ -154,7 +158,7 @@ function TripStatusPoller({
       window.clearInterval(intervalId)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [activeTripId, activeUserId, location.pathname, pollTripStatus])
+  }, [activeTripId, activeUserId, location.pathname])
 
   return null
 }
@@ -172,7 +176,6 @@ function App() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [records, setRecords] = useState<RecordItem[]>([])
   const [liveTripAdvisory, setLiveTripAdvisory] = useState<TripDisruptionAdvisory | null>(null)
-  const [lastSeenTripAdvisoryId, setLastSeenTripAdvisoryId] = useState<number | null>(null)
   const [status, setStatus] = useState('Loading FleetShare customer experience.')
   const [busy, setBusy] = useState(false)
   const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null)
@@ -396,7 +399,6 @@ function App() {
     setNotifications([])
     setRecords([])
     setLiveTripAdvisory(null)
-    setLastSeenTripAdvisoryId(null)
     setReservationDraft(null)
     setPendingInspectionRequest(null)
     setPendingUnlockRequest(null)
@@ -419,7 +421,6 @@ function App() {
     setPendingUnlockRequest(null)
     setSearchResponse(null)
     setLiveTripAdvisory(null)
-    setLastSeenTripAdvisoryId(null)
     setLatestInspectionResult(null)
     setReportedProblem(null)
     setPostTripInspectionResult(null)
@@ -732,10 +733,6 @@ function App() {
     .filter((booking) => booking.status !== 'CANCELLED' && booking.status !== 'RECONCILED' && !booking.tripId)
     .sort((left, right) => new Date(left.startTime).getTime() - new Date(right.startTime).getTime())
   const activeTrip = trips.find((trip) => trip.status === 'STARTED') ?? null
-  const visibleTripAdvisory =
-    liveTripAdvisory && liveTripAdvisory.notificationId !== lastSeenTripAdvisoryId
-      ? liveTripAdvisory
-      : null
   const completedTrips = trips
     .filter((trip) => trip.status === 'ENDED')
     .sort((left, right) => new Date(right.endedAt ?? right.startedAt).getTime() - new Date(left.endedAt ?? left.startedAt).getTime())
@@ -835,7 +832,14 @@ function App() {
           element={
             activeUserId ? (
               <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
-                <BookingDetailsPage bookings={bookings} customerSummary={customerSummary ?? selectedProfile} vehicles={vehicles} />
+                <BookingDetailsPage
+                  bookings={bookings}
+                  customerSummary={customerSummary ?? selectedProfile}
+                  notifications={notifications}
+                  payments={payments}
+                  trips={trips}
+                  vehicles={vehicles}
+                />
               </CustomerShell>
             ) : (
               <Navigate to="/" replace />
@@ -851,12 +855,11 @@ function App() {
                   activeTrip={activeTrip}
                   completedTrips={completedTrips}
                   historicalBookings={historicalBookings}
-                  liveTripAdvisory={visibleTripAdvisory}
+                  liveTripAdvisory={liveTripAdvisory}
                   onQueueInspection={(request) => {
                     setPendingInspectionRequest(request)
                     setLatestInspectionResult(null)
                   }}
-                  onAcknowledgeTripAdvisory={(notificationId) => setLastSeenTripAdvisoryId(notificationId)}
                   upcomingBookings={upcomingBookings}
                   vehicles={vehicles}
                   records={records}
@@ -922,13 +925,18 @@ function App() {
           path="/app/trips/unlock-processing"
           element={
             activeUserId ? (
-              <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
-                <TripUnlockProcessingPage
-                  activeTrip={activeTrip}
-                  request={pendingUnlockRequest}
-                  vehicles={vehicles}
-                  onUnlock={startQueuedTripUnlock}
-                />
+                <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
+                  <TripUnlockProcessingPage
+                    key={
+                      pendingUnlockRequest
+                        ? `${pendingUnlockRequest.bookingId}:${pendingUnlockRequest.vehicleId}:${pendingUnlockRequest.notes}`
+                        : 'unlock-empty'
+                    }
+                    activeTrip={activeTrip}
+                    request={pendingUnlockRequest}
+                    vehicles={vehicles}
+                    onUnlock={startQueuedTripUnlock}
+                  />
               </CustomerShell>
             ) : (
               <Navigate to="/" replace />
@@ -1058,7 +1066,7 @@ function App() {
           element={
             activeUserId ? (
               <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
-                <EndTripCompletePage endTripResult={endTripResult} postTripInspectionResult={postTripInspectionResult} />
+                <EndTripCompletePage endTripResult={endTripResult} />
               </CustomerShell>
             ) : (
               <Navigate to="/" replace />

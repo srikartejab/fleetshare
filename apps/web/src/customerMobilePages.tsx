@@ -835,21 +835,38 @@ function preTripInspectionState(
 export function BookingDetailsPage({
   bookings,
   customerSummary,
+  notifications,
+  payments,
+  trips,
   vehicles,
 }: {
   bookings: Booking[]
   customerSummary: CustomerSummary | null
+  notifications: Notification[]
+  payments: Payment[]
+  trips: Trip[]
   vehicles: Vehicle[]
 }) {
   const { bookingId } = useParams()
   const booking = bookings.find((item) => String(item.bookingId) === bookingId) ?? null
   const vehicle = vehicles.find((item) => item.id === booking?.vehicleId) ?? null
   const pricing = booking?.pricingSnapshot
+  const trip = booking ? trips.find((item) => item.bookingId === booking.bookingId) ?? null : null
+  const relatedPayments = booking ? payments.filter((item) => item.bookingId === booking.bookingId) : []
+  const refundPayment = relatedPayments.find((item) => item.status === 'REFUNDED') ?? null
+  const apologyCreditPayment = relatedPayments.find((item) => item.status === 'ADJUSTED') ?? null
+  const disruptionReason = trip?.disruptionReason ?? refundPayment?.reason ?? apologyCreditPayment?.reason ?? null
+  const disruptionNotification = booking
+    ? notifications.find((item) => item.bookingId === booking.bookingId && /disruption|issue|compensation|refund|cancelled/i.test(`${item.subject} ${item.message}`)) ?? null
+    : null
+  const disruptedBooking = booking?.status === 'DISRUPTED' || Boolean(disruptionReason)
   const bookingFeeLabel =
     booking?.refundPendingOnRenewal
       ? 'Renewal re-rate pending'
       : booking?.reconciliationStatus === 'COMPLETED'
         ? 'Reconciled'
+        : disruptedBooking
+          ? 'Disrupted trip'
         : booking?.status ?? 'Booking'
 
   if (!booking) {
@@ -858,7 +875,7 @@ export function BookingDetailsPage({
 
   return (
     <div className="customer-page-stack">
-      <PageHeader backTo="/app/trips" eyebrow="Reservation" title="Booking Details" />
+      <PageHeader backTo="/app/trips" eyebrow={disruptedBooking ? 'Disrupted booking' : booking.tripId ? 'Past booking' : 'Reservation'} title="Booking Details" />
 
       <section className="customer-hero-card customer-hero-card--angled">
         <div>
@@ -889,6 +906,36 @@ export function BookingDetailsPage({
         </div>
         <BookingTimeline endTime={booking.endTime} location={booking.pickupLocation} startTime={booking.startTime} />
       </article>
+
+      {disruptedBooking ? (
+        <article className="customer-card customer-card--warning">
+          <div className="customer-card__header">
+            <div>
+              <p className="customer-page-header__eyebrow">Disruption outcome</p>
+              <h2>Trip ended with compensation</h2>
+            </div>
+            <span className="customer-status-tag customer-status-tag--warning">{booking.status}</span>
+          </div>
+          <p>
+            {disruptionNotification?.message
+              ?? `This booking was disrupted due to ${titleCaseWords(disruptionReason ?? 'trip disruption')}.`}
+          </p>
+          <div className="customer-keyvalue-list">
+            <div className="customer-keyvalue-row">
+              <span>End reason</span>
+              <strong>{titleCaseWords(disruptionReason ?? 'Trip disruption')}</strong>
+            </div>
+            <div className="customer-keyvalue-row">
+              <span>Cash refund</span>
+              <strong>{refundPayment ? formatMoney(refundPayment.amount) : 'Queued'}</strong>
+            </div>
+            <div className="customer-keyvalue-row">
+              <span>Apology credit</span>
+              <strong>{apologyCreditPayment ? formatMoney(apologyCreditPayment.amount) : 'Queued'}</strong>
+            </div>
+          </div>
+        </article>
+      ) : null}
 
       <article className="customer-card">
         <div className="customer-card__header">
@@ -946,7 +993,6 @@ export function TripsPage({
   historicalBookings,
   latestInspectionResult,
   liveTripAdvisory,
-  onAcknowledgeTripAdvisory,
   onQueueInspection,
   upcomingBookings,
   vehicles,
@@ -957,7 +1003,6 @@ export function TripsPage({
   historicalBookings: Booking[]
   latestInspectionResult: InspectionSubmissionResult | null
   liveTripAdvisory: TripDisruptionAdvisory | null
-  onAcknowledgeTripAdvisory: (notificationId: number) => void
   onQueueInspection: (request: { bookingId: number; vehicleId: number; notes: string; photo: File | null }) => void
   upcomingBookings: Booking[]
   vehicles: Vehicle[]
@@ -1086,20 +1131,10 @@ export function TripsPage({
                     <div className="customer-action-row">
                       <button
                         className="customer-button customer-button--primary"
-                        onClick={() => {
-                          onAcknowledgeTripAdvisory(liveTripAdvisory.notificationId)
-                          navigate(`/app/trips/end-inspection?reason=${encodeURIComponent(liveTripAdvisory.endReason)}`)
-                        }}
+                        onClick={() => navigate(`/app/trips/end-inspection?reason=${encodeURIComponent(liveTripAdvisory.endReason)}`)}
                         type="button"
                       >
                         End trip now
-                      </button>
-                      <button
-                        className="customer-button customer-button--ghost"
-                        onClick={() => onAcknowledgeTripAdvisory(liveTripAdvisory.notificationId)}
-                        type="button"
-                      >
-                        Dismiss
                       </button>
                     </div>
                   </article>
@@ -1412,19 +1447,20 @@ export function TripUnlockProcessingPage({
 }) {
   const navigate = useNavigate()
   const vehicle = vehicles.find((item) => item.id === request?.vehicleId) ?? null
-  const [phase, setPhase] = useState<'processing' | 'success' | 'error'>('processing')
+  const requestKey = request ? `${request.bookingId}:${request.vehicleId}:${request.notes}` : null
+  const unlockSucceeded = Boolean(request && activeTrip?.bookingId === request.bookingId)
   const [error, setError] = useState<string | null>(null)
   const startedRequestRef = useRef<string | null>(null)
   const redirectTimerRef = useRef<number | undefined>(undefined)
+  const phase: 'processing' | 'success' | 'error' = error ? 'error' : unlockSucceeded ? 'success' : 'processing'
   const unlockVehicle = useEffectEvent(async (pendingRequest: { bookingId: number; vehicleId: number; notes: string }) => {
     await onUnlock(pendingRequest)
   })
 
   useEffect(() => {
-    if (!request || activeTrip?.bookingId !== request.bookingId || redirectTimerRef.current) {
+    if (!unlockSucceeded || redirectTimerRef.current) {
       return
     }
-    setPhase('success')
     redirectTimerRef.current = window.setTimeout(() => {
       navigate('/app/trips', { replace: true })
     }, 1200)
@@ -1434,13 +1470,12 @@ export function TripUnlockProcessingPage({
         redirectTimerRef.current = undefined
       }
     }
-  }, [activeTrip, navigate, request])
+  }, [navigate, unlockSucceeded])
 
   useEffect(() => {
     if (!request) {
       return
     }
-    const requestKey = `${request.bookingId}:${request.vehicleId}:${request.notes}`
     if (startedRequestRef.current === requestKey) {
       return
     }
@@ -1456,13 +1491,12 @@ export function TripUnlockProcessingPage({
         if (!active) {
           return
         }
-        setPhase('error')
         setError(unlockError instanceof Error ? unlockError.message : 'Unable to unlock the vehicle.')
       })
     return () => {
       active = false
     }
-  }, [request, unlockVehicle])
+  }, [request, requestKey])
 
   if (!request) {
     return <EmptyState actionLabel="Back to inspection" actionTo="/app/trips/inspection-result" body="Open the inspection result first before sending the unlock command." title="No unlock request found" />
@@ -2020,10 +2054,8 @@ export function EndTripLockProcessingPage({
 
 export function EndTripCompletePage({
   endTripResult,
-  postTripInspectionResult,
 }: {
   endTripResult: EndTripResult | null
-  postTripInspectionResult: PostTripInspectionResult | null
 }) {
   if (!endTripResult) {
     return <EmptyState actionLabel="Back to bookings" actionTo="/app/trips" body="Run the end-trip flow from the bookings page first." title="No completed end-trip result" />
@@ -2068,7 +2100,7 @@ export function EndTripCompletePage({
             <strong>{formatMoney(endTripResult.adjustedFare)}</strong>
           </div>
           <div className="customer-keyvalue-row">
-            <span>Discount applied</span>
+            <span>Apology credit</span>
             <strong>{formatMoney(endTripResult.discountAmount)}</strong>
           </div>
           <div className="customer-keyvalue-row">
@@ -2080,22 +2112,6 @@ export function EndTripCompletePage({
             <strong>{settlementValue}</strong>
           </div>
         </div>
-      </article>
-      <article className="customer-card">
-        <div className="customer-card__header">
-          <div>
-            <p className="customer-page-header__eyebrow">Inspection outcome</p>
-            <h2>Post-trip evidence</h2>
-          </div>
-        </div>
-        {postTripInspectionResult ? (
-          <>
-            <p>Severity: {formatSeverityLabel(postTripInspectionResult.assessmentResult.severity)}</p>
-            <p>{postTripInspectionResult.warningMessage}</p>
-          </>
-        ) : (
-          <p>No post-trip inspection record was stored in this session.</p>
-        )}
       </article>
       <div className="customer-action-row">
         <Link className="customer-button customer-button--primary link-button" to="/app/trips">
