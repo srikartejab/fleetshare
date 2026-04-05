@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     minio_secure: bool = False
     kong_public_url: str = "http://localhost:8000"
     web_api_base_url: str = "http://localhost:8000"
+    damage_booking_lookahead_hours: int = 336
     azure_vision_mode: str = "mock"
     azure_vision_endpoint: str = ""
     azure_vision_key: str = ""
@@ -42,6 +43,8 @@ class Settings(BaseSettings):
     end_trip_service_url: str = "http://end-trip-service:8000"
     handle_damage_service_url: str = "http://handle-damage-service:8000"
     renewal_reconciliation_service_url: str = "http://renewal-reconciliation-service:8000"
+    trip_experience_service_url: str = "http://trip-experience-service:8000"
+    ops_console_service_url: str = "http://ops-console-service:8000"
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="", extra="ignore")
 

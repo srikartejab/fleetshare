@@ -63,6 +63,8 @@ def list_notifications(userId: str | None = None, audience: str | None = None, d
             "audience": item.audience,
             "subject": item.subject,
             "message": item.message,
+            "payload": item.payload_json,
+            "createdAt": item.created_at.isoformat() if item.created_at else None,
         }
         for item in query.order_by(Notification.id.desc()).all()
     ]

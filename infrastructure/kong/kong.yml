@@ -1,58 +1,10 @@
 _format_version: "3.0"
 
 services:
-  - name: vehicle-service
-    url: http://vehicle-service:8000
-    routes:
-      - name: vehicle-routes
-        paths: ["/vehicles", "/vehicles/filters", "/vehicles/availability", "/vehicles/telemetry"]
-        strip_path: false
-  - name: booking-service
-    url: http://booking-service:8000
-    routes:
-      - name: booking-routes
-        paths: ["/booking", "/bookings"]
-        strip_path: false
-  - name: trip-service
-    url: http://trip-service:8000
-    routes:
-      - name: trip-routes
-        paths: ["/trips"]
-        strip_path: false
-  - name: record-service
-    url: http://record-service:8000
-    routes:
-      - name: record-routes
-        paths: ["/records"]
-        strip_path: false
-  - name: maintenance-service
-    url: http://maintenance-service:8000
-    routes:
-      - name: maintenance-routes
-        paths: ["/maintenance"]
-        strip_path: false
-  - name: pricing-service
-    url: http://pricing-service:8000
-    routes:
-      - name: pricing-routes
-        paths: ["/pricing"]
-        strip_path: false
-  - name: payment-service
-    url: http://payment-service:8000
-    routes:
-      - name: payment-routes
-        paths: ["/payments"]
-        strip_path: false
-  - name: notification-service
-    url: http://notification-service:8000
-    routes:
-      - name: notification-routes
-        paths: ["/notifications"]
-        strip_path: false
-  - name: search-service
+  - name: search-available-vehicles-service
     url: http://search-available-vehicles-service:8000
     routes:
-      - name: search-routes
+      - name: search-available-routes
         paths: ["/search-vehicles"]
         strip_path: false
   - name: process-booking-service
@@ -61,39 +13,15 @@ services:
       - name: process-booking-routes
         paths: ["/process-booking"]
         strip_path: false
-  - name: external-damage-service
-    url: http://external-damage-service:8000
+  - name: trip-experience-service
+    url: http://trip-experience-service:8000
     routes:
-      - name: external-damage-routes
-        paths: ["/damage-assessment"]
+      - name: trip-experience-routes
+        paths: ["/trip-experience"]
         strip_path: false
-  - name: start-trip-service
-    url: http://start-trip-service:8000
+  - name: ops-console-service
+    url: http://ops-console-service:8000
     routes:
-      - name: start-trip-route
-        paths: ["/trips/start"]
-        strip_path: false
-  - name: internal-damage-service
-    url: http://internal-damage-service:8000
-    routes:
-      - name: internal-damage-routes
-        paths: ["/internal-damage"]
-        strip_path: false
-  - name: end-trip-service
-    url: http://end-trip-service:8000
-    routes:
-      - name: end-trip-routes
-        paths: ["/end-trip"]
-        strip_path: false
-  - name: handle-damage-service
-    url: http://handle-damage-service:8000
-    routes:
-      - name: handle-damage-routes
-        paths: ["/handle-damage"]
-        strip_path: false
-  - name: renewal-reconciliation-service
-    url: http://renewal-reconciliation-service:8000
-    routes:
-      - name: renewal-routes
-        paths: ["/renewal-reconciliation"]
+      - name: ops-console-routes
+        paths: ["/ops-console"]
         strip_path: false

@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 
 from fleetshare_common.app import create_app
+from fleetshare_common.contracts import BookingStatus
 from fleetshare_common.http import get_json, patch_json, post_json
 from fleetshare_common.messaging import publish_event
 from fleetshare_common.settings import get_settings
@@ -71,20 +72,31 @@ def process_end_trip(payload: EndTripPayload):
     )
     patch_json(
         f"{settings.booking_service_url}/booking/{payload.bookingId}/status",
-        {"status": "COMPLETED"},
+        {"status": BookingStatus.DISRUPTED.value if disrupted else BookingStatus.COMPLETED.value},
     )
-    if pricing_result["refundAmount"] > 0 or pricing_result["discountAmount"] > 0:
+    if pricing_result["refundAmount"] > 0:
+        publish_event(
+            "payment.refund_required",
+            {
+                "bookingId": payload.bookingId,
+                "tripId": payload.tripId,
+                "userId": payload.userId,
+                "refundAmount": pricing_result["refundAmount"],
+                "reason": payload.endReason,
+            },
+        )
+    if pricing_result["discountAmount"] > 0:
         publish_event(
             "payment.adjustment_required",
             {
                 "bookingId": payload.bookingId,
                 "tripId": payload.tripId,
                 "userId": payload.userId,
-                "refundAmount": pricing_result["refundAmount"],
                 "discountAmount": pricing_result["discountAmount"],
                 "reason": payload.endReason,
             },
         )
+    if pricing_result["refundAmount"] > 0 or pricing_result["discountAmount"] > 0:
         publish_event(
             "booking.disruption_notification",
             {

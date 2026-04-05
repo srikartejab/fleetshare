@@ -10,7 +10,7 @@ from fleetshare_common.http import get_json, patch_json, post_json
 from fleetshare_common.settings import get_settings
 from fleetshare_common.vehicle_grpc import check_availability
 
-app = create_app("Process Booking Service", "Composite booking and payment orchestration.")
+app = create_app("Process Booking Service", "Public booking and billing composite service.")
 
 
 def validate_booking_window(start_time: datetime, end_time: datetime) -> None:
@@ -41,6 +41,91 @@ class PaymentPayload(BaseModel):
     paymentMethod: str = "SIMULATED_CARD"
 
 
+def customer_summary(user_id: str) -> dict:
+    settings = get_settings()
+    return get_json(f"{settings.pricing_service_url}/pricing/customers/{user_id}/summary")
+
+
+def customer_bookings(user_id: str) -> list[dict]:
+    settings = get_settings()
+    result = get_json(f"{settings.booking_service_url}/bookings", {"userId": user_id})
+    return result if isinstance(result, list) else []
+
+
+def customer_notifications(user_id: str) -> list[dict]:
+    settings = get_settings()
+    result = get_json(f"{settings.notification_service_url}/notifications", {"userId": user_id})
+    return result if isinstance(result, list) else []
+
+
+@app.get("/process-booking/customer-profiles")
+def list_customer_profiles():
+    settings = get_settings()
+    result = get_json(f"{settings.pricing_service_url}/pricing/customers")
+    return result if isinstance(result, list) else []
+
+
+@app.get("/process-booking/discovery-metadata")
+def discovery_metadata():
+    settings = get_settings()
+    vehicles = get_json(f"{settings.vehicle_service_url}/vehicles")
+    filters = get_json(f"{settings.vehicle_service_url}/vehicles/filters")
+    return {
+        "vehicles": vehicles if isinstance(vehicles, list) else [],
+        "filters": filters,
+    }
+
+
+@app.get("/process-booking/customers/{user_id}/home")
+def get_customer_home(user_id: str):
+    return {
+        "customerSummary": customer_summary(user_id),
+        "bookings": customer_bookings(user_id),
+        "notifications": customer_notifications(user_id),
+    }
+
+
+@app.get("/process-booking/customers/{user_id}/bookings")
+def get_customer_booking_list(user_id: str):
+    return {
+        "customerSummary": customer_summary(user_id),
+        "bookings": customer_bookings(user_id),
+    }
+
+
+@app.get("/process-booking/bookings/{booking_id}")
+def get_booking_detail(booking_id: int):
+    settings = get_settings()
+    booking = get_json(f"{settings.booking_service_url}/booking/{booking_id}")
+    vehicle = get_json(f"{settings.vehicle_service_url}/vehicles/{booking['vehicleId']}")
+    return {
+        "booking": booking,
+        "vehicle": vehicle,
+        "customerSummary": customer_summary(booking["userId"]),
+    }
+
+
+@app.get("/process-booking/customers/{user_id}/wallet")
+def get_customer_wallet(user_id: str):
+    settings = get_settings()
+    payments = get_json(f"{settings.payment_service_url}/payments", {"userId": user_id})
+    ledger_entries = get_json(f"{settings.pricing_service_url}/pricing/customers/{user_id}/ledger")
+    return {
+        "customerSummary": customer_summary(user_id),
+        "bookings": customer_bookings(user_id),
+        "payments": payments if isinstance(payments, list) else [],
+        "ledgerEntries": ledger_entries if isinstance(ledger_entries, list) else [],
+    }
+
+
+@app.get("/process-booking/customers/{user_id}/account")
+def get_customer_account(user_id: str):
+    return {
+        "customerSummary": customer_summary(user_id),
+        "notifications": customer_notifications(user_id),
+    }
+
+
 @app.get("/process-booking/search")
 def search_booking_options(
     userId: str = Query(...),
@@ -50,6 +135,7 @@ def search_booking_options(
     vehicleType: str | None = None,
     subscriptionPlanId: str = "STANDARD_MONTHLY",
 ):
+    # Compatibility shim: the customer UI should call /search-vehicles/search directly.
     validate_booking_window(startTime, endTime)
     settings = get_settings()
     params = {

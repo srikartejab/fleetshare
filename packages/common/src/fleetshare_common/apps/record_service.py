@@ -69,6 +69,8 @@ def record_to_dict(record: Record) -> dict:
         "confidence": record.confidence,
         "evidenceUrls": record.evidence_urls,
         "detectedDamage": record.detected_damage,
+        "createdAt": record.created_at.isoformat() if record.created_at else None,
+        "updatedAt": record.updated_at.isoformat() if record.updated_at else None,
     }
 
 

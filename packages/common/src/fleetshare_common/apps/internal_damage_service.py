@@ -187,6 +187,7 @@ def process_internal_damage(payload: InternalDamagePayload, *, snapshot: dict | 
                     "severity": severity,
                     "damageType": fault_fingerprint,
                     "recommendedAction": "Open maintenance ticket, cancel affected bookings, and guide customer to end trip safely.",
+                    "incidentAt": snapshot.get("createdAt"),
                 },
             )
             if trip_id and booking_id and user_id:

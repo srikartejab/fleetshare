@@ -1,5 +1,5 @@
-import { startTransition, useEffect, useState } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { startTransition, useEffect, useEffectEvent, useState } from 'react'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import './App.css'
 
 import { OpsPage } from './OpsPage'
@@ -11,19 +11,25 @@ import {
 } from './appTypes'
 import type {
   Booking,
+  CustomerAccountResponse,
+  CustomerHomeResponse,
   CustomerSummary,
+  CustomerWalletResponse,
+  DiscoveryMetadata,
   EndTripResult,
   InternalDamageResult,
   InspectionCancellationResult,
   InspectionSubmissionResult,
   Notification,
   Payment,
-  PostTripInspectionResult,
   PricingSnapshot,
+  PostTripInspectionResult,
   RecordItem,
   ReservationDraft,
   SearchResponse,
   Trip,
+  TripDisruptionAdvisory,
+  TripExperienceStatusResponse,
   Vehicle,
   VehicleFilters,
   WalletLedgerEntry,
@@ -89,6 +95,74 @@ type PendingEndTripRequest = {
   endReason: string
 }
 
+function mergeNotifications(...sources: Notification[][]) {
+  const merged = new Map<number, Notification>()
+  for (const source of sources) {
+    for (const notification of source) {
+      if (!notification?.notificationId) {
+        continue
+      }
+      const current = merged.get(notification.notificationId) ?? {}
+      merged.set(notification.notificationId, {
+        ...current,
+        ...notification,
+      } as Notification)
+    }
+  }
+  return [...merged.values()].sort((left, right) => {
+    const rightTime = new Date(right.createdAt ?? 0).getTime()
+    const leftTime = new Date(left.createdAt ?? 0).getTime()
+    if (rightTime !== leftTime) {
+      return rightTime - leftTime
+    }
+    return right.notificationId - left.notificationId
+  })
+}
+
+function shouldPollTripStatus(pathname: string) {
+  return pathname.startsWith('/app/trips') && pathname !== '/app/trips/unlock-processing'
+}
+
+function TripStatusPoller({
+  activeTripId,
+  activeUserId,
+  onPoll,
+}: {
+  activeTripId: number | null
+  activeUserId: string
+  onPoll: (userId: string) => Promise<void>
+}) {
+  const location = useLocation()
+  const pollTripStatus = useEffectEvent(() => {
+    if (!activeUserId || !activeTripId || document.visibilityState !== 'visible') {
+      return
+    }
+    void onPoll(activeUserId).catch(() => undefined)
+  })
+
+  useEffect(() => {
+    if (!activeUserId || !activeTripId || !shouldPollTripStatus(location.pathname)) {
+      return
+    }
+    pollTripStatus()
+    const intervalId = window.setInterval(() => {
+      pollTripStatus()
+    }, 5_000)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        pollTripStatus()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      window.clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [activeTripId, activeUserId, location.pathname])
+
+  return null
+}
+
 function App() {
   const [customers, setCustomers] = useState<CustomerSummary[]>([])
   const [activeUserId, setActiveUserId] = useState(() => localStorage.getItem(customerStorageKey) ?? '')
@@ -101,6 +175,7 @@ function App() {
   const [walletLedger, setWalletLedger] = useState<WalletLedgerEntry[]>([])
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [records, setRecords] = useState<RecordItem[]>([])
+  const [liveTripAdvisory, setLiveTripAdvisory] = useState<TripDisruptionAdvisory | null>(null)
   const [status, setStatus] = useState('Loading FleetShare customer experience.')
   const [busy, setBusy] = useState(false)
   const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null)
@@ -131,15 +206,16 @@ function App() {
   }
 
   async function loadCustomers() {
-    const allCustomers = await fetchJson<CustomerSummary[]>('/pricing/customers')
+    const allCustomers = await fetchJson<CustomerSummary[]>('/process-booking/customer-profiles')
     startTransition(() => {
       setCustomers(allCustomers)
     })
   }
 
   async function loadVehicleMetadata() {
-    const allVehicles = await fetchJson<Vehicle[]>('/vehicles')
-    const filters = await fetchJson<VehicleFilters>('/vehicles/filters').catch(() => {
+    const discovery = await fetchJson<DiscoveryMetadata>('/process-booking/discovery-metadata')
+    const allVehicles = discovery.vehicles
+    const resolvedFilters = discovery.filters ?? (() => {
       const locations = Array.from(new Set(allVehicles.map((vehicle) => vehicle.stationId ?? vehicle.zone)))
       const locationOptions = locations.map((locationId) => {
         const sampleVehicle = allVehicles.find((vehicle) => (vehicle.stationId ?? vehicle.zone) === locationId)
@@ -157,13 +233,13 @@ function App() {
         vehicleTypes: Array.from(new Set(allVehicles.map((vehicle) => vehicle.vehicleType))).sort(),
         locationOptions,
       }
-    })
+    })()
     startTransition(() => {
       setVehicles(allVehicles)
-      setVehicleFilters(filters)
+      setVehicleFilters(resolvedFilters)
       setSearchForm((current) => ({
         ...current,
-        pickupLocation: current.pickupLocation || filters.locationOptions?.[0]?.id || filters.locations[0] || '',
+        pickupLocation: current.pickupLocation || resolvedFilters.locationOptions?.[0]?.id || resolvedFilters.locations[0] || '',
         vehicleType: current.vehicleType,
       }))
     })
@@ -179,6 +255,7 @@ function App() {
         setWalletLedger([])
         setNotifications([])
         setRecords([])
+        setLiveTripAdvisory(null)
         setReservationDraft(null)
         setPendingInspectionRequest(null)
         setPendingUnlockRequest(null)
@@ -192,26 +269,70 @@ function App() {
 
     const query = encodeURIComponent(userId)
     const fallbackSummary = customers.find((customer) => customer.userId === userId) ?? null
-    const [summary, bookingData, tripData, paymentData, ledgerData, notificationData, recordData, allVehicles] = await Promise.all([
-      fetchOrDefault<CustomerSummary | null>(`/pricing/customers/${query}/summary`, fallbackSummary),
-      fetchOrDefault<Booking[]>(`/bookings?userId=${query}`, []),
-      fetchOrDefault<Trip[]>(`/trips?userId=${query}`, []),
-      fetchOrDefault<Payment[]>(`/payments?userId=${query}`, []),
-      fetchOrDefault<WalletLedgerEntry[]>(`/pricing/customers/${query}/ledger`, []),
-      fetchOrDefault<Notification[]>(`/notifications?userId=${query}`, []),
-      fetchOrDefault<RecordItem[]>('/records', []),
-      fetchOrDefault<Vehicle[]>('/vehicles', vehicles),
+    const emptyHome: CustomerHomeResponse = {
+      customerSummary: fallbackSummary ?? {
+        userId,
+        displayName: userId,
+        role: 'CUSTOMER',
+        planName: 'STANDARD_MONTHLY',
+        monthlyIncludedHours: 0,
+        hoursUsedThisCycle: 0,
+        remainingHoursThisCycle: 0,
+        renewalDate: new Date().toISOString(),
+        hourlyRate: 0,
+      },
+      bookings: [],
+      notifications: [],
+    }
+    const emptyWallet: CustomerWalletResponse = {
+      customerSummary: emptyHome.customerSummary,
+      bookings: [],
+      payments: [],
+      ledgerEntries: [],
+    }
+    const emptyTripStatus: TripExperienceStatusResponse = {
+      bookings: [],
+      trips: [],
+      vehicles,
+      records: [],
+      notifications: [],
+      liveTripAdvisory: null,
+    }
+    const [homeData, walletData, tripStatusData, accountData] = await Promise.all([
+      fetchOrDefault<CustomerHomeResponse>(`/process-booking/customers/${query}/home`, emptyHome),
+      fetchOrDefault<CustomerWalletResponse>(`/process-booking/customers/${query}/wallet`, emptyWallet),
+      fetchOrDefault<TripExperienceStatusResponse>(`/trip-experience/customers/${query}/status`, emptyTripStatus),
+      fetchOrDefault<CustomerAccountResponse>(`/process-booking/customers/${query}/account`, {
+        customerSummary: emptyHome.customerSummary,
+        notifications: [],
+      }),
     ])
 
     startTransition(() => {
-      setCustomerSummary(summary)
-      setBookings(bookingData)
-      setTrips(tripData)
-      setPayments(paymentData)
-      setWalletLedger(ledgerData)
-      setNotifications(notificationData)
-      setRecords(recordData)
-      setVehicles(allVehicles)
+      setCustomerSummary(homeData.customerSummary ?? walletData.customerSummary ?? accountData.customerSummary)
+      setBookings(homeData.bookings.length ? homeData.bookings : walletData.bookings)
+      setTrips(tripStatusData.trips)
+      setPayments(walletData.payments)
+      setWalletLedger(walletData.ledgerEntries)
+      setNotifications(mergeNotifications(homeData.notifications, accountData.notifications, tripStatusData.notifications))
+      setRecords(tripStatusData.records)
+      setVehicles(tripStatusData.vehicles.length ? tripStatusData.vehicles : vehicles)
+      setLiveTripAdvisory(tripStatusData.liveTripAdvisory ?? null)
+    })
+  }
+
+  async function refreshTripExperienceData(userId = activeUserId) {
+    if (!userId) {
+      return
+    }
+    const tripStatusData = await fetchJson<TripExperienceStatusResponse>(`/trip-experience/customers/${encodeURIComponent(userId)}/status`)
+    startTransition(() => {
+      setBookings(tripStatusData.bookings)
+      setTrips(tripStatusData.trips)
+      setRecords(tripStatusData.records)
+      setVehicles(tripStatusData.vehicles.length ? tripStatusData.vehicles : vehicles)
+      setNotifications((current) => mergeNotifications(current, tripStatusData.notifications))
+      setLiveTripAdvisory(tripStatusData.liveTripAdvisory ?? null)
     })
   }
 
@@ -277,6 +398,7 @@ function App() {
     setWalletLedger([])
     setNotifications([])
     setRecords([])
+    setLiveTripAdvisory(null)
     setReservationDraft(null)
     setPendingInspectionRequest(null)
     setPendingUnlockRequest(null)
@@ -298,6 +420,7 @@ function App() {
     setPendingInspectionRequest(null)
     setPendingUnlockRequest(null)
     setSearchResponse(null)
+    setLiveTripAdvisory(null)
     setLatestInspectionResult(null)
     setReportedProblem(null)
     setPostTripInspectionResult(null)
@@ -422,7 +545,7 @@ function App() {
     setBusy(true)
     setStatus('Assessing the reported issue...')
     try {
-      const result = await fetchJson<InternalDamageResult>('/internal-damage/fault-alert', {
+      const result = await fetchJson<InternalDamageResult>('/trip-experience/report-fault', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -470,7 +593,7 @@ function App() {
       if (request.photo) {
         formData.append('photos', request.photo)
       }
-      const result = await fetchJson<InspectionSubmissionResult>('/damage-assessment/external', {
+      const result = await fetchJson<InspectionSubmissionResult>('/trip-experience/pre-trip-inspection', {
         method: 'POST',
         body: formData,
       })
@@ -497,7 +620,7 @@ function App() {
       setReportedProblem(null)
       setPostTripInspectionResult(null)
       setEndTripResult(null)
-      await fetchJson('/trips/start', {
+      await fetchJson('/trip-experience/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -532,7 +655,7 @@ function App() {
       if (photo) {
         formData.append('photos', photo)
       }
-      const result = await fetchJson<PostTripInspectionResult>('/damage-assessment/post-trip', {
+      const result = await fetchJson<PostTripInspectionResult>('/trip-experience/post-trip-inspection', {
         method: 'POST',
         body: formData,
       })
@@ -569,7 +692,7 @@ function App() {
     }
     setBusy(true)
     try {
-      const result = await fetchJson<EndTripResult>('/end-trip/request', {
+      const result = await fetchJson<EndTripResult>('/trip-experience/end', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -620,6 +743,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <TripStatusPoller activeTripId={activeTrip?.tripId ?? null} activeUserId={activeUserId} onPoll={refreshTripExperienceData} />
       <Routes>
         <Route
           path="/"
@@ -658,7 +782,7 @@ function App() {
                   if (searchForm.vehicleType) {
                     params.set('vehicleType', searchForm.vehicleType)
                   }
-                  const result = await fetchJson<SearchResponse>(`/process-booking/search?${params.toString()}`)
+                  const result = await fetchJson<SearchResponse>(`/search-vehicles/search?${params.toString()}`)
                   startTransition(() => {
                     setSearchResponse(result)
                   })
@@ -708,7 +832,14 @@ function App() {
           element={
             activeUserId ? (
               <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
-                <BookingDetailsPage bookings={bookings} customerSummary={customerSummary ?? selectedProfile} vehicles={vehicles} />
+                <BookingDetailsPage
+                  bookings={bookings}
+                  customerSummary={customerSummary ?? selectedProfile}
+                  notifications={notifications}
+                  payments={payments}
+                  trips={trips}
+                  vehicles={vehicles}
+                />
               </CustomerShell>
             ) : (
               <Navigate to="/" replace />
@@ -724,6 +855,7 @@ function App() {
                   activeTrip={activeTrip}
                   completedTrips={completedTrips}
                   historicalBookings={historicalBookings}
+                  liveTripAdvisory={liveTripAdvisory}
                   onQueueInspection={(request) => {
                     setPendingInspectionRequest(request)
                     setLatestInspectionResult(null)
@@ -766,7 +898,7 @@ function App() {
                   latestInspectionResult={latestInspectionResult}
                   onCancelModerateDamage={(bookingId, vehicleId) =>
                     runCustomerAction(async () => {
-                      const result = await fetchJson<InspectionCancellationResult>('/damage-assessment/external/customer-cancel', {
+                      const result = await fetchJson<InspectionCancellationResult>('/trip-experience/pre-trip/cancel', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -793,13 +925,18 @@ function App() {
           path="/app/trips/unlock-processing"
           element={
             activeUserId ? (
-              <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
-                <TripUnlockProcessingPage
-                  activeTrip={activeTrip}
-                  request={pendingUnlockRequest}
-                  vehicles={vehicles}
-                  onUnlock={startQueuedTripUnlock}
-                />
+                <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
+                  <TripUnlockProcessingPage
+                    key={
+                      pendingUnlockRequest
+                        ? `${pendingUnlockRequest.bookingId}:${pendingUnlockRequest.vehicleId}:${pendingUnlockRequest.notes}`
+                        : 'unlock-empty'
+                    }
+                    activeTrip={activeTrip}
+                    request={pendingUnlockRequest}
+                    vehicles={vehicles}
+                    onUnlock={startQueuedTripUnlock}
+                  />
               </CustomerShell>
             ) : (
               <Navigate to="/" replace />
@@ -929,7 +1066,7 @@ function App() {
           element={
             activeUserId ? (
               <CustomerShell activeUser={selectedProfile} busy={busy} status={status} onSwitchUser={clearActiveCustomer}>
-                <EndTripCompletePage endTripResult={endTripResult} postTripInspectionResult={postTripInspectionResult} />
+                <EndTripCompletePage endTripResult={endTripResult} />
               </CustomerShell>
             ) : (
               <Navigate to="/" replace />

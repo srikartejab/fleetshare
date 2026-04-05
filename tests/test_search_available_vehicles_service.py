@@ -75,7 +75,10 @@ def test_search_available_vehicles_returns_station_aggregation(monkeypatch):
             return {
                 "estimatedPrice": 13.08 if vehicle_id == 101 else 15.90,
                 "allowanceStatus": "WITHIN_ALLOWANCE",
+                "crossCycleBooking": False,
                 "hourlyRate": 9.5,
+                "totalHours": 1.0,
+                "currentCycleHours": 1.0,
                 "includedHoursApplied": 1.0,
                 "includedHoursRemainingBefore": 9.0,
                 "includedHoursRemainingAfter": 8.0,

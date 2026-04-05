@@ -1,70 +1,165 @@
-import { startTransition, useEffect, useMemo, useState } from 'react'
+import { startTransition, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 import {
   fetchJson,
+  formatDateTime,
   formatHours,
   formatMoney,
   formatSeverityLabel,
 } from './appTypes'
-import type { Booking, CustomerSummary, Notification, Payment, RecordItem, Ticket, Trip, Vehicle } from './appTypes'
+import type { Booking, CustomerSummary, Notification, OpsDashboardResponse, OpsTicketDetailResponse, Payment, RecordItem, Ticket, Trip, Vehicle } from './appTypes'
+import './customerMobile.css'
 
-type OpsTab = 'overview' | 'fleet' | 'incidents' | 'billing' | 'inbox'
+type OpsSection = 'fleet' | 'tickets' | 'inbox' | 'actions' | 'billing'
 
-function BellIcon() {
+function deviceTime() {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date())
+}
+
+function FleetIcon() {
   return (
-    <svg aria-hidden="true" className="ops-bell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M15 18H5.5a1 1 0 0 1-.8-1.6l1.4-1.9a5 5 0 0 0 1-3V9a5 5 0 1 1 10 0v2.5a5 5 0 0 0 1 3l1.4 1.9a1 1 0 0 1-.8 1.6H15Z" />
-      <path d="M9.5 18a2.5 2.5 0 0 0 5 0" />
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M7 15.6h10l-1.4-4.6H8.4L7 15.6Z" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" />
+      <path d="m9 11 1.8-3.8h2.4L15 11" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" />
+      <circle cx="8.8" cy="17.2" r="1.2" fill="none" stroke="currentColor" strokeWidth="1.9" />
+      <circle cx="15.2" cy="17.2" r="1.2" fill="none" stroke="currentColor" strokeWidth="1.9" />
     </svg>
   )
 }
 
-function OpsTabButton({
+function TicketsIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M6 6.2h12a1.2 1.2 0 0 1 1.2 1.2v3.1a1.8 1.8 0 0 0 0 3.6v3.1a1.2 1.2 0 0 1-1.2 1.2H6a1.2 1.2 0 0 1-1.2-1.2v-3.1a1.8 1.8 0 0 0 0-3.6V7.4A1.2 1.2 0 0 1 6 6.2Z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.9" />
+      <path d="M9.2 9.4h5.6M9.2 12h5.6M9.2 14.6h3.2" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" />
+    </svg>
+  )
+}
+
+function InboxIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M4.8 8.2A2.2 2.2 0 0 1 7 6h10a2.2 2.2 0 0 1 2.2 2.2v7.6A2.2 2.2 0 0 1 17 18H7a2.2 2.2 0 0 1-2.2-2.2V8.2Z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.9" />
+      <path d="m5.5 8.3 6.5 5 6.5-5" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.9" />
+    </svg>
+  )
+}
+
+function ActionsIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M13.8 4.5a4.1 4.1 0 0 1 5.7 5.7l-8.1 8.1a2.4 2.4 0 0 1-1 .6l-3 .8.8-3a2.4 2.4 0 0 1 .6-1l8.1-8.1Z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.9" />
+      <path d="m12.5 5.8 5.7 5.7" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" />
+    </svg>
+  )
+}
+
+function BillingIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M6.2 5h11.6a1.2 1.2 0 0 1 1.2 1.2v11.6a1.2 1.2 0 0 1-1.2 1.2H6.2A1.2 1.2 0 0 1 5 17.8V6.2A1.2 1.2 0 0 1 6.2 5Z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.9" />
+      <path d="M8.5 9h7M8.5 12h7M8.5 15h4" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" />
+    </svg>
+  )
+}
+
+function OpsSectionHeader({
+  eyebrow,
+  title,
+  subtitle,
+}: {
+  eyebrow: string
+  title: string
+  subtitle: string
+}) {
+  return (
+    <header className="customer-page-header">
+      <div className="customer-page-header__row">
+        <div className="customer-page-header__copy">
+          <p className="customer-page-header__eyebrow">{eyebrow}</p>
+          <h1>{title}</h1>
+        </div>
+      </div>
+      <p className="customer-page-header__subtitle">{subtitle}</p>
+    </header>
+  )
+}
+
+function OpsMetricCard({
+  label,
+  value,
+}: {
+  label: string
+  value: string | number
+}) {
+  return (
+    <div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  )
+}
+
+function OpsNavButton({
   active,
   count,
+  icon,
   label,
   onClick,
 }: {
   active: boolean
   count?: number
+  icon: ReactNode
   label: string
   onClick: () => void
 }) {
   return (
-    <button className={`ops-tab ${active ? 'ops-tab--active' : ''}`} onClick={onClick} type="button">
+    <button className={`ops-mobile-bottomnav__item ${active ? 'ops-mobile-bottomnav__item--active' : ''}`} onClick={onClick} type="button">
+      <span className="ops-mobile-bottomnav__iconwrap">
+        {icon}
+        {count && count > 0 ? <small className="ops-mobile-bottomnav__count">{count}</small> : null}
+      </span>
       <span>{label}</span>
-      {count !== undefined ? <small className="ops-tab__count">{count}</small> : null}
     </button>
   )
 }
 
-function MetricCard({
-  label,
-  value,
-  tone = 'neutral',
-}: {
-  label: string
-  value: string | number
-  tone?: 'neutral' | 'attention' | 'good'
-}) {
-  return (
-    <article className={`ops-metric ops-metric--${tone}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </article>
-  )
-}
-
-function VehicleStatusPill({ status }: { status: string }) {
+function OpsStatusTag({ status }: { status: string }) {
   const normalized = status.toLowerCase()
   const tone =
-    normalized === 'available' || normalized === 'no_damage'
-      ? 'good'
-      : normalized === 'booked' || normalized === 'in_use' || normalized === 'pending'
-        ? 'neutral'
-        : 'attention'
-  return <span className={`ops-status-pill ops-status-pill--${tone}`}>{formatSeverityLabel(status)}</span>
+    normalized === 'available' || normalized === 'no_damage' || normalized === 'resolved' || normalized === 'closed'
+      ? 'success'
+      : normalized === 'booked' || normalized === 'in_use' || normalized === 'pending' || normalized === 'started' || normalized === 'ops'
+        ? 'info'
+        : 'warning'
+  return <span className={`customer-status-tag customer-status-tag--${tone}`}>{formatSeverityLabel(status)}</span>
+}
+
+function joinMeta(parts: Array<string | null | undefined>) {
+  return parts.filter(Boolean).join(' - ')
+}
+
+function displayVehicleLabel(vehicle: Pick<Vehicle, 'id' | 'model' | 'stationName' | 'zone'>) {
+  return joinMeta([vehicle.model, vehicle.stationName ?? vehicle.zone, `Vehicle ${vehicle.id}`])
+}
+
+function displayBookingLabel(booking: Pick<Booking, 'bookingId' | 'bookingCode' | 'customerName' | 'vehicleName' | 'pickupLocation'>) {
+  return joinMeta([
+    booking.bookingCode ?? `Booking #${booking.bookingId}`,
+    booking.customerName ?? null,
+    booking.vehicleName ?? null,
+    booking.pickupLocation ?? null,
+  ])
+}
+
+function evidenceSummary(record: Pick<RecordItem, 'evidenceCount' | 'evidenceUrls'>) {
+  const count = record.evidenceCount ?? record.evidenceUrls?.length ?? 0
+  return count > 0 ? `${count} image${count === 1 ? '' : 's'}` : 'No images'
 }
 
 export function OpsPage({
@@ -75,7 +170,7 @@ export function OpsPage({
   onCustomerDataChanged: () => Promise<void>
 }) {
   const vehicleStatuses = ['AVAILABLE', 'BOOKED', 'IN_USE', 'UNDER_INSPECTION', 'MAINTENANCE_REQUIRED'] as const
-  const [activeTab, setActiveTab] = useState<OpsTab>('overview')
+  const [activeSection, setActiveSection] = useState<OpsSection>('fleet')
   const [status, setStatus] = useState('Operations dashboard ready.')
   const [busy, setBusy] = useState(false)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
@@ -88,6 +183,10 @@ export function OpsPage({
   const [reviewQueue, setReviewQueue] = useState<RecordItem[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
   const [notifications, setNotifications] = useState<Notification[]>([])
+  const [fleetSearch, setFleetSearch] = useState('')
+  const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null)
+  const [ticketDetail, setTicketDetail] = useState<OpsTicketDetailResponse | null>(null)
+  const [ticketDetailBusy, setTicketDetailBusy] = useState(false)
   const [telemetryForm, setTelemetryForm] = useState({
     vehicleId: '2',
     batteryLevel: '14',
@@ -98,29 +197,34 @@ export function OpsPage({
   const [renewalUserId, setRenewalUserId] = useState(activeUserId || 'user-1001')
 
   async function refresh() {
-    const [vehicleData, customerData, bookingData, tripData, ticketData, recordData, queueData, paymentData, notificationData] = await Promise.all([
-      fetchJson<Vehicle[]>('/vehicles'),
-      fetchJson<CustomerSummary[]>('/pricing/customers'),
-      fetchJson<Booking[]>('/bookings'),
-      fetchJson<Trip[]>('/trips'),
-      fetchJson<Ticket[]>('/maintenance/tickets'),
-      fetchJson<RecordItem[]>('/records'),
-      fetchJson<RecordItem[]>('/records/manual-review-queue'),
-      fetchJson<Payment[]>('/payments'),
-      fetchJson<Notification[]>('/notifications'),
-    ])
+    const dashboard = await fetchJson<OpsDashboardResponse>('/ops-console/dashboard')
     startTransition(() => {
-      setVehicles(vehicleData)
-      setVehicleStatusDrafts(Object.fromEntries(vehicleData.map((vehicle) => [vehicle.id, vehicle.status])))
-      setCustomers(customerData)
-      setBookings(bookingData)
-      setTrips(tripData)
-      setTickets(ticketData)
-      setRecords(recordData)
-      setReviewQueue(queueData)
-      setPayments(paymentData)
-      setNotifications(notificationData)
+      setVehicles(dashboard.vehicles)
+      setVehicleStatusDrafts(Object.fromEntries(dashboard.vehicles.map((vehicle) => [vehicle.id, vehicle.status])))
+      setCustomers(dashboard.customers)
+      setBookings(dashboard.bookings)
+      setTrips(dashboard.trips)
+      setTickets(dashboard.tickets)
+      setRecords(dashboard.records)
+      setReviewQueue(dashboard.reviewQueue)
+      setPayments(dashboard.payments)
+      setNotifications(dashboard.notifications)
     })
+  }
+
+  async function openTicketDetail(ticketId: number) {
+    setSelectedTicketId(ticketId)
+    setTicketDetailBusy(true)
+    try {
+      const detail = await fetchJson<OpsTicketDetailResponse>(`/ops-console/tickets/${ticketId}`)
+      startTransition(() => {
+        setTicketDetail(detail)
+      })
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Unable to load ticket detail.')
+    } finally {
+      setTicketDetailBusy(false)
+    }
   }
 
   useEffect(() => {
@@ -160,141 +264,559 @@ export function OpsPage({
     }
   }
 
-  const unavailableVehicles = useMemo(
-    () => vehicles.filter((vehicle) => vehicle.status !== 'AVAILABLE'),
-    [vehicles],
+  const unavailableVehicles = useMemo(() => vehicles.filter((vehicle) => vehicle.status !== 'AVAILABLE'), [vehicles])
+  const fleetSearchQuery = fleetSearch.trim().toLowerCase()
+  const filteredVehicles = useMemo(() => {
+    if (!fleetSearchQuery) {
+      return vehicles
+    }
+    return vehicles.filter((vehicle) =>
+      [
+        String(vehicle.id),
+        vehicle.model,
+        vehicle.stationName,
+        vehicle.stationAddress,
+        vehicle.zone,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(fleetSearchQuery)),
+    )
+  }, [fleetSearchQuery, vehicles])
+  const filteredUnavailableVehicles = useMemo(
+    () => filteredVehicles.filter((vehicle) => vehicle.status !== 'AVAILABLE'),
+    [filteredVehicles],
   )
-  const activeTrips = useMemo(
-    () => trips.filter((trip) => trip.status === 'STARTED'),
-    [trips],
-  )
-  const openTickets = useMemo(
-    () => tickets.filter((ticket) => ticket.status !== 'RESOLVED' && ticket.status !== 'CLOSED'),
-    [tickets],
-  )
+  const activeTrips = useMemo(() => trips.filter((trip) => trip.status === 'STARTED'), [trips])
+  const openTickets = useMemo(() => tickets.filter((ticket) => ticket.status !== 'RESOLVED' && ticket.status !== 'CLOSED'), [tickets])
   const opsNotifications = useMemo(
     () => notifications.filter((notification) => notification.audience === 'OPS' || notification.userId.toLowerCase().startsWith('ops')),
     [notifications],
   )
-  const disruptedBookings = useMemo(
-    () => bookings.filter((booking) => booking.status === 'CANCELLED' || booking.status === 'DISRUPTED'),
-    [bookings],
-  )
-  const latestPayments = useMemo(
-    () => [...payments].sort((left, right) => right.paymentId - left.paymentId).slice(0, 8),
-    [payments],
-  )
-  const latestRecords = useMemo(
-    () => [...records].sort((left, right) => right.recordId - left.recordId).slice(0, 8),
-    [records],
-  )
-  const latestNotifications = useMemo(
-    () => [...opsNotifications].sort((left, right) => right.notificationId - left.notificationId).slice(0, 10),
-    [opsNotifications],
-  )
+  const disruptedBookings = useMemo(() => bookings.filter((booking) => booking.status === 'CANCELLED' || booking.status === 'DISRUPTED'), [bookings])
+  const latestPayments = useMemo(() => [...payments].sort((left, right) => right.paymentId - left.paymentId).slice(0, 10), [payments])
+  const latestRecords = useMemo(() => [...records].sort((left, right) => right.recordId - left.recordId).slice(0, 10), [records])
+  const latestNotifications = useMemo(() => [...opsNotifications].sort((left, right) => right.notificationId - left.notificationId).slice(0, 12), [opsNotifications])
+  const refundPayments = useMemo(() => payments.filter((payment) => payment.status === 'REFUNDED'), [payments])
+  const adjustmentPayments = useMemo(() => payments.filter((payment) => payment.status === 'ADJUSTED'), [payments])
   const customerOptions = useMemo(
-    () => customers
-      .filter((customer) => customer.role === 'CUSTOMER')
-      .map((customer) => customer.userId)
-      .sort(),
+    () => customers.filter((customer) => customer.role === 'CUSTOMER').map((customer) => customer.userId).sort(),
     [customers],
   )
 
   useEffect(() => {
-    if (customerOptions.length === 0) {
-      return
-    }
-    if (!customerOptions.includes(renewalUserId)) {
+    if (customerOptions.length > 0 && !customerOptions.includes(renewalUserId)) {
       setRenewalUserId(customerOptions[0])
     }
   }, [customerOptions, renewalUserId])
 
   useEffect(() => {
-    const vehicleIds = vehicles.map((vehicle) => String(vehicle.id))
-    if (vehicleIds.length === 0) {
+    if (selectedTicketId === null) {
+      setTicketDetail(null)
       return
     }
-    if (!vehicleIds.includes(telemetryForm.vehicleId)) {
+    if (!tickets.some((ticket) => ticket.ticketId === selectedTicketId)) {
+      setSelectedTicketId(null)
+      setTicketDetail(null)
+    }
+  }, [selectedTicketId, tickets])
+
+  useEffect(() => {
+    const vehicleIds = vehicles.map((vehicle) => String(vehicle.id))
+    if (vehicleIds.length > 0 && !vehicleIds.includes(telemetryForm.vehicleId)) {
       setTelemetryForm((current) => ({ ...current, vehicleId: vehicleIds[0] }))
     }
   }, [telemetryForm.vehicleId, vehicles])
 
+  const sectionCopy: Record<OpsSection, { eyebrow: string; title: string; subtitle: string }> = {
+    fleet: {
+      eyebrow: 'Fleet',
+      title: 'Fleet control',
+      subtitle: 'Vehicle health, availability, and shift-wide pressure in one mobile operations surface.',
+    },
+    tickets: {
+      eyebrow: 'Tickets',
+      title: 'Incident desk',
+      subtitle: 'Maintenance tickets, manual reviews, evidence, and booking impact grouped together.',
+    },
+    inbox: {
+      eyebrow: 'Inbox',
+      title: 'Ops inbox',
+      subtitle: 'Operational alerts and customer-impact notifications in a single feed.',
+    },
+    actions: {
+      eyebrow: 'Actions',
+      title: 'Intervention tools',
+      subtitle: 'Run high-friction operational actions without leaving the mobile shell.',
+    },
+    billing: {
+      eyebrow: 'Billing',
+      title: 'Billing watch',
+      subtitle: 'Refunds, adjustments, trip outcomes, and reservation-side financial impact for ops follow-up.',
+    },
+  }
+
   return (
-    <div className="ops-shell ops-shell--dashboard">
-      <header className="ops-launchbar">
-        <div className="ops-launchbar__title">
-          <p className="eyebrow">FleetShare Operations</p>
-          <h1>Operations Control Center</h1>
-          <p className="hero-copy">
-            Monitor fleet health, intervene on incidents, manage availability, and track customer-impacting events from one console.
-          </p>
+    <div className="customer-mobile-shell app-shell ops-mobile-shell">
+      <div className="customer-mobile-shell__chrome ops-mobile-shell__chrome">
+        <div className="customer-mobile-statusbar">
+          <span>{deviceTime()}</span>
+          <span>{busy ? 'Syncing' : 'Operations'}</span>
         </div>
-        <div className="ops-launchbar__actions">
-          <button className="ops-bell-button" onClick={() => setActiveTab('inbox')} type="button">
-            <BellIcon />
-            <span>Inbox</span>
-            <strong>{opsNotifications.length}</strong>
-          </button>
-          <span className={`status-banner ${busy ? 'status-banner--busy' : ''}`}>{busy ? 'Syncing...' : status}</span>
-          <Link className="ghost-link" to={activeUserId ? '/app/home' : '/'}>
-            Back to customer app
-          </Link>
+        <div className="customer-mobile-titlebar">
+          <span>Ops</span>
+          <small>FLEETSHARE CONTROL</small>
         </div>
-      </header>
+      </div>
 
-      <section className="ops-tabbar">
-        <OpsTabButton active={activeTab === 'overview'} label="Overview" onClick={() => setActiveTab('overview')} />
-        <OpsTabButton active={activeTab === 'fleet'} count={vehicles.length} label="Fleet" onClick={() => setActiveTab('fleet')} />
-        <OpsTabButton active={activeTab === 'incidents'} count={openTickets.length + reviewQueue.length} label="Incidents" onClick={() => setActiveTab('incidents')} />
-        <OpsTabButton active={activeTab === 'billing'} count={latestPayments.length} label="Billing" onClick={() => setActiveTab('billing')} />
-        <OpsTabButton active={activeTab === 'inbox'} count={opsNotifications.length} label="Inbox" onClick={() => setActiveTab('inbox')} />
-      </section>
+      <main className="customer-mobile-content ops-mobile-content">
+        <div className="customer-page-stack">
+          <OpsSectionHeader {...sectionCopy[activeSection]} />
 
-      {activeTab === 'overview' ? (
-        <>
-          <section className="ops-metric-grid">
-            <MetricCard label="Fleet size" value={vehicles.length} />
-            <MetricCard label="Unavailable vehicles" value={unavailableVehicles.length} tone={unavailableVehicles.length ? 'attention' : 'good'} />
-            <MetricCard label="Open tickets" value={openTickets.length} tone={openTickets.length ? 'attention' : 'good'} />
-            <MetricCard label="Ops inbox" value={opsNotifications.length} />
-          </section>
+          {activeSection === 'fleet' ? (
+            <>
+              <section className="customer-hero-card customer-hero-card--blue ops-mobile-hero">
+                <div>
+                  <p className="customer-page-header__eyebrow">Current shift</p>
+                  <h2>Fleet health at a glance</h2>
+                  <p>Start here for the highest-signal operational metrics before moving into tickets or actions.</p>
+                </div>
+                <div className="customer-stat-grid">
+                  <OpsMetricCard label="Fleet size" value={vehicles.length} />
+                  <OpsMetricCard label="Unavailable" value={unavailableVehicles.length} />
+                  <OpsMetricCard label="Active trips" value={activeTrips.length} />
+                  <OpsMetricCard label="Open tickets" value={openTickets.length} />
+                </div>
+              </section>
 
-          <section className="panel-card ops-overview-snapshot">
-            <div className="panel-card__header">
-              <div>
-                <p className="mini-label">Current shift</p>
-                <h2>Operational snapshot</h2>
-              </div>
-            </div>
-            <div className="ops-snapshot-grid">
-              <div className="ops-snapshot-pill">
-                <span>Active trips</span>
-                <strong>{activeTrips.length}</strong>
-              </div>
-              <div className="ops-snapshot-pill">
-                <span>Disrupted bookings</span>
-                <strong>{disruptedBookings.length}</strong>
-              </div>
-              <div className="ops-snapshot-pill">
-                <span>Manual review queue</span>
-                <strong>{reviewQueue.length}</strong>
-              </div>
-            </div>
-          </section>
+              <article className={`customer-card ${busy ? 'customer-card--warning' : 'customer-card--info'}`}>
+                <div className="customer-card__header">
+                  <div>
+                    <p className="customer-page-header__eyebrow">Shift status</p>
+                    <h2>Operations pulse</h2>
+                  </div>
+                  <span className={`customer-status-pill ${busy ? 'customer-status-pill--busy' : ''}`}>{busy ? 'Syncing' : 'Live'}</span>
+                </div>
+                <p>{status}</p>
+                <div className="customer-action-row">
+                  <button className="customer-button customer-button--secondary" onClick={() => setActiveSection('actions')} type="button">
+                    Open actions
+                  </button>
+                  <button className="customer-button customer-button--ghost" onClick={() => setActiveSection('inbox')} type="button">
+                    Check inbox
+                  </button>
+                </div>
+              </article>
 
-          <div className="ops-dashboard-grid">
-          <article className="panel-card">
-            <div className="panel-card__header">
-              <div>
-                <p className="mini-label">Quick actions</p>
-                <h2>Intervention tools</h2>
-              </div>
-            </div>
-            <div className="ops-quick-grid">
-              <section className="ops-quick-card">
-                <p className="mini-label">Telemetry injection</p>
-                <h3>Trigger vehicle fault flow</h3>
-                <div className="form-grid">
+              <article className="customer-card">
+                <div className="customer-card__header">
+                  <div>
+                    <p className="customer-page-header__eyebrow">Search</p>
+                    <h2>Find a vehicle fast</h2>
+                  </div>
+                </div>
+                <div className="customer-form-stack">
+                  <label>
+                    Search by vehicle ID, model, station, or zone
+                    <input
+                      placeholder="2, Kona, Pasir Ris, East"
+                      type="search"
+                      value={fleetSearch}
+                      onChange={(event) => setFleetSearch(event.target.value)}
+                    />
+                  </label>
+                </div>
+              </article>
+
+              <article className="customer-card">
+                <div className="customer-card__header">
+                  <div>
+                    <p className="customer-page-header__eyebrow">Attention needed</p>
+                    <h2>Fleet pressure</h2>
+                  </div>
+                </div>
+                <div className="customer-list-stack">
+                  {filteredUnavailableVehicles.slice(0, 6).map((vehicle) => (
+                    <article className="customer-list-card" key={vehicle.id}>
+                      <div className="customer-card__header">
+                        <div>
+                          <strong>{vehicle.model}</strong>
+                          <p>{joinMeta([vehicle.stationName ?? vehicle.zone, `Vehicle ${vehicle.id}`])}</p>
+                        </div>
+                        <OpsStatusTag status={vehicle.status} />
+                      </div>
+                    </article>
+                  ))}
+                  {filteredUnavailableVehicles.length === 0 ? <p className="customer-empty-copy">No vehicles match this search with an active issue.</p> : null}
+                </div>
+              </article>
+
+              <article className="customer-card">
+                <div className="customer-card__header">
+                  <div>
+                    <p className="customer-page-header__eyebrow">Vehicle control</p>
+                    <h2>Apply status updates</h2>
+                  </div>
+                </div>
+                <div className="customer-list-stack">
+                  {filteredVehicles.map((vehicle) => (
+                    <article className="customer-list-card ops-mobile-list-card" key={vehicle.id}>
+                      <div className="customer-card__header">
+                        <div>
+                          <strong>{vehicle.model}</strong>
+                          <p>{joinMeta([vehicle.stationName ?? vehicle.zone, `Vehicle ${vehicle.id}`])}</p>
+                        </div>
+                        <OpsStatusTag status={vehicle.status} />
+                      </div>
+                      <div className="customer-form-stack">
+                        <label>
+                          Status
+                          <select
+                            value={vehicleStatusDrafts[vehicle.id] ?? vehicle.status}
+                            onChange={(event) =>
+                              setVehicleStatusDrafts((current) => ({
+                                ...current,
+                                [vehicle.id]: event.target.value,
+                              }))
+                            }
+                          >
+                            {vehicleStatuses.map((vehicleStatus) => (
+                              <option key={vehicleStatus} value={vehicleStatus}>
+                                {vehicleStatus}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <button
+                          className="customer-button customer-button--primary"
+                          onClick={() =>
+                            void runAction(async () => {
+                              await fetchJson(`/ops-console/fleet/${vehicle.id}/status`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  status: vehicleStatusDrafts[vehicle.id] ?? vehicle.status,
+                                }),
+                              })
+                            }, `Vehicle ${vehicle.id} status updated to ${vehicleStatusDrafts[vehicle.id] ?? vehicle.status}.`)
+                          }
+                          type="button"
+                        >
+                          Apply status
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                  {filteredVehicles.length === 0 ? <p className="customer-empty-copy">No vehicles matched the current search.</p> : null}
+                </div>
+              </article>
+            </>
+          ) : null}
+
+          {activeSection === 'tickets' ? (
+            <>
+              <section className="customer-hero-card customer-hero-card--blue ops-mobile-hero">
+                <div>
+                  <p className="customer-page-header__eyebrow">Incident summary</p>
+                  <h2>Tickets and reviews</h2>
+                  <p>Maintenance work, customer impact, and evidence review stay grouped here for faster triage.</p>
+                </div>
+                <div className="customer-stat-grid">
+                  <OpsMetricCard label="Open tickets" value={openTickets.length} />
+                  <OpsMetricCard label="Review queue" value={reviewQueue.length} />
+                  <OpsMetricCard label="Disrupted" value={disruptedBookings.length} />
+                  <OpsMetricCard label="Records" value={latestRecords.length} />
+                </div>
+              </section>
+
+              <article className="customer-card">
+                <div className="customer-card__header">
+                  <div>
+                    <p className="customer-page-header__eyebrow">Maintenance</p>
+                    <h2>Open tickets</h2>
+                  </div>
+                </div>
+                <div className="customer-list-stack">
+                  {tickets.map((ticket) => (
+                    <article className="customer-list-card" key={ticket.ticketId}>
+                      <div className="customer-card__header">
+                        <div>
+                          <strong>{ticket.vehicleName ?? `Ticket #${ticket.ticketId}`}</strong>
+                          <p>{joinMeta([`Ticket #${ticket.ticketId}`, ticket.customerName ?? ticket.userId, ticket.damageType, ticket.stationName ?? ticket.zone])}</p>
+                        </div>
+                        <OpsStatusTag status={ticket.damageSeverity} />
+                      </div>
+                      <div className="customer-keyvalue-list">
+                        <div className="customer-keyvalue-row">
+                          <span>Status</span>
+                          <strong>{formatSeverityLabel(ticket.status)}</strong>
+                        </div>
+                        <div className="customer-keyvalue-row">
+                          <span>Created</span>
+                          <strong>{formatDateTime(ticket.createdAt)}</strong>
+                        </div>
+                        <div className="customer-keyvalue-row">
+                          <span>Evidence</span>
+                          <strong>{ticket.hasEvidence ? `${ticket.evidenceCount ?? 0} attached` : 'None'}</strong>
+                        </div>
+                      </div>
+                      <div className="customer-action-row">
+                        <button className="customer-button customer-button--secondary" onClick={() => void openTicketDetail(ticket.ticketId)} type="button">
+                          Open detail
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                  {tickets.length === 0 ? <p className="customer-empty-copy">No maintenance tickets recorded.</p> : null}
+                </div>
+              </article>
+
+              {selectedTicketId ? (
+                <article className={`customer-card ${ticketDetail?.ticket.hasEvidence ? 'customer-card--info' : ''}`}>
+                  <div className="customer-card__header">
+                    <div>
+                      <p className="customer-page-header__eyebrow">Ticket detail</p>
+                      <h2>{ticketDetail?.ticket.vehicleName ?? `Ticket #${selectedTicketId}`}</h2>
+                    </div>
+                    <button className="customer-button customer-button--ghost" onClick={() => setSelectedTicketId(null)} type="button">
+                      Close
+                    </button>
+                  </div>
+                  {ticketDetailBusy || !ticketDetail || ticketDetail.ticket.ticketId !== selectedTicketId ? (
+                    <p>Loading ticket detail...</p>
+                  ) : (
+                    <>
+                      <div className="customer-keyvalue-list">
+                        <div className="customer-keyvalue-row">
+                          <span>Severity</span>
+                          <strong>{formatSeverityLabel(ticketDetail.ticket.damageSeverity)}</strong>
+                        </div>
+                        <div className="customer-keyvalue-row">
+                          <span>Status</span>
+                          <strong>{formatSeverityLabel(ticketDetail.ticket.status)}</strong>
+                        </div>
+                        <div className="customer-keyvalue-row">
+                          <span>Created</span>
+                          <strong>{formatDateTime(ticketDetail.ticket.createdAt)}</strong>
+                        </div>
+                        <div className="customer-keyvalue-row">
+                          <span>Recommended action</span>
+                          <strong>{ticketDetail.ticket.recommendedAction ?? 'Inspect and resolve'}</strong>
+                        </div>
+                        <div className="customer-keyvalue-row">
+                          <span>Booking</span>
+                          <strong>{ticketDetail.booking ? displayBookingLabel(ticketDetail.booking) : ticketDetail.ticket.bookingCode ?? 'Not linked'}</strong>
+                        </div>
+                        <div className="customer-keyvalue-row">
+                          <span>Trip</span>
+                          <strong>{ticketDetail.trip?.tripId ? `Trip #${ticketDetail.trip.tripId}` : 'Not linked'}</strong>
+                        </div>
+                        <div className="customer-keyvalue-row">
+                          <span>Vehicle</span>
+                          <strong>{ticketDetail.vehicle ? displayVehicleLabel(ticketDetail.vehicle) : ticketDetail.ticket.vehicleName ?? `Vehicle ${ticketDetail.ticket.vehicleId}`}</strong>
+                        </div>
+                        <div className="customer-keyvalue-row">
+                          <span>Customer</span>
+                          <strong>{ticketDetail.customer?.displayName ?? ticketDetail.ticket.customerName ?? ticketDetail.ticket.userId ?? 'Ops only'}</strong>
+                        </div>
+                        <div className="customer-keyvalue-row">
+                          <span>Estimated duration</span>
+                          <strong>{formatHours(ticketDetail.ticket.estimatedDurationHours)}</strong>
+                        </div>
+                      </div>
+                      {ticketDetail.record ? (
+                        <>
+                          <p className="customer-inline-notice">
+                            {ticketDetail.record.notes ?? ticketDetail.ticket.recordSummary ?? 'No inspection notes were saved for this record.'}
+                          </p>
+                          {ticketDetail.evidenceUrls.length > 0 ? (
+                            <div className="customer-list-stack">
+                              {ticketDetail.evidenceUrls.map((url, index) => (
+                                <a className="customer-button customer-button--ghost link-button" href={url} key={`${url}-${index}`} rel="noreferrer" target="_blank">
+                                  Open evidence image {index + 1}
+                                </a>
+                              ))}
+                            </div>
+                          ) : null}
+                        </>
+                      ) : (
+                        <p className="customer-empty-copy">No linked inspection record was available for this ticket.</p>
+                      )}
+                    </>
+                  )}
+                </article>
+              ) : null}
+
+              <article className="customer-card">
+                <div className="customer-card__header">
+                  <div>
+                    <p className="customer-page-header__eyebrow">Manual review</p>
+                    <h2>Review queue</h2>
+                  </div>
+                </div>
+                <div className="customer-list-stack">
+                  {reviewQueue.map((record) => (
+                    <article className="customer-list-card" key={record.recordId}>
+                      <div className="customer-card__header">
+                        <div>
+                          <strong>{record.vehicleName ?? `Record #${record.recordId}`}</strong>
+                          <p>{joinMeta([`Record #${record.recordId}`, record.customerName ?? record.userId, record.recordType, evidenceSummary(record)])}</p>
+                        </div>
+                        <OpsStatusTag status={record.severity} />
+                      </div>
+                      <p>{formatDateTime(record.createdAt)}</p>
+                    </article>
+                  ))}
+                  {reviewQueue.length === 0 ? <p className="customer-empty-copy">No manual review items.</p> : null}
+                </div>
+              </article>
+
+              <article className="customer-card">
+                <div className="customer-card__header">
+                  <div>
+                    <p className="customer-page-header__eyebrow">Customer impact</p>
+                    <h2>Disrupted bookings</h2>
+                  </div>
+                </div>
+                <div className="customer-list-stack">
+                  {disruptedBookings.slice(0, 10).map((booking) => (
+                    <article className="customer-list-card" key={booking.bookingId}>
+                      <div className="customer-card__header">
+                        <div>
+                          <strong>{booking.customerName ?? booking.userId}</strong>
+                          <p>{displayBookingLabel(booking)}</p>
+                        </div>
+                        <OpsStatusTag status={booking.status} />
+                      </div>
+                      <p>{joinMeta([formatDateTime(booking.startTime), formatDateTime(booking.endTime)])}</p>
+                    </article>
+                  ))}
+                  {disruptedBookings.length === 0 ? <p className="customer-empty-copy">No disrupted bookings right now.</p> : null}
+                </div>
+              </article>
+
+              <article className="customer-card">
+                <div className="customer-card__header">
+                  <div>
+                    <p className="customer-page-header__eyebrow">Evidence</p>
+                    <h2>Latest records</h2>
+                  </div>
+                </div>
+                <div className="customer-list-stack">
+                  {latestRecords.map((record) => (
+                    <article className="customer-list-card" key={record.recordId}>
+                      <div className="customer-card__header">
+                        <div>
+                          <strong>{record.vehicleName ?? `Record #${record.recordId}`}</strong>
+                          <p>{joinMeta([`Record #${record.recordId}`, record.customerName ?? record.userId, record.recordType, formatSeverityLabel(record.reviewState)])}</p>
+                        </div>
+                        <OpsStatusTag status={record.severity} />
+                      </div>
+                      <p>{joinMeta([formatDateTime(record.createdAt), evidenceSummary(record)])}</p>
+                    </article>
+                  ))}
+                  {latestRecords.length === 0 ? <p className="customer-empty-copy">No evidence records yet.</p> : null}
+                </div>
+              </article>
+            </>
+          ) : null}
+
+          {activeSection === 'inbox' ? (
+            <>
+              <section className="customer-hero-card customer-hero-card--blue ops-mobile-hero">
+                <div>
+                  <p className="customer-page-header__eyebrow">Alerts</p>
+                  <h2>Operations inbox</h2>
+                  <p>Use this feed for what changed most recently and which incidents need acknowledgment first.</p>
+                </div>
+                <div className="customer-stat-grid">
+                  <OpsMetricCard label="Alerts" value={opsNotifications.length} />
+                  <OpsMetricCard label="Open tickets" value={openTickets.length} />
+                  <OpsMetricCard label="Review queue" value={reviewQueue.length} />
+                  <OpsMetricCard label="Refunds" value={refundPayments.length} />
+                </div>
+              </section>
+
+              <article className="customer-card">
+                <div className="customer-card__header">
+                  <div>
+                    <p className="customer-page-header__eyebrow">Notification feed</p>
+                    <h2>Latest alerts</h2>
+                  </div>
+                </div>
+                <div className="customer-list-stack">
+                  {latestNotifications.map((notification) => (
+                    <article className="customer-transaction-card" key={notification.notificationId}>
+                      <div className="customer-transaction-card__top">
+                        <div>
+                          <p className="customer-transaction-card__eyebrow">{notification.audience}</p>
+                          <strong>{notification.subject}</strong>
+                        </div>
+                        <OpsStatusTag status={notification.severity ?? notification.audience} />
+                      </div>
+                      <p className="customer-transaction-card__detail">{notification.message}</p>
+                      <p className="customer-transaction-card__subtitle">
+                        {joinMeta([
+                          notification.customerName ?? notification.userId,
+                          notification.vehicleName ?? (notification.vehicleId ? `Vehicle ${notification.vehicleId}` : null),
+                          notification.bookingCode ?? (notification.bookingId ? `Booking #${notification.bookingId}` : null),
+                        ])}
+                      </p>
+                      <div className="customer-pill-row">
+                        <span className="customer-status-tag">{formatDateTime(notification.createdAt)}</span>
+                        {notification.tripId ? <span className="customer-status-tag">Trip #{notification.tripId}</span> : null}
+                        {notification.stationName ? <span className="customer-status-tag">{notification.stationName}</span> : null}
+                      </div>
+                    </article>
+                  ))}
+                  {latestNotifications.length === 0 ? <p className="customer-empty-copy">No operations notifications yet.</p> : null}
+                </div>
+              </article>
+            </>
+          ) : null}
+
+          {activeSection === 'actions' ? (
+            <>
+              <section className="customer-hero-card customer-hero-card--blue ops-mobile-hero">
+                <div>
+                  <p className="customer-page-header__eyebrow">Control tools</p>
+                  <h2>Operator actions</h2>
+                  <p>Write actions stay isolated here so the rest of the ops console remains read-focused and easier to scan.</p>
+                </div>
+                <div className="customer-stat-grid">
+                  <OpsMetricCard label="Target vehicles" value={vehicles.length} />
+                  <OpsMetricCard label="Customers" value={customerOptions.length} />
+                  <OpsMetricCard label="Busy state" value={busy ? 'SYNCING' : 'READY'} />
+                  <OpsMetricCard label="Ops inbox" value={opsNotifications.length} />
+                </div>
+              </section>
+
+              <article className={`customer-card ${busy ? 'customer-card--warning' : 'customer-card--info'}`}>
+                <div className="customer-card__header">
+                  <div>
+                    <p className="customer-page-header__eyebrow">Live status</p>
+                    <h2>Operational guidance</h2>
+                  </div>
+                  <span className={`customer-status-pill ${busy ? 'customer-status-pill--busy' : ''}`}>{busy ? 'Syncing' : 'Ready'}</span>
+                </div>
+                <p>{status}</p>
+                <div className="customer-action-row">
+                  <Link className="customer-button customer-button--secondary link-button" to={activeUserId ? '/app/home' : '/'}>
+                    Back to customer app
+                  </Link>
+                  <button className="customer-button customer-button--ghost" onClick={() => setActiveSection('tickets')} type="button">
+                    Review tickets
+                  </button>
+                </div>
+              </article>
+
+              <article className="customer-card">
+                <div className="customer-card__header">
+                  <div>
+                    <p className="customer-page-header__eyebrow">Telemetry injection</p>
+                    <h2>Trigger vehicle fault flow</h2>
+                  </div>
+                </div>
+                <div className="customer-form-stack">
                   <label>
                     Vehicle ID
                     <select value={telemetryForm.vehicleId} onChange={(event) => setTelemetryForm((current) => ({ ...current, vehicleId: event.target.value }))}>
@@ -321,355 +843,177 @@ export function OpsPage({
                     Fault code
                     <input value={telemetryForm.faultCode} onChange={(event) => setTelemetryForm((current) => ({ ...current, faultCode: event.target.value }))} />
                   </label>
-                  <label className="toggle-line">
+                  <label className="ops-mobile-toggle">
                     <input
                       checked={telemetryForm.tirePressureOk}
                       onChange={(event) => setTelemetryForm((current) => ({ ...current, tirePressureOk: event.target.checked }))}
                       type="checkbox"
                     />
-                    Tire pressure OK
+                    <span>Tire pressure OK</span>
                   </label>
+                  <button
+                    className="customer-button customer-button--primary"
+                    onClick={() =>
+                      void runAction(async () => {
+                        await fetchJson('/ops-console/fleet/telemetry', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            vehicleId: Number(telemetryForm.vehicleId),
+                            batteryLevel: Number(telemetryForm.batteryLevel),
+                            tirePressureOk: telemetryForm.tirePressureOk,
+                            severity: telemetryForm.severity,
+                            faultCode: telemetryForm.faultCode,
+                          }),
+                        })
+                      }, `Telemetry injected for vehicle ${telemetryForm.vehicleId}.`)
+                    }
+                    type="button"
+                  >
+                    Inject telemetry
+                  </button>
                 </div>
-                <button
-                  className="primary"
-                  onClick={() =>
-                    void runAction(async () => {
-                      await fetchJson('/vehicles/telemetry', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          vehicleId: Number(telemetryForm.vehicleId),
-                          batteryLevel: Number(telemetryForm.batteryLevel),
-                          tirePressureOk: telemetryForm.tirePressureOk,
-                          severity: telemetryForm.severity,
-                          faultCode: telemetryForm.faultCode,
-                        }),
-                      })
-                    }, `Telemetry injected for vehicle ${telemetryForm.vehicleId}.`)
-                  }
-                  type="button"
-                >
-                  Inject telemetry
-                </button>
-              </section>
+              </article>
 
-              <section className="ops-quick-card">
-                <p className="mini-label">Renewal simulation</p>
-                <h3>Publish reconciliation event</h3>
-                <label>
-                  Customer user ID
-                  <select value={renewalUserId} onChange={(event) => setRenewalUserId(event.target.value)}>
-                    {customerOptions.map((userId) => (
-                      <option key={userId} value={userId}>
-                        {userId}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  className="primary"
-                  onClick={() =>
-                    void runAction(async () => {
-                      await fetchJson('/renewal-reconciliation/simulate', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ userId: renewalUserId }),
-                      })
-                    }, `Renewal event published for ${renewalUserId}.`)
-                  }
-                  type="button"
-                >
-                  Simulate renewal
-                </button>
-              </section>
-            </div>
-          </article>
-
-          <article className="panel-card">
-            <div className="panel-card__header">
-              <div>
-                <p className="mini-label">Attention needed</p>
-                <h2>Current fleet pressure</h2>
-              </div>
-            </div>
-            <div className="ops-stack-list">
-              {unavailableVehicles.slice(0, 6).map((vehicle) => (
-                <div className="ops-list-row" key={vehicle.id}>
+              <article className="customer-card">
+                <div className="customer-card__header">
                   <div>
-                    <strong>{vehicle.model}</strong>
-                    <p>{vehicle.zone}</p>
+                    <p className="customer-page-header__eyebrow">Renewal simulation</p>
+                    <h2>Publish reconciliation event</h2>
                   </div>
-                  <VehicleStatusPill status={vehicle.status} />
                 </div>
-              ))}
-              {unavailableVehicles.length === 0 ? <div className="empty-card"><p>No vehicles need intervention.</p></div> : null}
-            </div>
-          </article>
-
-          <article className="panel-card">
-            <div className="panel-card__header">
-              <div>
-                <p className="mini-label">Ops inbox</p>
-                <h2>Latest alerts</h2>
-              </div>
-              <button className="ghost-link" onClick={() => setActiveTab('inbox')} type="button">
-                Open inbox
-              </button>
-            </div>
-            <div className="notification-stack">
-              {latestNotifications.slice(0, 4).map((notification) => (
-                <article className="notification-card" key={notification.notificationId}>
-                  <strong>{notification.subject}</strong>
-                  <p>{notification.message}</p>
-                </article>
-              ))}
-              {latestNotifications.length === 0 ? <div className="empty-card"><p>No ops alerts at the moment.</p></div> : null}
-            </div>
-          </article>
-
-          <article className="panel-card">
-            <div className="panel-card__header">
-              <div>
-                <p className="mini-label">Customer impact</p>
-                <h2>Disrupted bookings</h2>
-              </div>
-            </div>
-            <div className="ops-stack-list">
-              {disruptedBookings.slice(0, 6).map((booking) => (
-                <div className="ops-list-row" key={booking.bookingId}>
-                  <div>
-                    <strong>Booking #{booking.bookingId}</strong>
-                    <p>{booking.userId} - Vehicle {booking.vehicleId}</p>
-                  </div>
-                  <VehicleStatusPill status={booking.status} />
-                </div>
-              ))}
-              {disruptedBookings.length === 0 ? <div className="empty-card"><p>No disrupted bookings right now.</p></div> : null}
-            </div>
-          </article>
-          </div>
-        </>
-      ) : null}
-
-      {activeTab === 'fleet' ? (
-        <section className="panel-card">
-          <div className="panel-card__header">
-            <div>
-              <p className="mini-label">Fleet management</p>
-              <h2>Vehicle availability and status control</h2>
-            </div>
-          </div>
-          <div className="ops-vehicle-grid">
-            {vehicles.map((vehicle) => (
-              <article className="ops-vehicle-card" key={vehicle.id}>
-                <div className="ops-vehicle-card__top">
-                  <div>
-                    <p className="mini-label">Vehicle {vehicle.id}</p>
-                    <h3>{vehicle.model}</h3>
-                    <p>{vehicle.zone}</p>
-                  </div>
-                  <VehicleStatusPill status={vehicle.status} />
-                </div>
-                <div className="ops-vehicle-card__actions">
+                <div className="customer-form-stack">
                   <label>
-                    Status
-                    <select
-                      value={vehicleStatusDrafts[vehicle.id] ?? vehicle.status}
-                      onChange={(event) =>
-                        setVehicleStatusDrafts((current) => ({
-                          ...current,
-                          [vehicle.id]: event.target.value,
-                        }))
-                      }
-                    >
-                      {vehicleStatuses.map((vehicleStatus) => (
-                        <option key={vehicleStatus} value={vehicleStatus}>
-                          {vehicleStatus}
+                    Customer user ID
+                    <select value={renewalUserId} onChange={(event) => setRenewalUserId(event.target.value)}>
+                      {customerOptions.map((userId) => (
+                        <option key={userId} value={userId}>
+                          {userId}
                         </option>
                       ))}
                     </select>
                   </label>
                   <button
-                    className="primary"
+                    className="customer-button customer-button--primary"
                     onClick={() =>
                       void runAction(async () => {
-                        await fetchJson(`/vehicles/${vehicle.id}/status`, {
-                          method: 'PATCH',
+                        await fetchJson('/ops-console/renewal/simulate', {
+                          method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            status: vehicleStatusDrafts[vehicle.id] ?? vehicle.status,
-                          }),
+                          body: JSON.stringify({ userId: renewalUserId }),
                         })
-                      }, `Vehicle ${vehicle.id} status updated to ${vehicleStatusDrafts[vehicle.id] ?? vehicle.status}.`)
+                      }, `Renewal event published for ${renewalUserId}.`)
                     }
                     type="button"
                   >
-                    Apply status
+                    Simulate renewal
                   </button>
                 </div>
               </article>
-            ))}
-          </div>
-        </section>
-      ) : null}
+            </>
+          ) : null}
 
-      {activeTab === 'incidents' ? (
-        <div className="ops-dashboard-grid">
-          <article className="panel-card">
-            <div className="panel-card__header">
-              <div>
-                <p className="mini-label">Maintenance</p>
-                <h2>Open tickets</h2>
-              </div>
-            </div>
-            <div className="ops-stack-list">
-              {tickets.map((ticket) => (
-                <div className="ops-list-row" key={ticket.ticketId}>
+          {activeSection === 'billing' ? (
+            <>
+              <section className="customer-hero-card customer-hero-card--blue ops-mobile-hero">
+                <div>
+                  <p className="customer-page-header__eyebrow">Settlement watch</p>
+                  <h2>Billing flow</h2>
+                  <p>Use this section to track refunds, adjustments, trip outcomes, and reservation-side financial impact.</p>
+                </div>
+                <div className="customer-stat-grid">
+                  <OpsMetricCard label="Payments" value={payments.length} />
+                  <OpsMetricCard label="Refunds" value={refundPayments.length} />
+                  <OpsMetricCard label="Credits" value={adjustmentPayments.length} />
+                  <OpsMetricCard label="Bookings" value={bookings.length} />
+                </div>
+              </section>
+
+              <article className="customer-card">
+                <div className="customer-card__header">
                   <div>
-                    <strong>Ticket {ticket.ticketId}</strong>
-                    <p>Vehicle {ticket.vehicleId} - {ticket.damageType}</p>
+                    <p className="customer-page-header__eyebrow">Payments</p>
+                    <h2>Recent adjustments and charges</h2>
                   </div>
-                  <VehicleStatusPill status={ticket.damageSeverity} />
                 </div>
-              ))}
-              {tickets.length === 0 ? <div className="empty-card"><p>No maintenance tickets recorded.</p></div> : null}
-            </div>
-          </article>
-
-          <article className="panel-card">
-            <div className="panel-card__header">
-              <div>
-                <p className="mini-label">Manual review</p>
-                <h2>Review queue</h2>
-              </div>
-            </div>
-            <div className="ops-stack-list">
-              {reviewQueue.map((record) => (
-                <div className="ops-list-row" key={record.recordId}>
-                  <div>
-                    <strong>Record {record.recordId}</strong>
-                    <p>Vehicle {record.vehicleId} - {record.recordType}</p>
-                  </div>
-                  <VehicleStatusPill status={record.severity} />
+                <div className="customer-list-stack">
+                  {latestPayments.map((payment) => (
+                    <article className="customer-transaction-card" key={payment.paymentId}>
+                      <div className="customer-transaction-card__top">
+                        <div>
+                          <p className="customer-transaction-card__eyebrow">{payment.status}</p>
+                          <strong>{payment.reason.replaceAll('_', ' ')}</strong>
+                        </div>
+                        <strong className={`customer-transaction-amount customer-transaction-amount--${payment.status === 'REFUNDED' || payment.status === 'ADJUSTED' ? 'credit' : 'debit'}`}>
+                          {formatMoney(payment.amount)}
+                        </strong>
+                      </div>
+                      <p className="customer-transaction-card__detail">
+                        {joinMeta([payment.bookingId ? `Booking #${payment.bookingId}` : null, payment.tripId ? `Trip #${payment.tripId}` : null, formatDateTime(payment.createdAt)])}
+                      </p>
+                    </article>
+                  ))}
+                  {latestPayments.length === 0 ? <p className="customer-empty-copy">No payment records yet.</p> : null}
                 </div>
-              ))}
-              {reviewQueue.length === 0 ? <div className="empty-card"><p>No manual review items.</p></div> : null}
-            </div>
-          </article>
-
-          <article className="panel-card ops-span-wide">
-            <div className="panel-card__header">
-              <div>
-                <p className="mini-label">Records</p>
-                <h2>Latest evidence and assessments</h2>
-              </div>
-            </div>
-            <div className="ops-stack-list">
-              {latestRecords.map((record) => (
-                <div className="ops-list-row" key={record.recordId}>
-                  <div>
-                    <strong>Record {record.recordId}</strong>
-                    <p>{record.recordType} - Vehicle {record.vehicleId} - {record.reviewState}</p>
-                  </div>
-                  <VehicleStatusPill status={record.severity} />
-                </div>
-              ))}
-            </div>
-          </article>
-        </div>
-      ) : null}
-
-      {activeTab === 'billing' ? (
-        <div className="ops-dashboard-grid">
-          <article className="panel-card">
-            <div className="panel-card__header">
-              <div>
-                <p className="mini-label">Payments</p>
-                <h2>Recent adjustments and charges</h2>
-              </div>
-            </div>
-            <div className="ops-stack-list">
-              {latestPayments.map((payment) => (
-                <div className="ops-list-row" key={payment.paymentId}>
-                  <div>
-                    <strong>{payment.reason.replaceAll('_', ' ')}</strong>
-                    <p>Booking {payment.bookingId ?? 'N/A'} - {payment.status}</p>
-                  </div>
-                  <strong>{formatMoney(payment.amount)}</strong>
-                </div>
-              ))}
-            </div>
-          </article>
-
-          <article className="panel-card">
-            <div className="panel-card__header">
-              <div>
-                <p className="mini-label">Trips</p>
-                <h2>Trip outcomes</h2>
-              </div>
-            </div>
-            <div className="ops-stack-list">
-              {trips.slice(0, 8).map((trip) => (
-                <div className="ops-list-row" key={trip.tripId}>
-                  <div>
-                    <strong>Trip #{trip.tripId}</strong>
-                    <p>Booking {trip.bookingId} - Vehicle {trip.vehicleId}</p>
-                  </div>
-                  <strong>{formatHours(trip.durationHours)}</strong>
-                </div>
-              ))}
-            </div>
-          </article>
-
-          <article className="panel-card ops-span-wide">
-            <div className="panel-card__header">
-              <div>
-                <p className="mini-label">Bookings</p>
-                <h2>Reservation ledger</h2>
-              </div>
-            </div>
-            <div className="ops-stack-list">
-              {bookings.slice(0, 10).map((booking) => (
-                <div className="ops-list-row" key={booking.bookingId}>
-                  <div>
-                    <strong>Booking #{booking.bookingId}</strong>
-                    <p>{booking.userId} - Vehicle {booking.vehicleId} - {booking.pickupLocation}</p>
-                  </div>
-                  <VehicleStatusPill status={booking.status} />
-                </div>
-              ))}
-            </div>
-          </article>
-        </div>
-      ) : null}
-
-      {activeTab === 'inbox' ? (
-        <section className="panel-card">
-          <div className="panel-card__header">
-            <div>
-              <p className="mini-label">Notifications</p>
-              <h2>Operations inbox</h2>
-            </div>
-            <div className="ops-inbox-summary">
-              <BellIcon />
-              <span>{opsNotifications.length} alerts</span>
-            </div>
-          </div>
-          <div className="notification-stack">
-            {latestNotifications.map((notification) => (
-              <article className="notification-card" key={notification.notificationId}>
-                <div className="panel-card__header">
-                  <strong>{notification.subject}</strong>
-                  <small>{notification.audience}</small>
-                </div>
-                <p>{notification.message}</p>
-                <small>Booking {notification.bookingId ?? 'N/A'} - Trip {notification.tripId ?? 'N/A'}</small>
               </article>
-            ))}
-            {latestNotifications.length === 0 ? <div className="empty-card"><p>No operations notifications yet.</p></div> : null}
-          </div>
-        </section>
-      ) : null}
+
+              <article className="customer-card">
+                <div className="customer-card__header">
+                  <div>
+                    <p className="customer-page-header__eyebrow">Trips</p>
+                    <h2>Trip outcomes</h2>
+                  </div>
+                </div>
+                <div className="customer-list-stack">
+                  {trips.slice(0, 10).map((trip) => (
+                    <article className="customer-list-card" key={trip.tripId}>
+                      <div className="customer-card__header">
+                        <div>
+                          <strong>Trip #{trip.tripId}</strong>
+                          <p>{joinMeta([trip.bookingId ? `Booking #${trip.bookingId}` : null, trip.vehicleId ? `Vehicle ${trip.vehicleId}` : null, formatDateTime(trip.startedAt)])}</p>
+                        </div>
+                        <strong>{formatHours(trip.durationHours)}</strong>
+                      </div>
+                    </article>
+                  ))}
+                  {trips.length === 0 ? <p className="customer-empty-copy">No trip outcomes to display.</p> : null}
+                </div>
+              </article>
+
+              <article className="customer-card">
+                <div className="customer-card__header">
+                  <div>
+                    <p className="customer-page-header__eyebrow">Bookings</p>
+                    <h2>Reservation ledger</h2>
+                  </div>
+                </div>
+                <div className="customer-list-stack">
+                  {bookings.slice(0, 12).map((booking) => (
+                    <article className="customer-list-card" key={booking.bookingId}>
+                      <div className="customer-card__header">
+                        <div>
+                          <strong>Booking #{booking.bookingId}</strong>
+                          <p>{displayBookingLabel(booking)}</p>
+                        </div>
+                        <OpsStatusTag status={booking.status} />
+                      </div>
+                    </article>
+                  ))}
+                  {bookings.length === 0 ? <p className="customer-empty-copy">No reservation ledger entries yet.</p> : null}
+                </div>
+              </article>
+            </>
+          ) : null}
+        </div>
+      </main>
+
+      <nav className="ops-mobile-bottomnav">
+        <OpsNavButton active={activeSection === 'fleet'} icon={<FleetIcon />} label="Fleet" onClick={() => setActiveSection('fleet')} />
+        <OpsNavButton active={activeSection === 'tickets'} count={openTickets.length + reviewQueue.length} icon={<TicketsIcon />} label="Tickets" onClick={() => setActiveSection('tickets')} />
+        <OpsNavButton active={activeSection === 'inbox'} count={opsNotifications.length} icon={<InboxIcon />} label="Inbox" onClick={() => setActiveSection('inbox')} />
+        <OpsNavButton active={activeSection === 'actions'} icon={<ActionsIcon />} label="Actions" onClick={() => setActiveSection('actions')} />
+        <OpsNavButton active={activeSection === 'billing'} icon={<BillingIcon />} label="Billing" onClick={() => setActiveSection('billing')} />
+      </nav>
     </div>
   )
 }

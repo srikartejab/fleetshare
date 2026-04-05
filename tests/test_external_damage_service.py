@@ -157,24 +157,11 @@ def test_external_damage_service_allows_text_only_mock_testing(monkeypatch):
             "detectedDamage": ["major exterior damage"],
         },
     ]
-    assert published_events == [
-        (
-            "incident.external_damage_detected",
-            {
-                "recordId": 321,
-                "bookingId": 112,
-                "vehicleId": 6,
-                "userId": "user-damage",
-                "severity": "SEVERE",
-                "damageType": "major exterior damage",
-                "recommendedAction": "Immediate inspection and customer refund",
-            },
-        )
-    ]
+    assert published_events == []
     assert vehicle_updates == [(6, "UNDER_INSPECTION")]
 
 
-def test_external_damage_service_blocks_severe_damage_and_publishes_incident(monkeypatch):
+def test_external_damage_service_blocks_severe_damage_without_publishing_incident(monkeypatch):
     record_updates: list[dict] = []
     published_events: list[tuple[str, dict]] = []
     vehicle_updates: list[tuple[int, str]] = []
@@ -219,20 +206,7 @@ def test_external_damage_service_blocks_severe_damage_and_publishes_incident(mon
         }
     ]
     assert vehicle_updates == [(9, "UNDER_INSPECTION")]
-    assert published_events == [
-        (
-            "incident.external_damage_detected",
-            {
-                "recordId": 456,
-                "bookingId": 202,
-                "vehicleId": 9,
-                "userId": "user-2",
-                "severity": "SEVERE",
-                "damageType": "major exterior damage",
-                "recommendedAction": "Immediate inspection and customer refund",
-            },
-        )
-    ]
+    assert published_events == []
 
 
 def test_external_damage_service_allows_trip_start_for_moderate_damage(monkeypatch):
@@ -284,7 +258,7 @@ def test_external_damage_service_allows_trip_start_for_moderate_damage(monkeypat
     assert vehicle_updates == []
 
 
-def test_customer_cancel_for_moderate_damage_publishes_incident(monkeypatch):
+def test_customer_cancel_for_moderate_damage_marks_blocked_without_publishing_incident(monkeypatch):
     record_updates: list[dict] = []
     published_events: list[tuple[str, dict]] = []
     vehicle_updates: list[tuple[int, str]] = []
@@ -326,22 +300,11 @@ def test_customer_cancel_for_moderate_damage_publishes_incident(monkeypatch):
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "CANCELLATION_REQUESTED"
+    assert payload["reviewState"] == "EXTERNAL_BLOCKED"
+    assert payload["detectedDamage"] == ["possible body damage"]
     assert record_updates == [{"reviewState": "EXTERNAL_BLOCKED"}]
     assert vehicle_updates == [(11, "UNDER_INSPECTION")]
-    assert published_events == [
-        (
-            "incident.external_damage_detected",
-            {
-                "recordId": 789,
-                "bookingId": 303,
-                "vehicleId": 11,
-                "userId": "user-3",
-                "severity": "MODERATE",
-                "damageType": "possible body damage",
-                "recommendedAction": "Customer requested cancellation after moderate external damage finding",
-            },
-        )
-    ]
+    assert published_events == []
 
 
 def test_post_trip_damage_service_records_follow_up_without_blocking_end_trip(monkeypatch):

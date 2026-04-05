@@ -119,6 +119,17 @@ def sorted_candidates(candidates: list[dict]) -> list[dict]:
     )
 
 
+def pending_reconciliation_candidates(settings, user_id: str, active_billing_cycle_id: str, booking_id: int | None = None) -> list[dict]:
+    params = {"userId": user_id, "billingCycleId": active_billing_cycle_id}
+    if booking_id is not None:
+        params["bookingId"] = booking_id
+    pending = get_json(
+        f"{settings.booking_service_url}/bookings/reconciliation-pending",
+        params,
+    )
+    return sorted_candidates(pending.get("reconciliationCandidates", []))
+
+
 def build_completion_message(candidate: dict, rerate: dict) -> str:
     message_parts = []
     if float(rerate.get("eligibleIncludedHours", 0)) > 0:
@@ -132,18 +143,18 @@ def build_completion_message(candidate: dict, rerate: dict) -> str:
     return f"Booking {candidate['bookingId']} was re-rated after renewal. {'; '.join(message_parts)}."
 
 
-def process_pending_reconciliations(settings, user_id: str, active_billing_cycle_id: str) -> int:
-    pending = get_json(
-        f"{settings.booking_service_url}/bookings/reconciliation-pending",
-        {"userId": user_id, "billingCycleId": active_billing_cycle_id},
-    )
+def process_pending_reconciliations(
+    settings,
+    user_id: str,
+    active_billing_cycle_id: str,
+    booking_id: int | None = None,
+) -> int:
     processed = 0
-    for candidate in sorted_candidates(pending.get("reconciliationCandidates", [])):
-        latest_booking = get_json(f"{settings.booking_service_url}/booking/{candidate['bookingId']}")
-        if not latest_booking.get("refundPendingOnRenewal"):
+    for candidate in pending_reconciliation_candidates(settings, user_id, active_billing_cycle_id, booking_id):
+        if not candidate.get("refundPendingOnRenewal"):
             continue
 
-        trip_id = latest_booking.get("tripId")
+        trip_id = candidate.get("tripId")
         if not trip_id:
             continue
 
@@ -151,15 +162,14 @@ def process_pending_reconciliations(settings, user_id: str, active_billing_cycle
         if trip.get("status") != "ENDED" or not trip.get("endedAt"):
             continue
 
-        usage = get_json(f"{settings.trip_service_url}/trips/{trip_id}/post-midnight-usage")
         rerate = post_json(
             f"{settings.pricing_service_url}/pricing/re-rate-renewed-booking",
             {
-                "bookingId": latest_booking["bookingId"],
+                "bookingId": candidate["bookingId"],
                 "tripId": trip_id,
                 "userId": user_id,
                 "newBillingCycleId": active_billing_cycle_id,
-                "actualPostMidnightHours": usage["actualPostMidnightHours"],
+                "actualPostMidnightHours": trip.get("actualPostMidnightHours") or 0.0,
             },
         )
 
@@ -167,7 +177,7 @@ def process_pending_reconciliations(settings, user_id: str, active_billing_cycle
             publish_event(
                 "payment.refund_required",
                 {
-                    "bookingId": latest_booking["bookingId"],
+                    "bookingId": candidate["bookingId"],
                     "tripId": trip_id,
                     "userId": user_id,
                     "refundAmount": rerate["refundAmount"],
@@ -176,12 +186,9 @@ def process_pending_reconciliations(settings, user_id: str, active_billing_cycle
             )
 
         patch_json(
-            f"{settings.booking_service_url}/booking/{latest_booking['bookingId']}/financials",
-            {"finalPrice": rerate["finalPrice"]},
-        )
-        patch_json(
-            f"{settings.booking_service_url}/booking/{latest_booking['bookingId']}/reconciliation-status",
+            f"{settings.booking_service_url}/booking/{candidate['bookingId']}/reconciliation-complete",
             {
+                "finalPrice": rerate["finalPrice"],
                 "refund_pending_on_renewal": False,
                 "reconciliationStatus": "COMPLETED",
             },
@@ -191,11 +198,11 @@ def process_pending_reconciliations(settings, user_id: str, active_billing_cycle
             publish_event(
                 "billing.refund_adjustment_completed",
                 {
-                    "bookingId": latest_booking["bookingId"],
+                    "bookingId": candidate["bookingId"],
                     "tripId": trip_id,
                     "userId": user_id,
                     "subject": "Billing adjustment completed",
-                    "message": build_completion_message(latest_booking, rerate),
+                    "message": build_completion_message(candidate, rerate),
                 },
             )
         processed += 1
@@ -209,22 +216,13 @@ def handle_renewal_event(event: dict):
         return
 
     try:
-        current_summary = fetch_customer_summary(settings, payload["userId"])
-        target_billing_cycle_id = payload.get("newBillingCycleId")
-        if not target_billing_cycle_id or target_billing_cycle_id == "next":
-            target_billing_cycle_id = billing_cycle_id_for_date(
-                date.fromisoformat(current_summary["renewalDate"]) + relativedelta(months=1)
-            )
-
-        if active_billing_cycle_id_from_summary(current_summary) != target_billing_cycle_id:
-            renewal_result = post_json(
-                f"{settings.pricing_service_url}/pricing/customers/{payload['userId']}/renewal",
-                {"newBillingCycleId": target_billing_cycle_id},
-            )
-            active_billing_cycle_id = renewal_result.get("billingCycleId", target_billing_cycle_id)
-        else:
-            active_billing_cycle_id = target_billing_cycle_id
-
+        renewal_result = post_json(
+            f"{settings.pricing_service_url}/pricing/customers/{payload['userId']}/renewal",
+            {"newBillingCycleId": payload.get("newBillingCycleId", "next")},
+        )
+        active_billing_cycle_id = renewal_result.get("billingCycleId")
+        if not active_billing_cycle_id:
+            raise RuntimeError("Pricing renewal response did not include billingCycleId")
         process_pending_reconciliations(settings, payload["userId"], active_billing_cycle_id)
     except Exception as exc:
         mark_renewal_outcome(event["event_id"], status="FAILED", last_error=str(exc))
@@ -244,7 +242,7 @@ def handle_trip_ended_event(event: dict):
     if booking.get("pricingSnapshot", {}).get("nextBillingCycleId") != active_billing_cycle_id:
         return
 
-    process_pending_reconciliations(settings, payload["userId"], active_billing_cycle_id)
+    process_pending_reconciliations(settings, payload["userId"], active_billing_cycle_id, booking_id=payload["bookingId"])
 
 
 def handle_event(event: dict):

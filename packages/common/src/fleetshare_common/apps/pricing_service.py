@@ -92,6 +92,23 @@ class DisruptionCompensationPayload(BaseModel):
     reason: str = "VEHICLE_UNAVAILABLE"
 
 
+class PreTripCancellationBooking(BaseModel):
+    bookingId: int
+    userId: str
+    startTime: datetime
+    endTime: datetime
+    displayedPrice: float = 0.0
+    capturedCashAmount: float = 0.0
+    includedHoursApplied: float = 0.0
+    provisionalPostMidnightHours: float = 0.0
+
+
+class PreTripCancellationCompensationPayload(BaseModel):
+    affectedBookings: list[PreTripCancellationBooking]
+    reason: str = "VEHICLE_UNAVAILABLE"
+    apologyCredit: float = APOLOGY_CREDIT
+
+
 def seed_customers():
     today = utcnow().date()
     with Session(engine) as db:
@@ -177,9 +194,13 @@ def billing_cycle_id_for_renewal_date(renewal_date: date) -> str:
     return renewal_date.strftime("%Y-%m")
 
 
+def next_billing_cycle_id_for_renewal_date(renewal_date: date) -> str:
+    return billing_cycle_id_for_renewal_date(renewal_date + relativedelta(months=1))
+
+
 def quote_to_dict(user_id: str, quote, profile: CustomerProfile) -> dict:
     current_cycle_id = billing_cycle_id_for_renewal_date(profile.renewal_date)
-    next_cycle_id = billing_cycle_id_for_renewal_date(profile.renewal_date + relativedelta(months=1))
+    next_cycle_id = next_billing_cycle_id_for_renewal_date(profile.renewal_date)
     return {
         "userId": user_id,
         "estimatedPrice": quote.estimated_price,
@@ -258,6 +279,10 @@ def ledger_entry_to_dict(ledger: UsageLedger) -> dict:
     }
 
 
+def _hours_between(start: datetime, end: datetime) -> float:
+    return round(max((end - start).total_seconds() / 3600.0, 0.0), 2)
+
+
 @app.get("/pricing/customers")
 def list_customers(db: Session = Depends(get_db)):
     return [summary_from_profile(profile) for profile in db.query(CustomerProfile).order_by(CustomerProfile.user_id).all()]
@@ -283,7 +308,21 @@ def get_customer_ledger(user_id: str, db: Session = Depends(get_db)):
 @app.post("/pricing/customers/{user_id}/renewal")
 def apply_customer_renewal(user_id: str, payload: RenewalPayload, db: Session = Depends(get_db)):
     profile = get_profile_or_404(db, user_id)
-    previous_billing_cycle_id = billing_cycle_id_for_renewal_date(profile.renewal_date)
+    current_billing_cycle_id = billing_cycle_id_for_renewal_date(profile.renewal_date)
+    next_billing_cycle_id = next_billing_cycle_id_for_renewal_date(profile.renewal_date)
+    target_billing_cycle_id = payload.newBillingCycleId if payload.newBillingCycleId not in {"", "next"} else next_billing_cycle_id
+
+    if target_billing_cycle_id == current_billing_cycle_id:
+        return {
+            **summary_from_profile(profile),
+            "billingCycleId": current_billing_cycle_id,
+            "previousBillingCycleId": current_billing_cycle_id,
+            "idempotent": True,
+        }
+    if target_billing_cycle_id != next_billing_cycle_id:
+        raise HTTPException(status_code=400, detail="Requested billing cycle is inconsistent with the active renewal window")
+
+    previous_billing_cycle_id = current_billing_cycle_id
     profile.hours_used_this_cycle = 0.0
     profile.renewal_date = profile.renewal_date + relativedelta(months=1)
     db.commit()
@@ -291,6 +330,7 @@ def apply_customer_renewal(user_id: str, payload: RenewalPayload, db: Session = 
         **summary_from_profile(profile),
         "billingCycleId": billing_cycle_id_for_renewal_date(profile.renewal_date),
         "previousBillingCycleId": previous_billing_cycle_id,
+        "idempotent": False,
     }
 
 
@@ -413,6 +453,79 @@ def disruption_compensation(payload: DisruptionCompensationPayload):
         "affectedUsers": sorted({item["userId"] for item in adjustments}),
         "totalRefundAmount": round(sum(item["refundAmount"] for item in adjustments), 2),
         "totalDiscountAmount": round(sum(item["discountAmount"] for item in adjustments), 2),
+    }
+
+
+@app.post("/pricing/pre-trip-cancellation-compensation")
+def pre_trip_cancellation_compensation(payload: PreTripCancellationCompensationPayload, db: Session = Depends(get_db)):
+    settlements = []
+    ledger_entries = []
+    for booking in payload.affectedBookings:
+        cash_refund_amount = round(max(booking.capturedCashAmount, 0.0), 2)
+        restored_included_hours = round(max(booking.includedHoursApplied, 0.0), 2)
+        discount_amount = round(max(payload.apologyCredit, 0.0), 2)
+        normalized_start = as_utc_naive(booking.startTime)
+        normalized_end = as_utc_naive(booking.endTime)
+        total_hours = _hours_between(normalized_start, normalized_end)
+        current_cycle_hours = round(max(total_hours - max(booking.provisionalPostMidnightHours, 0.0), 0.0), 2)
+        billable_hours = round(max(current_cycle_hours - restored_included_hours, 0.0), 2)
+
+        ledger = db.query(UsageLedger).filter(UsageLedger.booking_id == booking.bookingId).first()
+        ledger_created = False
+        if ledger is None and restored_included_hours > 0:
+            ledger = UsageLedger(
+                booking_id=booking.bookingId,
+                trip_id=None,
+                user_id=booking.userId,
+                start_time=normalized_start,
+                end_time=normalized_end,
+            )
+            db.add(ledger)
+            ledger_created = True
+
+        if ledger is not None:
+            ledger.trip_id = None
+            ledger.user_id = booking.userId
+            ledger.start_time = normalized_start
+            ledger.end_time = normalized_end
+            ledger.total_hours = total_hours
+            ledger.current_cycle_hours = current_cycle_hours
+            ledger.included_hours_applied = restored_included_hours
+            ledger.included_hours_after_renewal = restored_included_hours
+            ledger.billable_hours = billable_hours
+            ledger.provisional_post_renewal_hours = round(max(booking.provisionalPostMidnightHours, 0.0), 2)
+            ledger.provisional_charge = round(max(booking.displayedPrice, 0.0), 2)
+            ledger.base_charge = round(max(booking.displayedPrice, 0.0), 2)
+            ledger.final_charge = 0.0
+            ledger.refund_amount = cash_refund_amount
+            ledger.discount_amount = 0.0
+            ledger.renewal_pending = False
+            ledger.reconciliation_status = "RESTORED" if restored_included_hours > 0 else "NONE"
+
+        settlements.append(
+            {
+                "bookingId": booking.bookingId,
+                "userId": booking.userId,
+                "cashRefundAmount": cash_refund_amount,
+                "restoredIncludedHours": restored_included_hours,
+                "discountAmount": discount_amount,
+                "reconciliationStatus": ledger.reconciliation_status if ledger is not None else "NONE",
+                "ledgerCreated": ledger_created,
+            }
+        )
+
+        if ledger is not None:
+            ledger_entries.append(ledger)
+
+    db.commit()
+
+    return {
+        "settlements": settlements,
+        "ledgerEntries": [ledger_entry_to_dict(ledger) for ledger in ledger_entries],
+        "affectedUsers": sorted({item.userId for item in payload.affectedBookings}),
+        "totalRefundAmount": round(sum(item["cashRefundAmount"] for item in settlements), 2),
+        "totalDiscountAmount": round(sum(item["discountAmount"] for item in settlements), 2),
+        "totalRestoredIncludedHours": round(sum(item["restoredIncludedHours"] for item in settlements), 2),
     }
 
 

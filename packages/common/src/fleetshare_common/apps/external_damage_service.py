@@ -79,18 +79,6 @@ async def assess_external_damage(
         blocked = True
         warning = "Severe damage detected. Vehicle blocked."
         update_vehicle_status(vehicleId, "UNDER_INSPECTION")
-        publish_event(
-            "incident.external_damage_detected",
-            {
-                "recordId": record["recordId"],
-                "bookingId": bookingId,
-                "vehicleId": vehicleId,
-                "userId": userId,
-                "severity": assessment["severity"],
-                "damageType": ",".join(assessment["detectedDamage"]),
-                "recommendedAction": "Immediate inspection and customer refund",
-            },
-        )
     elif assessment["severity"] == "MODERATE":
         warning = "Moderate damage noted. You can still unlock the vehicle or cancel the booking to escalate it to ops."
     elif assessment["confidence"] < 0.55:
@@ -114,6 +102,7 @@ async def assess_external_damage(
         "tripStatus": "BLOCKED" if blocked else "CLEARED",
         "warningMessage": warning,
         "manualReview": review_state == "MANUAL_REVIEW",
+        "reviewState": review_state,
     }
 
 
@@ -217,22 +206,14 @@ def cancel_booking_for_external_damage(payload: ExternalDamageCancellationPayloa
         },
     )
     update_vehicle_status(payload.vehicleId, "UNDER_INSPECTION")
-    publish_event(
-        "incident.external_damage_detected",
-        {
-            "recordId": latest_inspection["recordId"],
-            "bookingId": payload.bookingId,
-            "vehicleId": payload.vehicleId,
-            "userId": payload.userId,
-            "severity": latest_inspection["severity"],
-            "damageType": ",".join(latest_inspection.get("detectedDamage") or ["possible body damage"]),
-            "recommendedAction": "Customer requested cancellation after moderate external damage finding",
-        },
-    )
     return {
         "bookingId": payload.bookingId,
         "vehicleId": payload.vehicleId,
         "recordId": latest_inspection["recordId"],
         "status": "CANCELLATION_REQUESTED",
-        "message": "Cancellation requested. Ops review, compensation, and notifications will follow through the incident workflow.",
+        "message": "Cancellation requested. FleetShare is finalizing the cancellation and compensation now.",
+        "warningMessage": "Moderate damage escalated. The booking will be cancelled and compensation processed.",
+        "severity": latest_inspection["severity"],
+        "reviewState": "EXTERNAL_BLOCKED",
+        "detectedDamage": latest_inspection.get("detectedDamage") or ["possible body damage"],
     }
