@@ -1,13 +1,17 @@
 from __future__ import annotations
-import os
-import json
+
 import base64
+import json
+import logging
+import os
 from typing import Any
 
 try:
     from openai import AzureOpenAI
 except ImportError:  # pragma: no cover - optional dependency for local mock testing
     AzureOpenAI = None
+
+logger = logging.getLogger("fleetshare.ai")
 
 # Mock fallback tokens
 SEVERE_TOKENS = ("broken", "crack", "cracked", "flat tire", "hazard", "leak", "major dent", "shattered", "severe")
@@ -26,6 +30,9 @@ CLEAR_TOKENS = (
     "nothing found",
 )
 TEXT_ONLY_BLOCK_TOKENS = ("damage", "damaged")
+MANUAL_REVIEW_REASON = "manual review required; AI assessment unavailable"
+MISSING_IMAGE_REASON = "manual review required; image evidence missing"
+
 
 def _normalize(text: str) -> str:
     return " ".join(text.lower().split())
@@ -72,72 +79,109 @@ def _mock_assessment_from_text(notes: str, *, text_only: bool = False) -> dict[s
         return {"severity": "MODERATE", "confidence": 0.55, "detectedDamage": ["requires manual review"]}
     return {"severity": "MODERATE", "confidence": 0.51, "detectedDamage": ["insufficient inspection detail"]}
 
-def assess_damage(notes: str, image_bytes_list: list[bytes] | None = None, mode: str = "mock") -> dict[str, Any]:
-    print(f"--- AI START: Mode is set to '{mode}' ---", flush=True)
 
-    if mode == "azure" and image_bytes_list and AzureOpenAI is not None:
-        try:
-            print("--- ANALYZING WITH GPT-4o-MINI ---", flush=True)
-            client = AzureOpenAI(
-                api_key= os.environ.get("AZURE_OPENAI_KEY"),
-                api_version="2024-02-15-preview",
-                azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT")
-            )
-            deployment_name = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini")
+def _manual_review_assessment(reason: str = MANUAL_REVIEW_REASON) -> dict[str, Any]:
+    return {
+        "severity": "MODERATE",
+        "confidence": 0.2,
+        "detectedDamage": [reason],
+    }
 
-            # Convert the raw image bytes to base64 for the prompt
-            base64_image = base64.b64encode(image_bytes_list[0]).decode('utf-8')
 
-            # The exact prompt instructing the AI
-            prompt = """
-            You are an expert car damage assessor. Analyze the image and return a JSON object with two keys:
-            1. "severity": Must be exactly one of the following:
-               - "NO_DAMAGE": Car looks clean, normal, or has no visible exterior damage.
-               - "SEVERE": Crushed body panels, bent or misaligned parts (like trunk lids or doors), broken light housings, shattered glass, deployed airbags, or major crashes.
-               - "MODERATE": Medium dents, deep scratches, scraped bumpers, or missing small non-critical parts.
-               - "MINOR": Small surface dents, light scratches, scuffs, or dirt.
-            2. "detectedDamage": A list of short strings describing the damage (e.g., ["crushed rear bumper", "smashed windshield"]). If no damage, return ["no visible exterior damage"].
-            Return ONLY valid JSON format.
-            """
+def _azure_openai_config() -> tuple[dict[str, str], list[str]]:
+    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT", "").strip()
+    api_key = os.getenv("AZURE_OPENAI_KEY", "").strip()
+    deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini").strip()
+    missing = []
+    if not endpoint:
+        missing.append("AZURE_OPENAI_ENDPOINT")
+    if not api_key:
+        missing.append("AZURE_OPENAI_KEY")
+    if not deployment:
+        missing.append("AZURE_OPENAI_DEPLOYMENT")
+    return {
+        "endpoint": endpoint,
+        "api_key": api_key,
+        "deployment": deployment,
+    }, missing
 
-            response = client.chat.completions.create(
-                model=deployment_name,
-                response_format={ "type": "json_object" },
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
-                            }
-                        ]
-                    }
-                ]
-            )
 
-            # Parse the JSON response from GPT
-            result_json = json.loads(response.choices[0].message.content)
-            print(f"GPT Output: {result_json}", flush=True)
+def _assess_damage_with_azure(notes: str, image_bytes_list: list[bytes] | None) -> dict[str, Any]:
+    config, missing = _azure_openai_config()
+    if not image_bytes_list:
+        logger.warning("Azure AI inspection requested without image evidence; forcing manual review")
+        return _manual_review_assessment(MISSING_IMAGE_REASON)
+    if AzureOpenAI is None:
+        logger.warning("Azure OpenAI SDK is unavailable; forcing manual review")
+        return _manual_review_assessment()
+    if missing:
+        logger.warning("Azure OpenAI config is incomplete; forcing manual review", extra={"missing": ",".join(missing)})
+        return _manual_review_assessment()
 
-            return _normalize_assessment(
+    try:
+        logger.info("Analyzing damage with Azure OpenAI", extra={"deployment": config["deployment"]})
+        client = AzureOpenAI(
+            api_key=config["api_key"],
+            api_version="2024-02-15-preview",
+            azure_endpoint=config["endpoint"],
+        )
+
+        base64_image = base64.b64encode(image_bytes_list[0]).decode("utf-8")
+        prompt = """
+        You are an expert car damage assessor. Analyze the image and return a JSON object with two keys:
+        1. "severity": Must be exactly one of the following:
+           - "NO_DAMAGE": Car looks clean, normal, or has no visible exterior damage.
+           - "SEVERE": Crushed body panels, bent or misaligned parts (like trunk lids or doors), broken light housings, shattered glass, deployed airbags, or major crashes.
+           - "MODERATE": Medium dents, deep scratches, scraped bumpers, or missing small non-critical parts.
+           - "MINOR": Small surface dents, light scratches, scuffs, or dirt.
+        2. "detectedDamage": A list of short strings describing the damage (e.g., ["crushed rear bumper", "smashed windshield"]). If no damage, return ["no visible exterior damage"].
+        Return ONLY valid JSON format.
+        """
+
+        response = client.chat.completions.create(
+            model=config["deployment"],
+            response_format={"type": "json_object"},
+            messages=[
                 {
-                    "severity": result_json.get("severity", "MODERATE"),
-                    "confidence": 0.95,
-                    "detectedDamage": result_json.get("detectedDamage", []),
-                },
-                notes,
-            )
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+                        },
+                    ],
+                }
+            ],
+        )
 
-        except Exception as e:
-            print(f"Azure OpenAI Error: {e}", flush=True)
-    elif mode == "azure" and image_bytes_list and AzureOpenAI is None:
-        print("--- AZURE OPENAI SDK NOT INSTALLED; USING MOCK ---", flush=True)
+        result_json = json.loads(response.choices[0].message.content)
+        logger.info("Azure OpenAI damage assessment completed")
+        return _normalize_assessment(
+            {
+                "severity": result_json.get("severity", "MODERATE"),
+                "confidence": 0.95,
+                "detectedDamage": result_json.get("detectedDamage", []),
+            },
+            notes,
+        )
+    except Exception:
+        logger.exception("Azure OpenAI damage assessment failed; forcing manual review")
+        return _manual_review_assessment()
+
+
+def assess_damage(notes: str, image_bytes_list: list[bytes] | None = None, mode: str = "mock") -> dict[str, Any]:
+    logger.info(
+        "Damage assessment requested",
+        extra={"mode": mode, "has_images": bool(image_bytes_list), "has_notes": bool(notes.strip())},
+    )
+
+    if mode == "azure":
+        return _assess_damage_with_azure(notes, image_bytes_list)
 
     if not image_bytes_list:
-        print("--- USING TEXT-ONLY MOCK FOR TESTING ---", flush=True)
+        logger.info("Using text-only mock damage assessment")
         return _normalize_assessment(_mock_assessment_from_text(notes, text_only=True), notes)
 
-    print("--- FALLING BACK TO TEXT MOCK ---", flush=True)
+    logger.info("Using image-backed mock damage assessment")
     return _normalize_assessment(_mock_assessment_from_text(notes), notes)

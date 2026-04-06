@@ -3,6 +3,7 @@ services:
     image: mysql:8.4
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-fleetshare_root}
+      TZ: ${TZ:-Asia/Singapore}
     ports:
       - "3306:3306"
     volumes:
@@ -15,6 +16,8 @@ services:
 
   rabbitmq:
     image: rabbitmq:3.13-management
+    environment:
+      TZ: ${TZ:-Asia/Singapore}
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -25,6 +28,7 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+      TZ: ${TZ:-Asia/Singapore}
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -33,6 +37,7 @@ services:
     image: adminer:4
     environment:
       ADMINER_DEFAULT_SERVER: mysql
+      TZ: ${TZ:-Asia/Singapore}
     ports:
       - "8080:8080"
     depends_on:
@@ -49,6 +54,7 @@ services:
       KONG_PROXY_ERROR_LOG: /dev/stderr
       KONG_ADMIN_ERROR_LOG: /dev/stderr
       KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      TZ: ${TZ:-Asia/Singapore}
     ports:
       - "8000:8000"
       - "8001:8001"
@@ -64,7 +70,9 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        VITE_API_BASE_URL: ${WEB_API_BASE_URL:-http://localhost:8000}
+        VITE_API_BASE_URL: ${WEB_API_BASE_URL:-}
+    environment:
+      TZ: ${TZ:-Asia/Singapore}
     ports:
       - "4173:80"
     depends_on:
@@ -77,6 +85,8 @@ services:
     command: python -m uvicorn fleetshare_common.apps.vehicle_service:app --host 0.0.0.0 --port 8000
     environment: &backend-env
       PYTHONPATH: /app/packages/common/src:/app
+      TZ: ${TZ:-Asia/Singapore}
+      BILLING_TIMEZONE: ${BILLING_TIMEZONE:-Asia/Singapore}
       RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}

@@ -18,7 +18,7 @@ from fleetshare_common.pricing import (
     rerate_after_renewal,
     trip_adjustment,
 )
-from fleetshare_common.timeutils import as_utc_naive, iso, utcnow
+from fleetshare_common.timeutils import as_utc_naive, billing_today, iso, utcnow
 
 app = create_app("Pricing Service", "Atomic pricing and re-rating service.")
 
@@ -110,7 +110,7 @@ class PreTripCancellationCompensationPayload(BaseModel):
 
 
 def seed_customers():
-    today = utcnow().date()
+    today = billing_today()
     with Session(engine) as db:
         if db.query(CustomerProfile).count():
             return

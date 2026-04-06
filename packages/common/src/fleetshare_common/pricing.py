@@ -1,19 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta
+
+from fleetshare_common.timeutils import as_billing_time, billing_timezone
 
 
 BASE_HOURLY_RATE = 20.0
 SUBSCRIPTION_INCLUDED_HOURS = 6.0
 APOLOGY_CREDIT = 8.0
-BILLING_TIMEZONE = timezone(timedelta(hours=8), name="SGT")
-
-
-def as_billing_time(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(BILLING_TIMEZONE)
 
 
 @dataclass
@@ -39,7 +34,7 @@ def hours_between(start: datetime, end: datetime) -> float:
 def post_midnight_hours(start: datetime, end: datetime) -> float:
     local_start = as_billing_time(start)
     local_end = as_billing_time(end)
-    midnight = datetime.combine(local_end.date(), time.min, tzinfo=BILLING_TIMEZONE)
+    midnight = datetime.combine(local_end.date(), time.min, tzinfo=billing_timezone())
     if local_start >= midnight:
         return hours_between(local_start, local_end)
     if local_end <= midnight:
@@ -53,7 +48,7 @@ def hours_after_renewal_boundary(start: datetime, end: datetime, renewal_date: d
 
     local_start = as_billing_time(start)
     local_end = as_billing_time(end)
-    boundary = datetime.combine(renewal_date + timedelta(days=1), time.min, tzinfo=BILLING_TIMEZONE)
+    boundary = datetime.combine(renewal_date + timedelta(days=1), time.min, tzinfo=billing_timezone())
     if local_end <= boundary:
         return 0.0
     if local_start >= boundary:

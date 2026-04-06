@@ -79,12 +79,12 @@ async def assess_external_damage(
         blocked = True
         warning = "Severe damage detected. Vehicle blocked."
         update_vehicle_status(vehicleId, "UNDER_INSPECTION")
-    elif assessment["severity"] == "MODERATE":
-        warning = "Moderate damage noted. You can still unlock the vehicle or cancel the booking to escalate it to ops."
     elif assessment["confidence"] < 0.55:
         review_state = "MANUAL_REVIEW"
         blocked = True
         warning = "Inspection details are incomplete. Add more evidence or request manual review."
+    elif assessment["severity"] == "MODERATE":
+        warning = "Moderate damage noted. You can still unlock the vehicle or cancel the booking to escalate it to ops."
     patch_json(
         f"{settings.record_service_url}/records/{record['recordId']}",
         {

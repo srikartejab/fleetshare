@@ -95,6 +95,32 @@ class _FakeDb:
         self.committed = True
 
 
+class _FakeSeedQuery:
+    def count(self):
+        return 0
+
+
+class _FakeSeedSession:
+    def __init__(self):
+        self.added = []
+        self.committed = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def query(self, _model):
+        return _FakeSeedQuery()
+
+    def add_all(self, rows):
+        self.added.extend(rows)
+
+    def commit(self):
+        self.committed = True
+
+
 def test_finalize_trip_pricing_returns_used_allowance_on_internal_fault(monkeypatch):
     profile = SimpleNamespace(
         user_id="user-1001",
@@ -127,6 +153,23 @@ def test_finalize_trip_pricing_returns_used_allowance_on_internal_fault(monkeypa
     assert result["allowanceHoursApplied"] == 1.0
     assert result["restoredIncludedHours"] == 1.0
     assert result["refundAmount"] == 10.0
+
+
+def test_seed_customers_uses_billing_today(monkeypatch):
+    fake_session = _FakeSeedSession()
+
+    monkeypatch.setattr(pricing_service, "Session", lambda _engine: fake_session)
+    monkeypatch.setattr(pricing_service, "billing_today", lambda: date(2026, 4, 1))
+
+    pricing_service.seed_customers()
+
+    assert fake_session.committed is True
+    assert [profile.renewal_date for profile in fake_session.added] == [
+        date(2026, 4, 1),
+        date(2026, 4, 9),
+        date(2026, 4, 15),
+        date(2026, 5, 1),
+    ]
 
 
 def test_finalize_trip_pricing_internal_fault_clears_renewal_pending_and_restores_allowance(monkeypatch):
