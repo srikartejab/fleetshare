@@ -204,7 +204,7 @@ def resolve_damage_recovery(payload: dict, *, reason: str, source_event_id: str 
                 "subject": "Vehicle disruption detected",
                 "message": (
                     f"Vehicle {payload['vehicleId']} is unavailable. "
-                    f"Booking {booking['bookingId']} was cancelled and compensation has been queued."
+                    f"Booking {booking['bookingId']} was cancelled and compensation is being processed."
                 ),
                 "primaryBookingCancelled": booking["bookingId"] == payload.get("bookingId"),
                 "futureBookingsCancelledCount": cancellation_breakdown["futureBookingsCancelledCount"] if booking["bookingId"] == payload.get("bookingId") else 0,

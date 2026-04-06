@@ -9,6 +9,15 @@ TestClient = pytest.importorskip("fastapi.testclient").TestClient
 from fleetshare_common.apps import external_damage_service
 
 
+@pytest.fixture(autouse=True)
+def default_mock_settings(monkeypatch):
+    monkeypatch.setattr(external_damage_service, "get_settings", lambda: type("Settings", (), {
+        "azure_vision_mode": "mock",
+        "record_service_url": "http://record-service:8000",
+        "booking_service_url": "http://booking-service:8000",
+    })())
+
+
 def test_mock_assessment_ignores_uploaded_filename_keywords():
     result = assess_damage("Vehicle exterior looks clean.", ["dent-fix-cost-estimate.jpg"])
 
@@ -62,6 +71,22 @@ def test_azure_mode_without_openai_config_forces_manual_review(monkeypatch):
         "severity": "MODERATE",
         "confidence": 0.2,
         "detectedDamage": ["manual review required; AI assessment unavailable"],
+    }
+
+
+def test_azure_mode_without_image_uses_text_only_fallback():
+    clean_result = assess_damage("clean", [], mode="azure")
+    damage_result = assess_damage("damage", [], mode="azure")
+
+    assert clean_result == {
+        "severity": "NO_DAMAGE",
+        "confidence": 0.98,
+        "detectedDamage": ["no visible exterior damage"],
+    }
+    assert damage_result == {
+        "severity": "SEVERE",
+        "confidence": 0.9,
+        "detectedDamage": ["major exterior damage"],
     }
 
 
@@ -169,6 +194,53 @@ def test_external_damage_service_keeps_clean_inspection_cleared(monkeypatch):
     ]
     assert published_events == []
     assert vehicle_updates == []
+
+
+def test_external_damage_service_omits_trip_id_for_pre_trip_record_ingest(monkeypatch):
+    captured_calls: list[dict] = []
+
+    def _fake_post_form_json(url, data=None, files=None):
+        captured_calls.append({"url": url, "data": data, "files": files})
+        return {"recordId": 901, "status": "PENDING_EXTERNAL"}
+
+    monkeypatch.setattr(external_damage_service, "post_form_json", _fake_post_form_json)
+    monkeypatch.setattr(external_damage_service, "patch_json", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(external_damage_service, "update_vehicle_status", lambda *_args, **_kwargs: None)
+
+    with TestClient(external_damage_service.app) as client:
+        response = client.post(
+            "/damage-assessment/external",
+            data={"bookingId": 301, "vehicleId": 8, "userId": "user-pretrip", "notes": "clean"},
+        )
+
+    assert response.status_code == 200
+    assert len(captured_calls) == 1
+    assert captured_calls[0]["url"] == "http://record-service:8000/records/ingest"
+    assert captured_calls[0]["data"]["bookingId"] == 301
+    assert "tripId" not in captured_calls[0]["data"]
+
+
+def test_external_damage_service_includes_trip_id_for_post_trip_record_ingest(monkeypatch):
+    captured_calls: list[dict] = []
+
+    def _fake_post_form_json(url, data=None, files=None):
+        captured_calls.append({"url": url, "data": data, "files": files})
+        return {"recordId": 902, "status": "PENDING_EXTERNAL"}
+
+    monkeypatch.setattr(external_damage_service, "post_form_json", _fake_post_form_json)
+    monkeypatch.setattr(external_damage_service, "patch_json", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(external_damage_service, "update_vehicle_status", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(external_damage_service, "publish_event", lambda *_args, **_kwargs: None)
+
+    with TestClient(external_damage_service.app) as client:
+        response = client.post(
+            "/damage-assessment/post-trip",
+            data={"bookingId": 302, "tripId": 77, "vehicleId": 8, "userId": "user-posttrip", "notes": "clean"},
+        )
+
+    assert response.status_code == 200
+    assert len(captured_calls) == 1
+    assert captured_calls[0]["data"]["tripId"] == 77
 
 
 def test_external_damage_service_allows_text_only_mock_testing(monkeypatch):

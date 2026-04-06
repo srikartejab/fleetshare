@@ -107,10 +107,11 @@ def _azure_openai_config() -> tuple[dict[str, str], list[str]]:
 
 
 def _assess_damage_with_azure(notes: str, image_bytes_list: list[bytes] | None) -> dict[str, Any]:
-    config, missing = _azure_openai_config()
     if not image_bytes_list:
-        logger.warning("Azure AI inspection requested without image evidence; forcing manual review")
-        return _manual_review_assessment(MISSING_IMAGE_REASON)
+        logger.info("Azure AI inspection requested without image evidence; falling back to text heuristic")
+        return _normalize_assessment(_mock_assessment_from_text(notes, text_only=True), notes)
+
+    config, missing = _azure_openai_config()
     if AzureOpenAI is None:
         logger.warning("Azure OpenAI SDK is unavailable; forcing manual review")
         return _manual_review_assessment()

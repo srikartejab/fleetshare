@@ -104,7 +104,7 @@ def process_end_trip(payload: EndTripPayload):
                 "tripId": payload.tripId,
                 "userIds": [payload.userId, "ops"],
                 "subject": "Trip ended with adjustment",
-                "message": f"Trip {payload.tripId} ended early and compensation has been queued.",
+                "message": f"Trip {payload.tripId} ended early and compensation is being processed.",
             },
         )
     return {

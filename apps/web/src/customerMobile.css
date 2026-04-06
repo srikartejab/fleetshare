@@ -286,6 +286,23 @@
   padding: 1.15rem;
 }
 
+.customer-card__header {
+  align-items: flex-start;
+  gap: 0.9rem;
+}
+
+.customer-card__header > * {
+  min-width: 0;
+}
+
+.customer-card__header p,
+.customer-card__header strong,
+.customer-list-card p,
+.customer-list-card strong {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .customer-hero-card,
 .customer-booking-card__top {
   display: grid;
@@ -472,6 +489,21 @@
   border-bottom: 1px solid var(--customer-line);
 }
 
+.customer-keyvalue-row > * {
+  min-width: 0;
+}
+
+.customer-keyvalue-row span {
+  flex: 0 0 5.5rem;
+}
+
+.customer-keyvalue-row strong {
+  flex: 1 1 auto;
+  text-align: right;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .customer-keyvalue-row:last-child {
   border-bottom: 0;
 }
@@ -596,6 +628,10 @@
 .customer-action-row {
   flex-wrap: wrap;
   gap: 0.8rem;
+}
+
+.customer-action-row > * {
+  min-width: 0;
 }
 
 .customer-form-stack label,

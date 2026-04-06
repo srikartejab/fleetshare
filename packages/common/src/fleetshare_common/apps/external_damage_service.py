@@ -42,18 +42,20 @@ def _create_record_with_evidence(
     notes: str,
     photo_payloads: list[tuple[str, bytes, str]],
 ) -> dict:
+    data = {
+        "bookingId": booking_id,
+        "vehicleId": vehicle_id,
+        "recordType": "EXTERNAL_DAMAGE",
+        "notes": notes,
+        "severity": "PENDING",
+        "reviewState": "PENDING_EXTERNAL",
+        "confidence": 0.0,
+    }
+    if trip_id is not None:
+        data["tripId"] = trip_id
     return post_form_json(
         f"{settings.record_service_url}/records/ingest",
-        data={
-            "bookingId": booking_id,
-            "tripId": trip_id,
-            "vehicleId": vehicle_id,
-            "recordType": "EXTERNAL_DAMAGE",
-            "notes": notes,
-            "severity": "PENDING",
-            "reviewState": "PENDING_EXTERNAL",
-            "confidence": 0.0,
-        },
+        data=data,
         files=[("photos", file_tuple) for file_tuple in photo_payloads],
     )
 

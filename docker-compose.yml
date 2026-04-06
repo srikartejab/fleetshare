@@ -22,6 +22,8 @@ x-backend-env: &backend-env
   TRIP_SERVICE_URL: http://trip-service:8000
   RECORD_SERVICE_URL: http://record-service:8000
   MAINTENANCE_SERVICE_URL: http://maintenance-service:8000
+  MAINTENANCE_BACKEND_MODE: ${MAINTENANCE_BACKEND_MODE:-outsystems}
+  OUTSYSTEMS_MAINTENANCE_BASE_URL: ${OUTSYSTEMS_MAINTENANCE_BASE_URL:-https://personal-1p5qci9q.outsystemscloud.com/MaintenanceService/rest/maintenance}
   PRICING_SERVICE_URL: http://pricing-service:8000
   PAYMENT_SERVICE_URL: http://payment-service:8000
   NOTIFICATION_SERVICE_URL: http://notification-service:8000

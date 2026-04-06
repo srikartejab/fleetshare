@@ -45,6 +45,40 @@ def test_record_ingest_stores_uploaded_evidence_in_record_service(monkeypatch):
     assert records[0]["evidenceUrls"] == uploaded_keys
 
 
+def test_record_ingest_accepts_pre_trip_form_without_trip_id(monkeypatch):
+    uploaded_keys: list[str] = []
+    monkeypatch.setattr(
+        record_service,
+        "upload_bytes",
+        lambda key, raw, content_type="application/octet-stream": uploaded_keys.append(key) or key,
+    )
+    record_service.initialize_schema_with_retry(record_service.Base.metadata)
+    with SessionLocal() as db:
+        db.query(record_service.Record).delete()
+        db.commit()
+
+    with TestClient(record_service.app) as client:
+        response = client.post(
+            "/records/ingest",
+            data={
+                "bookingId": "14",
+                "vehicleId": "4",
+                "recordType": "EXTERNAL_DAMAGE",
+                "notes": "Vehicle looks clean",
+                "severity": "PENDING",
+                "reviewState": "PENDING_EXTERNAL",
+            },
+        )
+        record_id = response.json()["recordId"]
+        records = client.get("/records", params={"bookingId": 14}).json()
+
+    assert response.status_code == 200
+    assert len(records) == 1
+    assert records[0]["recordId"] == record_id
+    assert records[0]["tripId"] is None
+    assert records[0]["evidenceUrls"] == []
+
+
 def test_record_evidence_download_returns_binary_payload(monkeypatch):
     monkeypatch.setattr(record_service, "download_bytes", lambda key: (b"evidence-image", "image/jpeg"))
     record_service.initialize_schema_with_retry(record_service.Base.metadata)

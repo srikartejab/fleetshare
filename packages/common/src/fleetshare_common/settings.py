@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     trip_service_url: str = "http://trip-service:8000"
     record_service_url: str = "http://record-service:8000"
     maintenance_service_url: str = "http://maintenance-service:8000"
+    maintenance_backend_mode: str = "outsystems"
+    outsystems_maintenance_base_url: str = "https://personal-1p5qci9q.outsystemscloud.com/MaintenanceService/rest/maintenance"
+    outsystems_maintenance_timeout_seconds: int = 20
     pricing_service_url: str = "http://pricing-service:8000"
     payment_service_url: str = "http://payment-service:8000"
     notification_service_url: str = "http://notification-service:8000"
