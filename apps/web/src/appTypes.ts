@@ -1,5 +1,8 @@
-export const apiBase = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+const configuredApiBase = import.meta.env.VITE_API_BASE_URL?.trim()
+export const apiBase = configuredApiBase ? configuredApiBase.replace(/\/$/, '') : ''
 export const customerStorageKey = 'fleetshare.activeUserId'
+const BILLING_TIMEZONE = 'Asia/Singapore'
+const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
 
 export type CustomerSummary = {
   userId: string
@@ -457,6 +460,12 @@ function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
+function parseDateOnly(value: string) {
+  const match = DATE_ONLY_PATTERN.exec(value)
+  if (!match) return null
+  return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12))
+}
+
 export async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
   const method = (options?.method ?? 'GET').toUpperCase()
   const retryableStatuses = new Set([404, 408, 429, 502, 503, 504])
@@ -500,9 +509,27 @@ export function formatSeverityLabel(value?: string | null) {
   return value.replaceAll('_', ' ')
 }
 
+export function formatDateOnly(value?: string | null) {
+  if (!value) return 'N/A'
+  const parsedDate = parseDateOnly(value)
+  if (!parsedDate) return formatDate(value)
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: BILLING_TIMEZONE,
+  }).format(parsedDate)
+}
+
 export function formatDate(value?: string | null) {
   if (!value) return 'N/A'
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value))
+  const parsedDate = parseDateOnly(value)
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: parsedDate ? BILLING_TIMEZONE : undefined,
+  }).format(parsedDate ?? new Date(value))
 }
 
 export function formatDateTime(value?: string | null) {
@@ -516,8 +543,10 @@ export function formatDateTime(value?: string | null) {
 }
 
 export function formatShortDate(value: string) {
+  const parsedDate = parseDateOnly(value)
   return new Intl.DateTimeFormat(undefined, {
     day: 'numeric',
     month: 'short',
-  }).format(new Date(value))
+    timeZone: parsedDate ? BILLING_TIMEZONE : undefined,
+  }).format(parsedDate ?? new Date(value))
 }

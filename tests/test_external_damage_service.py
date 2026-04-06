@@ -51,6 +51,90 @@ def test_mock_assessment_treats_good_condition_as_no_damage():
     }
 
 
+def test_azure_mode_without_openai_config_forces_manual_review(monkeypatch):
+    monkeypatch.delenv("AZURE_OPENAI_ENDPOINT", raising=False)
+    monkeypatch.delenv("AZURE_OPENAI_KEY", raising=False)
+    monkeypatch.delenv("AZURE_OPENAI_DEPLOYMENT", raising=False)
+
+    result = assess_damage("Rear door dent visible.", [b"fake-image"], mode="azure")
+
+    assert result == {
+        "severity": "MODERATE",
+        "confidence": 0.2,
+        "detectedDamage": ["manual review required; AI assessment unavailable"],
+    }
+
+
+def test_azure_mode_provider_failure_forces_manual_review(monkeypatch):
+    class _BrokenCompletions:
+        def create(self, **_kwargs):
+            raise RuntimeError("boom")
+
+    class _BrokenChat:
+        def __init__(self):
+            self.completions = _BrokenCompletions()
+
+    class _BrokenAzureClient:
+        def __init__(self, **_kwargs):
+            self.chat = _BrokenChat()
+
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com/")
+    monkeypatch.setenv("AZURE_OPENAI_KEY", "test-key")
+    monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4.1-mini")
+    monkeypatch.setattr("fleetshare_common.ai.AzureOpenAI", _BrokenAzureClient)
+
+    result = assess_damage("Rear door dent visible.", [b"fake-image"], mode="azure")
+
+    assert result == {
+        "severity": "MODERATE",
+        "confidence": 0.2,
+        "detectedDamage": ["manual review required; AI assessment unavailable"],
+    }
+
+
+def test_external_damage_service_marks_azure_fallback_as_manual_review(monkeypatch):
+    record_updates: list[dict] = []
+
+    monkeypatch.setattr(external_damage_service, "ensure_bucket", lambda: None)
+    monkeypatch.setattr(
+        external_damage_service,
+        "upload_bytes",
+        lambda key, raw, content_type="application/octet-stream": f"minio://{key}",
+    )
+    monkeypatch.setattr(external_damage_service, "post_json", lambda url, payload: {"recordId": 777})
+    monkeypatch.setattr(external_damage_service, "patch_json", lambda url, payload: record_updates.append(payload))
+    monkeypatch.setattr(external_damage_service, "update_vehicle_status", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(external_damage_service, "get_settings", lambda: type("Settings", (), {
+        "azure_vision_mode": "azure",
+        "record_service_url": "http://record-service:8000",
+    })())
+    monkeypatch.delenv("AZURE_OPENAI_ENDPOINT", raising=False)
+    monkeypatch.delenv("AZURE_OPENAI_KEY", raising=False)
+    monkeypatch.delenv("AZURE_OPENAI_DEPLOYMENT", raising=False)
+
+    with TestClient(external_damage_service.app) as client:
+        response = client.post(
+            "/damage-assessment/external",
+            data={"bookingId": 909, "vehicleId": 31, "userId": "user-azure", "notes": "Rear door dent visible."},
+            files=[("photos", ("walkaround.jpg", b"fake-image", "image/jpeg"))],
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["tripStatus"] == "BLOCKED"
+    assert payload["manualReview"] is True
+    assert payload["reviewState"] == "MANUAL_REVIEW"
+    assert payload["warningMessage"] == "Inspection details are incomplete. Add more evidence or request manual review."
+    assert record_updates == [
+        {
+            "severity": "MODERATE",
+            "reviewState": "MANUAL_REVIEW",
+            "confidence": 0.2,
+            "detectedDamage": ["manual review required; AI assessment unavailable"],
+        }
+    ]
+
+
 def test_external_damage_service_keeps_clean_inspection_cleared(monkeypatch):
     record_updates: list[dict] = []
     published_events: list[tuple[str, dict]] = []

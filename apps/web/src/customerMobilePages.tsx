@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useEffectEvent, useRef, useState } from 'rea
 import { Link, NavLink, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import {
-  formatDate,
+  formatDateOnly,
   formatDateTime,
   formatHours,
   formatMoney,
@@ -84,10 +84,7 @@ function vehicleTypeLabel(vehicle?: Vehicle | null) {
 }
 
 function formatRenewalDisplayDate(value?: string | null) {
-  if (!value) return 'N/A'
-  const date = new Date(value)
-  date.setDate(date.getDate() + 1)
-  return formatDate(date.toISOString())
+  return formatDateOnly(value)
 }
 
 function bookingChargeNotice(

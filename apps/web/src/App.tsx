@@ -278,7 +278,7 @@ function App() {
         monthlyIncludedHours: 0,
         hoursUsedThisCycle: 0,
         remainingHoursThisCycle: 0,
-        renewalDate: new Date().toISOString(),
+        renewalDate: new Date().toISOString().slice(0, 10),
         hourlyRate: 0,
       },
       bookings: [],

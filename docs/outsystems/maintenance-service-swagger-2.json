@@ -1,0 +1,219 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Maintenance Service",
+    "description": "Atomic maintenance ticket service.",
+    "version": "1.0.0"
+  },
+  "basePath": "/",
+  "schemes": [
+    "https",
+    "http"
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/maintenance/tickets": {
+      "get": {
+        "summary": "List maintenance tickets",
+        "operationId": "listTickets",
+        "responses": {
+          "200": {
+            "description": "Tickets ordered by newest first.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/MaintenanceTicketResponse"
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create maintenance ticket",
+        "operationId": "createTicket",
+        "parameters": [
+          {
+            "in": "body",
+            "name": "payload",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/TicketPayload"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Created ticket.",
+            "schema": {
+              "$ref": "#/definitions/MaintenanceTicketResponse"
+            }
+          }
+        }
+      }
+    },
+    "/maintenance/tickets/{ticket_id}": {
+      "get": {
+        "summary": "Get maintenance ticket by id",
+        "operationId": "getTicket",
+        "parameters": [
+          {
+            "name": "ticket_id",
+            "in": "path",
+            "required": true,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ticket found.",
+            "schema": {
+              "$ref": "#/definitions/MaintenanceTicketResponse"
+            }
+          },
+          "404": {
+            "description": "Ticket not found.",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "TicketPayload": {
+      "type": "object",
+      "required": [
+        "vehicleId",
+        "damageSeverity",
+        "damageType",
+        "recommendedAction"
+      ],
+      "properties": {
+        "vehicleId": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "damageSeverity": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "damageType": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "recommendedAction": {
+          "type": "string",
+          "maxLength": 255
+        },
+        "estimatedDurationHours": {
+          "type": "integer",
+          "format": "int32",
+          "default": 24
+        },
+        "recordId": {
+          "type": "integer",
+          "format": "int32",
+          "x-nullable": true
+        },
+        "bookingId": {
+          "type": "integer",
+          "format": "int32",
+          "x-nullable": true
+        },
+        "tripId": {
+          "type": "integer",
+          "format": "int32",
+          "x-nullable": true
+        },
+        "openedByEventType": {
+          "type": "string",
+          "maxLength": 128,
+          "x-nullable": true
+        }
+      }
+    },
+    "MaintenanceTicketResponse": {
+      "type": "object",
+      "required": [
+        "ticketId",
+        "vehicleId",
+        "damageSeverity",
+        "damageType",
+        "recommendedAction",
+        "estimatedDurationHours",
+        "status"
+      ],
+      "properties": {
+        "ticketId": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "vehicleId": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "damageSeverity": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "damageType": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "recommendedAction": {
+          "type": "string",
+          "maxLength": 255
+        },
+        "estimatedDurationHours": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "recordId": {
+          "type": "integer",
+          "format": "int32",
+          "x-nullable": true
+        },
+        "bookingId": {
+          "type": "integer",
+          "format": "int32",
+          "x-nullable": true
+        },
+        "tripId": {
+          "type": "integer",
+          "format": "int32",
+          "x-nullable": true
+        },
+        "openedByEventType": {
+          "type": "string",
+          "maxLength": 128,
+          "x-nullable": true
+        },
+        "status": {
+          "type": "string",
+          "maxLength": 64,
+          "default": "OPEN"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "x-nullable": true
+        }
+      }
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "properties": {
+        "detail": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

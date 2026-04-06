@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     minio_secure: bool = False
     kong_public_url: str = "http://localhost:8000"
     web_api_base_url: str = "http://localhost:8000"
+    billing_timezone: str = "Asia/Singapore"
     damage_booking_lookahead_hours: int = 336
     azure_vision_mode: str = "mock"
     azure_vision_endpoint: str = ""

@@ -2,7 +2,7 @@ import { type Dispatch, type ReactNode, type SetStateAction, useEffect, useState
 import { Link, NavLink, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import {
-  formatDate,
+  formatDateOnly,
   formatDateTime,
   formatHours,
   formatMoney,
@@ -76,7 +76,7 @@ export function LandingPage({
               </div>
               <div>
                 <span>Renewal</span>
-                <strong>{formatDate(customer.renewalDate)}</strong>
+                <strong>{formatDateOnly(customer.renewalDate)}</strong>
               </div>
             </div>
             <button
@@ -181,7 +181,7 @@ export function HomePage({
           </div>
           <div>
             <span>Renewal date</span>
-            <strong>{customerSummary ? formatDate(customerSummary.renewalDate) : '...'}</strong>
+            <strong>{customerSummary ? formatDateOnly(customerSummary.renewalDate) : '...'}</strong>
           </div>
         </div>
       </section>
@@ -355,7 +355,7 @@ export function DiscoverPage({
                 <div className="notice-card">
                   <strong>Renewal boundary detected</strong>
                   <p>
-                    {formatHours(vehicle.provisionalPostMidnightHours)} will be charged provisionally now and may be re-rated after renewal on {formatDate(vehicle.renewalDate)}.
+                    {formatHours(vehicle.provisionalPostMidnightHours)} will be charged provisionally now and may be re-rated after renewal on {formatDateOnly(vehicle.renewalDate)}.
                   </p>
                 </div>
               ) : null}
@@ -539,7 +539,7 @@ export function BookingDetailsPage({
           </div>
           <div>
             <span>Renewal date</span>
-            <strong>{customerSummary ? formatDate(customerSummary.renewalDate) : 'N/A'}</strong>
+            <strong>{customerSummary ? formatDateOnly(customerSummary.renewalDate) : 'N/A'}</strong>
           </div>
         </div>
       </section>
@@ -1180,7 +1180,7 @@ export function AccountPage({
             </div>
             <div>
               <span>Renews</span>
-              <strong>{formatDate(customerSummary?.renewalDate)}</strong>
+              <strong>{formatDateOnly(customerSummary?.renewalDate)}</strong>
             </div>
           </div>
         </article>

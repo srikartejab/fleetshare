@@ -50,6 +50,14 @@ Local default access:
 - MySQL through Adminer: system `MySQL`, server `mysql`, username `root`, password `fleetshare_root`
 - MySQL through Adminer: database can be left blank to browse all schemas, or set to a schema like `pricing_db`
 
+## Deployment Notes
+
+- Billing boundaries use `BILLING_TIMEZONE`, which defaults to `Asia/Singapore`. This controls renewal dates and post-midnight allowance logic even if the VM clock or container timezone differs.
+- The web app now defaults to same-origin API routing. Leave `WEB_API_BASE_URL` blank unless you explicitly want the frontend to call a different public API origin.
+- `APP_ENV` is informational only. The current runtime does not switch behavior based on `APP_ENV`.
+- MinIO remains the supported evidence store for this release. `AZURE_STORAGE_CONNECTION_STRING` is not used by the current code path.
+- `AZURE_VISION_MODE=azure` requires `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, and `AZURE_OPENAI_DEPLOYMENT`. If Azure AI is unavailable, the inspection flow will force manual review instead of silently using mock results.
+
 ## Demo Flow
 
 - Search and reserve a vehicle in the Customer view.
@@ -102,4 +110,4 @@ python scripts/run_scenario_tests.py --keep-up
 
 - `Vehicle Service` is implemented in Python first so the surrounding contracts stay stable; it is intentionally isolated so it can later be ported to OutSystems.
 - Payment and notifications are simulated but persisted.
-- Azure Computer Vision is represented by a mockable adapter inside the external damage workflow.
+- Azure OpenAI powers the production inspection path; local development can stay on `AZURE_VISION_MODE=mock`.
