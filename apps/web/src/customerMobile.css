@@ -21,6 +21,11 @@
   box-shadow: 0 0 0 1px rgba(30, 53, 86, 0.06), 0 28px 70px rgba(21, 42, 74, 0.2);
 }
 
+.customer-mobile-shell {
+  height: 100svh;
+  overflow: hidden;
+}
+
 .customer-mobile-shell.app-shell,
 .customer-entry-shell {
   padding: 0;
