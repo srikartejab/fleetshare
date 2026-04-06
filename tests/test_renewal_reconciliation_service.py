@@ -19,7 +19,6 @@ def test_handle_renewal_event_processes_candidates_without_redundant_booking_or_
     post_calls = []
     patch_calls = []
     published = []
-    outcomes = []
 
     def fake_get_json(url, params=None):
         get_calls.append((url, params))
@@ -54,12 +53,14 @@ def test_handle_renewal_event_processes_candidates_without_redundant_booking_or_
         raise AssertionError(f"Unexpected POST {url} {payload}")
 
     monkeypatch.setattr(renewal_reconciliation_service, "get_settings", _settings)
-    monkeypatch.setattr(renewal_reconciliation_service, "mark_renewal_processing", lambda event: True)
-    monkeypatch.setattr(renewal_reconciliation_service, "mark_renewal_outcome", lambda event_id, **kwargs: outcomes.append((event_id, kwargs)))
     monkeypatch.setattr(renewal_reconciliation_service, "get_json", fake_get_json)
     monkeypatch.setattr(renewal_reconciliation_service, "post_json", fake_post_json)
     monkeypatch.setattr(renewal_reconciliation_service, "patch_json", lambda url, payload: patch_calls.append((url, payload)))
-    monkeypatch.setattr(renewal_reconciliation_service, "publish_event", lambda event_type, payload: published.append((event_type, payload)))
+    monkeypatch.setattr(
+        renewal_reconciliation_service,
+        "publish_event",
+        lambda event_type, payload, *, event_id=None: published.append((event_type, payload, event_id)),
+    )
 
     renewal_reconciliation_service.handle_renewal_event(
         {
@@ -77,9 +78,26 @@ def test_handle_renewal_event_processes_candidates_without_redundant_booking_or_
             {"finalPrice": 0.0, "refund_pending_on_renewal": False, "reconciliationStatus": "COMPLETED"},
         )
     ]
-    assert ("payment.refund_required", {"bookingId": 11, "tripId": 21, "userId": "user-1001", "refundAmount": 24.0, "reason": "RENEWAL_RECONCILIATION"}) in published
-    assert any(event_type == "billing.refund_adjustment_completed" for event_type, _payload in published)
-    assert outcomes == [("evt-1", {"status": "COMPLETED"})]
+    assert (
+        "payment.refund_required",
+        {"bookingId": 11, "tripId": 21, "userId": "user-1001", "refundAmount": 24.0, "reason": "RENEWAL_RECONCILIATION"},
+        renewal_reconciliation_service._reconciliation_event_id(
+            "refund", booking_id=11, trip_id=21, billing_cycle_id="2026-05"
+        ),
+    ) in published
+    assert (
+        "billing.refund_adjustment_completed",
+        {
+            "bookingId": 11,
+            "tripId": 21,
+            "userId": "user-1001",
+            "subject": "Billing adjustment completed",
+            "message": "Booking 11 was re-rated after renewal. 1.0h moved into the new cycle allowance; SGD 24.00 refunded.",
+        },
+        renewal_reconciliation_service._reconciliation_event_id(
+            "notification", booking_id=11, trip_id=21, billing_cycle_id="2026-05"
+        ),
+    ) in published
 
 
 def test_handle_trip_ended_event_targets_only_the_ended_booking(monkeypatch):

@@ -1,4 +1,5 @@
 import pytest
+import httpx
 
 TestClient = pytest.importorskip("fastapi.testclient").TestClient
 
@@ -21,7 +22,7 @@ def test_ops_console_dashboard_enriches_operational_views(monkeypatch):
         "/bookings": [{"bookingId": 10, "userId": "user-1001", "vehicleId": 1, "pickupLocation": "Pasir Ris Hub"}],
         "/trips": [{"tripId": 20, "bookingId": 10, "vehicleId": 1}],
         "/maintenance/tickets": [{"ticketId": 30, "vehicleId": 1, "bookingId": 10, "recordId": 40}],
-        "/records": [{"recordId": 40, "vehicleId": 1, "bookingId": 10, "notes": "Front bumper dent", "evidenceUrls": ["https://img/1.jpg"]}],
+        "/records": [{"recordId": 40, "vehicleId": 1, "bookingId": 10, "notes": "Front bumper dent", "evidenceUrls": ["damage/40/front.jpg"]}],
         "/records/manual-review-queue": [{"recordId": 50, "vehicleId": 1, "bookingId": 10, "evidenceUrls": []}],
         "/payments": [{"paymentId": 60}],
         "/notifications": [{"notificationId": 70, "bookingId": 10, "tripId": 20, "payload": {"severity": "CRITICAL"}}],
@@ -59,7 +60,7 @@ def test_ops_console_ticket_detail_returns_linked_entities(monkeypatch):
         "/bookings": [{"bookingId": 10, "userId": "user-1001", "vehicleId": 1, "pickupLocation": "Pasir Ris Hub"}],
         "/trips": [{"tripId": 20, "bookingId": 10, "vehicleId": 1}],
         "/maintenance/tickets": [{"ticketId": 30, "vehicleId": 1, "bookingId": 10, "tripId": 20, "recordId": 40}],
-        "/records": [{"recordId": 40, "vehicleId": 1, "bookingId": 10, "notes": "Front bumper dent", "evidenceUrls": ["https://img/1.jpg"]}],
+        "/records": [{"recordId": 40, "vehicleId": 1, "bookingId": 10, "notes": "Front bumper dent", "evidenceUrls": ["damage/40/front.jpg"]}],
         "/records/manual-review-queue": [],
         "/payments": [],
         "/notifications": [],
@@ -95,4 +96,46 @@ def test_ops_console_ticket_detail_returns_linked_entities(monkeypatch):
     assert payload["ticket"]["customerName"] == "Alicia Tan"
     assert payload["booking"]["bookingCode"] == "B-000010"
     assert payload["record"]["notes"] == "Front bumper dent"
-    assert payload["evidenceUrls"] == ["https://img/1.jpg"]
+    assert payload["evidenceUrls"] == ["/ops-console/tickets/30/evidence/0"]
+
+
+def test_ops_console_ticket_evidence_proxies_record_service_bytes(monkeypatch):
+    responses = {
+        "/vehicles": [],
+        "/pricing/customers": [],
+        "/bookings": [],
+        "/trips": [],
+        "/maintenance/tickets": [{"ticketId": 30, "vehicleId": 1, "recordId": 40}],
+        "/records": [{"recordId": 40, "vehicleId": 1, "evidenceUrls": ["damage/40/front.jpg"]}],
+        "/records/manual-review-queue": [],
+        "/payments": [],
+        "/notifications": [],
+    }
+
+    def fake_get_json(url, params=None):
+        if url.endswith("/maintenance/tickets/30"):
+            return {"ticketId": 30, "vehicleId": 1, "recordId": 40}
+        for suffix, payload in responses.items():
+            if url.endswith(suffix):
+                return payload
+        raise AssertionError(f"Unexpected URL {url}")
+
+    def fake_httpx_get(url, timeout):
+        assert url.endswith("/records/40/evidence/0")
+        return httpx.Response(
+            200,
+            content=b"image-bytes",
+            headers={"content-type": "image/jpeg", "content-disposition": 'inline; filename="front.jpg"'},
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(ops_console_service, "get_json", fake_get_json)
+    monkeypatch.setattr(ops_console_service.httpx, "get", fake_httpx_get)
+
+    with TestClient(ops_console_service.app) as client:
+        response = client.get("/ops-console/tickets/30/evidence/0")
+
+    assert response.status_code == 200
+    assert response.content == b"image-bytes"
+    assert response.headers["content-type"].startswith("image/jpeg")
+    assert response.headers["content-disposition"] == 'inline; filename="front.jpg"'

@@ -1,17 +1,15 @@
 from __future__ import annotations
 
 import re
+import threading
 from datetime import datetime, timedelta
 
 from fastapi import HTTPException
 from pydantic import BaseModel
-from sqlalchemy import DateTime, Integer, String, func
-from sqlalchemy.orm import Mapped, mapped_column
 
 from fleetshare_common.app import create_app
-from fleetshare_common.database import Base, initialize_schema_with_retry, session_scope
 from fleetshare_common.http import get_json, post_json
-from fleetshare_common.messaging import publish_event, start_consumer
+from fleetshare_common.messaging import publish_event, stable_event_id, start_consumer
 from fleetshare_common.settings import get_settings
 from fleetshare_common.timeutils import as_utc_naive, utcnow
 from fleetshare_common.vehicle_grpc import update_vehicle_status
@@ -20,15 +18,8 @@ app = create_app("Internal Damage Service", "Composite telemetry-backed internal
 
 OPS_USER_ID = "ops-maint-1"
 RECENT_WINDOW_MINUTES = 15
-
-
-class ProcessedInternalIncident(Base):
-    __tablename__ = "processed_internal_incidents"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    vehicle_id: Mapped[int] = mapped_column(Integer, index=True)
-    fault_fingerprint: Mapped[str] = mapped_column(String(128), index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+_recent_fault_cache: dict[tuple[int, str], datetime] = {}
+_recent_fault_lock = threading.Lock()
 
 
 class InternalDamagePayload(BaseModel):
@@ -43,7 +34,6 @@ class InternalDamagePayload(BaseModel):
 
 @app.on_event("startup")
 def startup_event():
-    initialize_schema_with_retry(Base.metadata)
     start_consumer("internal-damage-telemetry", ["vehicle.telemetry_alert"], handle_telemetry_event)
 
 
@@ -101,27 +91,18 @@ def has_open_ticket(settings, vehicle_id: int, fault_fingerprint: str) -> bool:
 
 def processed_recently(vehicle_id: int, fault_fingerprint: str) -> bool:
     cutoff = as_utc_naive(utcnow() - timedelta(minutes=RECENT_WINDOW_MINUTES))
-    with session_scope() as db:
-        existing = (
-            db.query(ProcessedInternalIncident)
-            .filter(
-                ProcessedInternalIncident.vehicle_id == vehicle_id,
-                ProcessedInternalIncident.fault_fingerprint == fault_fingerprint,
-                ProcessedInternalIncident.created_at >= cutoff,
-            )
-            .first()
-        )
-        return existing is not None
+    cache_key = (vehicle_id, fault_fingerprint)
+    with _recent_fault_lock:
+        stale_keys = [key for key, created_at in _recent_fault_cache.items() if created_at < cutoff]
+        for key in stale_keys:
+            _recent_fault_cache.pop(key, None)
+        existing = _recent_fault_cache.get(cache_key)
+        return existing is not None and existing >= cutoff
 
 
 def remember_processed(vehicle_id: int, fault_fingerprint: str):
-    with session_scope() as db:
-        db.add(
-            ProcessedInternalIncident(
-                vehicle_id=vehicle_id,
-                fault_fingerprint=fault_fingerprint,
-            )
-        )
+    with _recent_fault_lock:
+        _recent_fault_cache[(vehicle_id, fault_fingerprint)] = as_utc_naive(utcnow())
 
 
 def build_context(settings, payload: InternalDamagePayload) -> tuple[int | None, int | None, str | None]:
@@ -144,12 +125,43 @@ def build_context(settings, payload: InternalDamagePayload) -> tuple[int | None,
     return active_booking["bookingId"], active_booking.get("tripId"), active_booking["userId"]
 
 
-def process_internal_damage(payload: InternalDamagePayload, *, snapshot: dict | None = None) -> dict:
+def _incident_source_event_id(
+    payload: InternalDamagePayload,
+    *,
+    snapshot: dict,
+    booking_id: int | None,
+    trip_id: int | None,
+    fault_fingerprint: str,
+    source_event_id: str | None,
+) -> str:
+    if source_event_id:
+        return source_event_id
+    return stable_event_id(
+        "internal-damage",
+        payload.vehicleId,
+        booking_id,
+        trip_id,
+        fault_fingerprint,
+        snapshot.get("createdAt"),
+        payload.faultCode,
+        payload.notes,
+    )
+
+
+def process_internal_damage(payload: InternalDamagePayload, *, snapshot: dict | None = None, source_event_id: str | None = None) -> dict:
     settings = get_settings()
     booking_id, trip_id, user_id = build_context(settings, payload)
     snapshot = snapshot or get_latest_snapshot(settings, payload.vehicleId)
     severity, message = assess_fault(snapshot, payload)
     fault_fingerprint = normalize_fault_family(snapshot, payload)
+    resolved_source_event_id = _incident_source_event_id(
+        payload,
+        snapshot=snapshot,
+        booking_id=booking_id,
+        trip_id=trip_id,
+        fault_fingerprint=fault_fingerprint,
+        source_event_id=source_event_id,
+    )
 
     record = post_json(
         f"{settings.record_service_url}/records",
@@ -189,6 +201,7 @@ def process_internal_damage(payload: InternalDamagePayload, *, snapshot: dict | 
                     "recommendedAction": "Open maintenance ticket, cancel affected bookings, and guide customer to end trip safely.",
                     "incidentAt": snapshot.get("createdAt"),
                 },
+                event_id=resolved_source_event_id,
             )
             if trip_id and booking_id and user_id:
                 publish_event(
@@ -200,6 +213,7 @@ def process_internal_damage(payload: InternalDamagePayload, *, snapshot: dict | 
                         "subject": "Vehicle issue detected during trip",
                         "message": "A severe vehicle issue was detected. Stop at the nearest safe carpark and begin the end-trip flow.",
                     },
+                    event_id=stable_event_id("internal-damage", "trip-notification", resolved_source_event_id, booking_id, trip_id),
                 )
             remember_processed(payload.vehicleId, fault_fingerprint)
             incident_published = True
@@ -234,6 +248,7 @@ def handle_telemetry_event(event: dict):
             notes=payload.get("faultCode", ""),
         ),
         snapshot=payload,
+        source_event_id=event["event_id"],
     )
 
 

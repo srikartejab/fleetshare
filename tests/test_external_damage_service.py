@@ -95,13 +95,7 @@ def test_azure_mode_provider_failure_forces_manual_review(monkeypatch):
 def test_external_damage_service_marks_azure_fallback_as_manual_review(monkeypatch):
     record_updates: list[dict] = []
 
-    monkeypatch.setattr(external_damage_service, "ensure_bucket", lambda: None)
-    monkeypatch.setattr(
-        external_damage_service,
-        "upload_bytes",
-        lambda key, raw, content_type="application/octet-stream": f"minio://{key}",
-    )
-    monkeypatch.setattr(external_damage_service, "post_json", lambda url, payload: {"recordId": 777})
+    monkeypatch.setattr(external_damage_service, "_create_record_with_evidence", lambda *_args, **_kwargs: {"recordId": 777})
     monkeypatch.setattr(external_damage_service, "patch_json", lambda url, payload: record_updates.append(payload))
     monkeypatch.setattr(external_damage_service, "update_vehicle_status", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(external_damage_service, "get_settings", lambda: type("Settings", (), {
@@ -140,13 +134,7 @@ def test_external_damage_service_keeps_clean_inspection_cleared(monkeypatch):
     published_events: list[tuple[str, dict]] = []
     vehicle_updates: list[tuple[int, str]] = []
 
-    monkeypatch.setattr(external_damage_service, "ensure_bucket", lambda: None)
-    monkeypatch.setattr(
-        external_damage_service,
-        "upload_bytes",
-        lambda key, raw, content_type="application/octet-stream": f"minio://{key}",
-    )
-    monkeypatch.setattr(external_damage_service, "post_json", lambda url, payload: {"recordId": 123})
+    monkeypatch.setattr(external_damage_service, "_create_record_with_evidence", lambda *_args, **_kwargs: {"recordId": 123})
     monkeypatch.setattr(external_damage_service, "patch_json", lambda url, payload: record_updates.append(payload))
     monkeypatch.setattr(
         external_damage_service,
@@ -188,7 +176,7 @@ def test_external_damage_service_allows_text_only_mock_testing(monkeypatch):
     published_events: list[tuple[str, dict]] = []
     vehicle_updates: list[tuple[int, str]] = []
 
-    monkeypatch.setattr(external_damage_service, "post_json", lambda url, payload: {"recordId": 321})
+    monkeypatch.setattr(external_damage_service, "_create_record_with_evidence", lambda *_args, **_kwargs: {"recordId": 321})
     monkeypatch.setattr(external_damage_service, "patch_json", lambda url, payload: record_updates.append(payload))
     monkeypatch.setattr(
         external_damage_service,
@@ -250,13 +238,7 @@ def test_external_damage_service_blocks_severe_damage_without_publishing_inciden
     published_events: list[tuple[str, dict]] = []
     vehicle_updates: list[tuple[int, str]] = []
 
-    monkeypatch.setattr(external_damage_service, "ensure_bucket", lambda: None)
-    monkeypatch.setattr(
-        external_damage_service,
-        "upload_bytes",
-        lambda key, raw, content_type="application/octet-stream": f"minio://{key}",
-    )
-    monkeypatch.setattr(external_damage_service, "post_json", lambda url, payload: {"recordId": 456})
+    monkeypatch.setattr(external_damage_service, "_create_record_with_evidence", lambda *_args, **_kwargs: {"recordId": 456})
     monkeypatch.setattr(external_damage_service, "patch_json", lambda url, payload: record_updates.append(payload))
     monkeypatch.setattr(
         external_damage_service,
@@ -298,13 +280,7 @@ def test_external_damage_service_allows_trip_start_for_moderate_damage(monkeypat
     published_events: list[tuple[str, dict]] = []
     vehicle_updates: list[tuple[int, str]] = []
 
-    monkeypatch.setattr(external_damage_service, "ensure_bucket", lambda: None)
-    monkeypatch.setattr(
-        external_damage_service,
-        "upload_bytes",
-        lambda key, raw, content_type="application/octet-stream": f"minio://{key}",
-    )
-    monkeypatch.setattr(external_damage_service, "post_json", lambda url, payload: {"recordId": 789})
+    monkeypatch.setattr(external_damage_service, "_create_record_with_evidence", lambda *_args, **_kwargs: {"recordId": 789})
     monkeypatch.setattr(external_damage_service, "patch_json", lambda url, payload: record_updates.append(payload))
     monkeypatch.setattr(
         external_damage_service,
@@ -396,13 +372,7 @@ def test_post_trip_damage_service_records_follow_up_without_blocking_end_trip(mo
     published_events: list[tuple[str, dict]] = []
     vehicle_updates: list[tuple[int, str]] = []
 
-    monkeypatch.setattr(external_damage_service, "ensure_bucket", lambda: None)
-    monkeypatch.setattr(
-        external_damage_service,
-        "upload_bytes",
-        lambda key, raw, content_type="application/octet-stream": f"minio://{key}",
-    )
-    monkeypatch.setattr(external_damage_service, "post_json", lambda url, payload: {"recordId": 880})
+    monkeypatch.setattr(external_damage_service, "_create_record_with_evidence", lambda *_args, **_kwargs: {"recordId": 880})
     monkeypatch.setattr(external_damage_service, "patch_json", lambda url, payload: record_updates.append(payload))
     monkeypatch.setattr(
         external_damage_service,
@@ -443,13 +413,7 @@ def test_post_trip_damage_service_escalates_severe_damage(monkeypatch):
     published_events: list[tuple[str, dict]] = []
     vehicle_updates: list[tuple[int, str]] = []
 
-    monkeypatch.setattr(external_damage_service, "ensure_bucket", lambda: None)
-    monkeypatch.setattr(
-        external_damage_service,
-        "upload_bytes",
-        lambda key, raw, content_type="application/octet-stream": f"minio://{key}",
-    )
-    monkeypatch.setattr(external_damage_service, "post_json", lambda url, payload: {"recordId": 990})
+    monkeypatch.setattr(external_damage_service, "_create_record_with_evidence", lambda *_args, **_kwargs: {"recordId": 990})
     monkeypatch.setattr(external_damage_service, "patch_json", lambda url, payload: record_updates.append(payload))
     monkeypatch.setattr(
         external_damage_service,

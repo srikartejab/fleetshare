@@ -18,6 +18,16 @@ def post_json(url: str, payload: dict[str, Any] | None = None) -> dict[str, Any]
     return response.json()
 
 
+def post_form_json(
+    url: str,
+    data: dict[str, Any] | None = None,
+    files: list[tuple[str, tuple[str, bytes, str]]] | None = None,
+) -> dict[str, Any]:
+    response = httpx.post(url, data=data or {}, files=files or [], timeout=30.0)
+    _raise_for_status(response)
+    return response.json()
+
+
 def patch_json(url: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
     response = httpx.patch(url, json=payload or {}, timeout=30.0)
     _raise_for_status(response)

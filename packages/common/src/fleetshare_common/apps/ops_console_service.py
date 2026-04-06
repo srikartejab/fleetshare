@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import httpx
+from fastapi import HTTPException, Response
 from pydantic import BaseModel
 
 from fleetshare_common.app import create_app
@@ -184,6 +186,11 @@ def _enrich_notification(notification: dict, indexes: dict) -> dict:
     }
 
 
+def _ticket_evidence_links(ticket_id: int, record: dict | None) -> list[str]:
+    evidence_urls = (record or {}).get("evidenceUrls") or []
+    return [f"/ops-console/tickets/{ticket_id}/evidence/{index}" for index in range(len(evidence_urls))]
+
+
 def _enriched_payload() -> dict:
     payload = _raw_payload()
     indexes = _indexes(payload)
@@ -254,8 +261,43 @@ def get_ticket_detail(ticket_id: int):
         "booking": _enrich_booking(booking, indexes) if booking else None,
         "trip": trip,
         "record": enriched_record,
-        "evidenceUrls": (record or {}).get("evidenceUrls", []),
+        "evidenceUrls": _ticket_evidence_links(ticket_id, record),
     }
+
+
+@app.get("/ops-console/tickets/{ticket_id}/evidence/{index}")
+def get_ticket_evidence(ticket_id: int, index: int):
+    settings = get_settings()
+    payload = _raw_payload()
+    indexes = _indexes(payload)
+    ticket = get_json(f"{settings.maintenance_service_url}/maintenance/tickets/{ticket_id}")
+    record_id = ticket.get("recordId")
+    if record_id is None:
+        raise HTTPException(status_code=404, detail="No inspection record was linked to this ticket.")
+    record = indexes["recordById"].get(record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Inspection record not found for this ticket.")
+
+    evidence_urls = record.get("evidenceUrls") or []
+    if index < 0 or index >= len(evidence_urls):
+        raise HTTPException(status_code=404, detail="Evidence item not found")
+
+    response = httpx.get(f"{settings.record_service_url}/records/{record_id}/evidence/{index}", timeout=20.0)
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text.strip() or exc.response.reason_phrase
+        raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
+
+    headers = {"Cache-Control": "no-store"}
+    content_disposition = response.headers.get("content-disposition")
+    if content_disposition:
+        headers["Content-Disposition"] = content_disposition
+    return Response(
+        content=response.content,
+        media_type=response.headers.get("content-type", "application/octet-stream"),
+        headers=headers,
+    )
 
 
 @app.post("/ops-console/fleet/telemetry")

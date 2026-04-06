@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-from uuid import uuid4
-
 from fastapi import File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from fleetshare_common.ai import assess_damage
 from fleetshare_common.app import create_app
-from fleetshare_common.http import get_json, patch_json, post_json
+from fleetshare_common.http import get_json, patch_json, post_form_json
 from fleetshare_common.messaging import publish_event
-from fleetshare_common.object_store import ensure_bucket, upload_bytes
 from fleetshare_common.settings import get_settings
 from fleetshare_common.vehicle_grpc import update_vehicle_status
 
@@ -22,29 +19,43 @@ class ExternalDamageCancellationPayload(BaseModel):
     userId: str
 
 
-# @app.on_event("startup")
-# def startup_event():
-#     try:
-#         ensure_bucket()
-#     except Exception:
-#         # MinIO may still be starting when the service boots; uploads re-check lazily.
-#         pass
-
-
-async def _store_uploaded_photos(prefix: str, photos: list[UploadFile]) -> tuple[list[str], list[bytes]]:
-    uploaded_keys: list[str] = []
+async def _extract_uploaded_photos(photos: list[UploadFile]) -> tuple[list[tuple[str, bytes, str]], list[bytes]]:
+    photo_payloads: list[tuple[str, bytes, str]] = []
     image_bytes_list: list[bytes] = []
     if not photos:
-        return uploaded_keys, image_bytes_list
+        return photo_payloads, image_bytes_list
 
-    ensure_bucket()
     for photo in photos:
         data = await photo.read()
         image_bytes_list.append(data)
         filename = photo.filename or "upload.bin"
-        key = f"{prefix}/{uuid4()}-{filename}"
-        uploaded_keys.append(upload_bytes(key, data, content_type=photo.content_type or "application/octet-stream"))
-    return uploaded_keys, image_bytes_list
+        photo_payloads.append((filename, data, photo.content_type or "application/octet-stream"))
+    return photo_payloads, image_bytes_list
+
+
+def _create_record_with_evidence(
+    settings,
+    *,
+    booking_id: int,
+    trip_id: int | None,
+    vehicle_id: int,
+    notes: str,
+    photo_payloads: list[tuple[str, bytes, str]],
+) -> dict:
+    return post_form_json(
+        f"{settings.record_service_url}/records/ingest",
+        data={
+            "bookingId": booking_id,
+            "tripId": trip_id,
+            "vehicleId": vehicle_id,
+            "recordType": "EXTERNAL_DAMAGE",
+            "notes": notes,
+            "severity": "PENDING",
+            "reviewState": "PENDING_EXTERNAL",
+            "confidence": 0.0,
+        },
+        files=[("photos", file_tuple) for file_tuple in photo_payloads],
+    )
 
 
 @app.post("/damage-assessment/external")
@@ -56,19 +67,14 @@ async def assess_external_damage(
     photos: list[UploadFile] = File(default_factory=list),
 ):
     settings = get_settings()
-    uploaded_keys, image_bytes_list = await _store_uploaded_photos(f"damage/{bookingId}", photos)
-
-    record = post_json(
-        f"{settings.record_service_url}/records",
-        {
-            "bookingId": bookingId,
-            "vehicleId": vehicleId,
-            "recordType": "EXTERNAL_DAMAGE",
-            "notes": notes,
-            "severity": "PENDING",
-            "reviewState": "PENDING_EXTERNAL",
-            "evidenceUrls": uploaded_keys,
-        },
+    photo_payloads, image_bytes_list = await _extract_uploaded_photos(photos)
+    record = _create_record_with_evidence(
+        settings,
+        booking_id=bookingId,
+        trip_id=None,
+        vehicle_id=vehicleId,
+        notes=notes,
+        photo_payloads=photo_payloads,
     )
     assessment = assess_damage(notes, image_bytes_list=image_bytes_list, mode=settings.azure_vision_mode)
     review_state = "EXTERNAL_ASSESSED"
@@ -116,20 +122,14 @@ async def assess_post_trip_damage(
     photos: list[UploadFile] = File(default_factory=list),
 ):
     settings = get_settings()
-    uploaded_keys, image_bytes_list = await _store_uploaded_photos(f"damage/post-trip/{bookingId}", photos)
-
-    record = post_json(
-        f"{settings.record_service_url}/records",
-        {
-            "bookingId": bookingId,
-            "tripId": tripId,
-            "vehicleId": vehicleId,
-            "recordType": "EXTERNAL_DAMAGE",
-            "notes": notes,
-            "severity": "PENDING",
-            "reviewState": "PENDING_EXTERNAL",
-            "evidenceUrls": uploaded_keys,
-        },
+    photo_payloads, image_bytes_list = await _extract_uploaded_photos(photos)
+    record = _create_record_with_evidence(
+        settings,
+        booking_id=bookingId,
+        trip_id=tripId,
+        vehicle_id=vehicleId,
+        notes=notes,
+        photo_payloads=photo_payloads,
     )
     assessment = assess_damage(notes, image_bytes_list=image_bytes_list, mode=settings.azure_vision_mode)
     review_state = "EXTERNAL_ASSESSED"

@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
+from uuid import uuid4
 
-from fastapi import Depends, HTTPException
+from botocore.exceptions import ClientError
+from fastapi import Depends, File, Form, HTTPException, Response, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import JSON, DateTime, Float, Integer, String, func
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from fleetshare_common.app import create_app
 from fleetshare_common.database import Base, get_db, initialize_schema_with_retry
+from fleetshare_common.object_store import download_bytes, upload_bytes
 
 app = create_app("Record Service", "Atomic evidence and record management service.")
 
@@ -74,6 +78,57 @@ def record_to_dict(record: Record) -> dict:
     }
 
 
+def _build_record(
+    *,
+    booking_id: int | None,
+    trip_id: int | None,
+    vehicle_id: int,
+    record_type: str,
+    notes: str | None,
+    severity: str,
+    review_state: str,
+    confidence: float,
+    evidence_urls: list[str],
+    detected_damage: list[str],
+) -> Record:
+    return Record(
+        booking_id=booking_id,
+        trip_id=trip_id,
+        vehicle_id=vehicle_id,
+        record_type=record_type,
+        notes=notes,
+        severity=severity,
+        review_state=review_state,
+        confidence=confidence,
+        evidence_urls=evidence_urls,
+        detected_damage=detected_damage,
+    )
+
+
+async def _store_uploaded_evidence(
+    *,
+    booking_id: int | None,
+    trip_id: int | None,
+    record_type: str,
+    photos: list[UploadFile],
+) -> list[str]:
+    uploaded_keys: list[str] = []
+    if not photos:
+        return uploaded_keys
+    prefix_parts = ["records", record_type.lower()]
+    if booking_id is not None:
+        prefix_parts.append(f"booking-{booking_id}")
+    if trip_id is not None:
+        prefix_parts.append(f"trip-{trip_id}")
+    prefix = "/".join(prefix_parts)
+    for photo in photos:
+        raw = await photo.read()
+        filename = photo.filename or "upload.bin"
+        key = f"{prefix}/{uuid4()}-{filename}"
+        uploaded_keys.append(upload_bytes(key, raw, content_type=photo.content_type or "application/octet-stream"))
+    return uploaded_keys
+
+
 @app.get("/records")
 def list_records(
     bookingId: int | None = None,
@@ -99,7 +154,7 @@ def list_records(
 
 @app.post("/records")
 def create_record(payload: RecordPayload, db: Session = Depends(get_db)):
-    record = Record(
+    record = _build_record(
         booking_id=payload.bookingId,
         trip_id=payload.tripId,
         vehicle_id=payload.vehicleId,
@@ -115,6 +170,71 @@ def create_record(payload: RecordPayload, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(record)
     return {"recordId": record.id, "status": record.review_state}
+
+
+@app.post("/records/ingest")
+async def create_record_with_evidence(
+    vehicleId: int = Form(...),
+    recordType: str = Form(...),
+    bookingId: int | None = Form(None),
+    tripId: int | None = Form(None),
+    notes: str | None = Form(None),
+    severity: str = Form("PENDING"),
+    reviewState: str = Form("PENDING_EXTERNAL"),
+    confidence: float = Form(0.0),
+    photos: list[UploadFile] = File(default_factory=list),
+    db: Session = Depends(get_db),
+):
+    evidence_urls = await _store_uploaded_evidence(
+        booking_id=bookingId,
+        trip_id=tripId,
+        record_type=recordType,
+        photos=photos,
+    )
+    record = _build_record(
+        booking_id=bookingId,
+        trip_id=tripId,
+        vehicle_id=vehicleId,
+        record_type=recordType,
+        notes=notes,
+        severity=severity,
+        review_state=reviewState,
+        confidence=confidence,
+        evidence_urls=evidence_urls,
+        detected_damage=[],
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return {"recordId": record.id, "status": record.review_state}
+
+
+@app.get("/records/{record_id}/evidence/{index}")
+def get_record_evidence(record_id: int, index: int, db: Session = Depends(get_db)):
+    record = db.get(Record, record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Record not found")
+    evidence_urls = record.evidence_urls or []
+    if index < 0 or index >= len(evidence_urls):
+        raise HTTPException(status_code=404, detail="Evidence item not found")
+
+    object_key = evidence_urls[index]
+    try:
+        raw, content_type = download_bytes(object_key)
+    except ClientError as exc:
+        error_code = exc.response.get("Error", {}).get("Code")
+        if error_code in {"NoSuchKey", "404"}:
+            raise HTTPException(status_code=404, detail="Evidence object not found") from exc
+        raise HTTPException(status_code=502, detail="Evidence storage is unavailable") from exc
+    filename = Path(object_key).name or f"record-{record_id}-evidence-{index + 1}"
+    return Response(
+        content=raw,
+        media_type=content_type,
+        headers={
+            "Content-Disposition": f'inline; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @app.patch("/records/{record_id}")

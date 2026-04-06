@@ -2,15 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from fastapi import Depends
+from fastapi import HTTPException
 from pydantic import BaseModel
-from sqlalchemy import DateTime, Integer, String, Text, func
-from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from fleetshare_common.app import create_app
-from fleetshare_common.database import Base, get_db, initialize_schema_with_retry, session_scope
 from fleetshare_common.http import get_json, post_json, put_json
-from fleetshare_common.messaging import publish_event, start_consumer
+from fleetshare_common.messaging import publish_event, stable_event_id, start_consumer
 from fleetshare_common.settings import get_settings
 from fleetshare_common.timeutils import as_utc_naive, iso, utcnow
 
@@ -28,69 +25,16 @@ class PreTripResolutionPayload(BaseModel):
     recommendedAction: str = "Inspect vehicle"
     reason: str = "PRE_TRIP_EXTERNAL_DAMAGE"
     incidentAt: str | None = None
-
-
-class ProcessedIncident(Base):
-    __tablename__ = "processed_incidents"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    event_id: Mapped[str] = mapped_column(String(64), unique=True)
-    event_type: Mapped[str] = mapped_column(String(128))
-    status: Mapped[str] = mapped_column(String(32), default="PROCESSING")
-    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    sourceEventId: str | None = None
 
 
 @app.on_event("startup")
 def startup_event():
-    initialize_schema_with_retry(Base.metadata)
     start_consumer(
         "handle-damage-service",
         ["incident.external_damage_detected", "incident.internal_fault_detected"],
         handle_incident,
     )
-
-
-@app.get("/handle-damage/incidents")
-def list_processed(db: Session = Depends(get_db)):
-    return [
-        {
-            "eventId": item.event_id,
-            "eventType": item.event_type,
-            "status": item.status,
-            "lastError": item.last_error,
-            "createdAt": item.created_at.isoformat(),
-        }
-        for item in db.query(ProcessedIncident).order_by(ProcessedIncident.id.desc()).all()
-    ]
-
-
-def mark_incident_processing(event: dict):
-    with session_scope() as db:
-        existing = db.query(ProcessedIncident).filter(ProcessedIncident.event_id == event["event_id"]).first()
-        if existing and existing.status == "COMPLETED":
-            return False
-        if existing:
-            existing.status = "PROCESSING"
-            existing.last_error = None
-        else:
-            db.add(
-                ProcessedIncident(
-                    event_id=event["event_id"],
-                    event_type=event["event_type"],
-                    status="PROCESSING",
-                )
-            )
-    return True
-
-
-def mark_incident_outcome(event_id: str, *, status: str, last_error: str | None = None):
-    with session_scope() as db:
-        existing = db.query(ProcessedIncident).filter(ProcessedIncident.event_id == event_id).first()
-        if not existing:
-            return
-        existing.status = status
-        existing.last_error = last_error
 
 
 def _captured_cash_amount(settings, booking_id: int) -> float:
@@ -136,9 +80,38 @@ def _resolve_incident_time(payload: dict) -> datetime:
     return as_utc_naive(datetime.fromisoformat(normalized))
 
 
-def resolve_damage_recovery(payload: dict, *, reason: str) -> dict:
+def _cancellation_breakdown(primary_booking_id: int | None, affected_bookings: list[dict]) -> dict:
+    cancelled_booking_ids = [item["bookingId"] for item in affected_bookings]
+    primary_booking_cancelled = primary_booking_id in cancelled_booking_ids if primary_booking_id is not None else False
+    future_bookings_cancelled_count = len(
+        [booking_id for booking_id in cancelled_booking_ids if primary_booking_id is None or booking_id != primary_booking_id]
+    )
+    return {
+        "primaryBookingCancelled": primary_booking_cancelled,
+        "futureBookingsCancelledCount": future_bookings_cancelled_count,
+        "cancelledBookingIds": cancelled_booking_ids,
+    }
+
+
+def _resolve_source_event_id(payload: dict, *, reason: str, source_event_id: str | None) -> str:
+    if source_event_id:
+        return source_event_id
+    if payload.get("sourceEventId"):
+        return str(payload["sourceEventId"])
+    return stable_event_id(
+        "handle-damage",
+        reason,
+        payload.get("recordId"),
+        payload.get("bookingId"),
+        payload.get("tripId"),
+        payload.get("vehicleId"),
+    )
+
+
+def resolve_damage_recovery(payload: dict, *, reason: str, source_event_id: str | None = None) -> dict:
     settings = get_settings()
     incident_time = _resolve_incident_time(payload)
+    resolved_source_event_id = _resolve_source_event_id(payload, reason=reason, source_event_id=source_event_id)
     estimated_duration_hours = 24 if payload.get("severity") == "MODERATE" else 48
     maintenance_start = incident_time
     maintenance_end = maintenance_start + timedelta(hours=settings.damage_booking_lookahead_hours)
@@ -154,8 +127,11 @@ def resolve_damage_recovery(payload: dict, *, reason: str) -> dict:
             "bookingId": payload.get("bookingId"),
             "tripId": payload.get("tripId"),
             "openedByEventType": reason,
+            "sourceEventId": resolved_source_event_id,
         },
     )
+    if not ticket.get("ticketId"):
+        raise HTTPException(status_code=502, detail="Maintenance ticket service did not return a ticketId")
     affected = put_json(
         f"{settings.booking_service_url}/bookings/cancel-affected",
         {
@@ -179,6 +155,7 @@ def resolve_damage_recovery(payload: dict, *, reason: str) -> dict:
             f"{settings.pricing_service_url}/pricing/pre-trip-cancellation-compensation",
             _compensation_payload(affected["affectedBookings"], settings, reason=reason),
         )
+    cancellation_breakdown = _cancellation_breakdown(payload.get("bookingId"), affected["affectedBookings"])
 
     settlements_by_booking_id = {
         item["bookingId"]: item
@@ -204,6 +181,7 @@ def resolve_damage_recovery(payload: dict, *, reason: str) -> dict:
                     "refundAmount": settlement["cashRefundAmount"],
                     "reason": reason,
                 },
+                event_id=stable_event_id("handle-damage", "refund", resolved_source_event_id, booking["bookingId"], reason),
             )
         if settlement["discountAmount"] > 0:
             publish_event(
@@ -215,6 +193,7 @@ def resolve_damage_recovery(payload: dict, *, reason: str) -> dict:
                     "discountAmount": settlement["discountAmount"],
                     "reason": reason,
                 },
+                event_id=stable_event_id("handle-damage", "adjustment", resolved_source_event_id, booking["bookingId"], reason),
             )
         publish_event(
             "booking.disruption_notification",
@@ -227,7 +206,11 @@ def resolve_damage_recovery(payload: dict, *, reason: str) -> dict:
                     f"Vehicle {payload['vehicleId']} is unavailable. "
                     f"Booking {booking['bookingId']} was cancelled and compensation has been queued."
                 ),
+                "primaryBookingCancelled": booking["bookingId"] == payload.get("bookingId"),
+                "futureBookingsCancelledCount": cancellation_breakdown["futureBookingsCancelledCount"] if booking["bookingId"] == payload.get("bookingId") else 0,
+                "cancelledBookingIds": cancellation_breakdown["cancelledBookingIds"],
             },
+            event_id=stable_event_id("handle-damage", "customer-notification", resolved_source_event_id, booking["bookingId"]),
         )
 
     publish_event(
@@ -239,9 +222,11 @@ def resolve_damage_recovery(payload: dict, *, reason: str) -> dict:
             "subject": "Ops action required",
             "message": (
                 f"Vehicle {payload['vehicleId']} is unavailable. "
-                f"Ticket {ticket['ticketId']} opened and {affected['cancelledCount']} booking(s) were cancelled."
+                f"Ticket {ticket['ticketId']} opened."
             ),
+            **cancellation_breakdown,
         },
+        event_id=stable_event_id("handle-damage", "ops-notification", resolved_source_event_id, ticket["ticketId"]),
     )
 
     primary_booking = next(
@@ -267,6 +252,9 @@ def resolve_damage_recovery(payload: dict, *, reason: str) -> dict:
         "booking": primary_booking,
         "walletSettlement": primary_settlement,
         "cancelledCount": affected["cancelledCount"],
+        "primaryBookingCancelled": cancellation_breakdown["primaryBookingCancelled"],
+        "futureBookingsCancelledCount": cancellation_breakdown["futureBookingsCancelledCount"],
+        "cancelledBookingIds": cancellation_breakdown["cancelledBookingIds"],
         "affectedBookings": affected["affectedBookings"],
         "compensation": compensation,
     }
@@ -277,18 +265,11 @@ def resolve_external_pre_trip_damage(payload: PreTripResolutionPayload):
     return resolve_damage_recovery(
         payload.model_dump(mode="json"),
         reason=payload.reason,
+        source_event_id=payload.sourceEventId,
     )
 
 
 def handle_incident(event: dict):
     payload = event["payload"]
-    if not mark_incident_processing(event):
-        return
-
-    try:
-        resolve_damage_recovery(payload, reason=event["event_type"])
-    except Exception as exc:
-        mark_incident_outcome(event["event_id"], status="FAILED", last_error=str(exc))
-        raise
-    mark_incident_outcome(event["event_id"], status="COMPLETED")
+    resolve_damage_recovery(payload, reason=event["event_type"], source_event_id=event["event_id"])
 

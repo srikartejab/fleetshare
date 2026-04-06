@@ -38,3 +38,12 @@ def upload_bytes(key: str, raw: bytes, content_type: str = "application/octet-st
     client = get_s3_client()
     client.put_object(Bucket=settings.minio_bucket, Key=key, Body=io.BytesIO(raw), ContentType=content_type)
     return key
+
+
+def download_bytes(key: str) -> tuple[bytes, str]:
+    settings = get_settings()
+    client = get_s3_client()
+    response = client.get_object(Bucket=settings.minio_bucket, Key=key)
+    body = response["Body"]
+    content_type = response.get("ContentType") or "application/octet-stream"
+    return body.read(), content_type

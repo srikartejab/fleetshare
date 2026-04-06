@@ -20,9 +20,14 @@ def _connection():
     return pika.BlockingConnection(pika.URLParameters(settings.rabbitmq_url))
 
 
-def publish_event(event_type: str, payload: dict[str, Any]):
+def stable_event_id(*parts: Any) -> str:
+    normalized = "|".join("" if part is None else str(part) for part in parts)
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, normalized))
+
+
+def publish_event(event_type: str, payload: dict[str, Any], *, event_id: str | None = None):
     settings = get_settings()
-    event = EventEnvelope(event_id=str(uuid.uuid4()), event_type=event_type, payload=payload)
+    event = EventEnvelope(event_id=event_id or str(uuid.uuid4()), event_type=event_type, payload=payload)
     connection = _connection()
     try:
         channel = connection.channel()

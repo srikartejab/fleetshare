@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -9,10 +9,11 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from fleetshare_common.app import create_app
 from fleetshare_common.contracts import BookingStatus
-from fleetshare_common.database import Base, get_db, initialize_schema_with_retry
-from fleetshare_common.timeutils import as_utc_naive, iso
+from fleetshare_common.database import Base, SessionLocal, get_db, initialize_schema_with_retry
+from fleetshare_common.timeutils import as_utc_naive, iso, utcnow
 
 app = create_app("Booking Service", "Atomic booking reservation service.")
+DEMO_FUTURE_BOOKING_SEED_CATEGORY = "FUTURE_DISRUPTION_DEMO"
 
 
 class Booking(Base):
@@ -90,6 +91,98 @@ class CancelAffectedPayload(BaseModel):
 @app.on_event("startup")
 def startup_event():
     initialize_schema_with_retry(Base.metadata)
+    seed_demo_bookings()
+
+
+def _demo_seed_specs(now: datetime) -> list[dict]:
+    base_time = as_utc_naive(now)
+    return [
+        {
+            "seedMarker": "future-disruption-demo-vehicle-2-a",
+            "userId": "user-1002",
+            "vehicleId": 2,
+            "pickupLocation": "SMU",
+            "startTime": base_time + timedelta(days=3, hours=1),
+            "endTime": base_time + timedelta(days=3, hours=3),
+            "displayedPrice": 24.0,
+            "bookingNote": "Seeded future booking for ops disruption demo.",
+        },
+        {
+            "seedMarker": "future-disruption-demo-vehicle-2-b",
+            "userId": "user-1003",
+            "vehicleId": 2,
+            "pickupLocation": "SMU",
+            "startTime": base_time + timedelta(days=5, hours=2),
+            "endTime": base_time + timedelta(days=5, hours=5),
+            "displayedPrice": 36.0,
+            "bookingNote": "Seeded second future booking for ops disruption demo.",
+        },
+        {
+            "seedMarker": "future-disruption-demo-vehicle-103-a",
+            "userId": "user-1001",
+            "vehicleId": 103,
+            "pickupLocation": "Pasir Ris Hub",
+            "startTime": base_time + timedelta(days=4, hours=1),
+            "endTime": base_time + timedelta(days=4, hours=4),
+            "displayedPrice": 42.0,
+            "bookingNote": "Seeded future booking for damage recovery demo.",
+        },
+    ]
+
+
+def seed_demo_bookings():
+    specs = _demo_seed_specs(utcnow())
+    with SessionLocal() as db:
+        existing_by_marker = {
+            (booking.metadata_json or {}).get("seedMarker"): booking
+            for booking in db.query(Booking).all()
+            if (booking.metadata_json or {}).get("seedCategory") == DEMO_FUTURE_BOOKING_SEED_CATEGORY
+        }
+        for spec in specs:
+            metadata = {
+                "seedCategory": DEMO_FUTURE_BOOKING_SEED_CATEGORY,
+                "seedMarker": spec["seedMarker"],
+            }
+            booking = existing_by_marker.get(spec["seedMarker"])
+            if booking is None:
+                booking = Booking(
+                    user_id=spec["userId"],
+                    vehicle_id=spec["vehicleId"],
+                    pickup_location=spec["pickupLocation"],
+                    start_time=spec["startTime"],
+                    end_time=spec["endTime"],
+                    displayed_price=spec["displayedPrice"],
+                    final_price=spec["displayedPrice"],
+                    subscription_plan_id="STANDARD_MONTHLY",
+                    status=BookingStatus.CONFIRMED.value,
+                    cross_cycle_booking=False,
+                    refund_pending_on_renewal=False,
+                    reconciliation_status="PENDING",
+                    trip_id=None,
+                    booking_note=spec["bookingNote"],
+                    cancellation_reason=None,
+                    metadata_json=metadata,
+                )
+                db.add(booking)
+                continue
+
+            booking.user_id = spec["userId"]
+            booking.vehicle_id = spec["vehicleId"]
+            booking.pickup_location = spec["pickupLocation"]
+            booking.start_time = spec["startTime"]
+            booking.end_time = spec["endTime"]
+            booking.displayed_price = spec["displayedPrice"]
+            booking.final_price = spec["displayedPrice"]
+            booking.subscription_plan_id = "STANDARD_MONTHLY"
+            booking.status = BookingStatus.CONFIRMED.value
+            booking.cross_cycle_booking = False
+            booking.refund_pending_on_renewal = False
+            booking.reconciliation_status = "PENDING"
+            booking.trip_id = None
+            booking.booking_note = spec["bookingNote"]
+            booking.cancellation_reason = None
+            booking.metadata_json = metadata
+        db.commit()
 
 
 def booking_to_dict(booking: Booking) -> dict:

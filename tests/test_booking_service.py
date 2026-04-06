@@ -1,10 +1,12 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
 
 from fleetshare_common.apps import booking_service
+from fleetshare_common.contracts import BookingStatus
+from fleetshare_common.timeutils import as_utc_naive
 
 
 class _FakeQuery:
@@ -126,3 +128,33 @@ def test_patch_reconciliation_complete_is_idempotent():
     assert db.committed is False
     assert result["idempotent"] is True
     assert result["status"] == "RECONCILED"
+
+
+def test_seed_demo_bookings_is_idempotent_and_within_lookahead(monkeypatch):
+    fixed_now = datetime(2026, 4, 6, 9, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(booking_service, "utcnow", lambda: fixed_now)
+    booking_service.initialize_schema_with_retry(booking_service.Base.metadata)
+
+    with booking_service.SessionLocal() as db:
+        db.query(booking_service.Booking).delete()
+        db.query(booking_service.VehicleReservationLock).delete()
+        db.commit()
+
+    booking_service.seed_demo_bookings()
+    booking_service.seed_demo_bookings()
+
+    with booking_service.SessionLocal() as db:
+        bookings = (
+            db.query(booking_service.Booking)
+            .filter(booking_service.Booking.status == BookingStatus.CONFIRMED.value)
+            .order_by(booking_service.Booking.id.asc())
+            .all()
+        )
+
+    assert len(bookings) == 3
+    markers = [(booking.metadata_json or {}).get("seedMarker") for booking in bookings]
+    assert len(set(markers)) == 3
+    assert all((booking.metadata_json or {}).get("seedCategory") == booking_service.DEMO_FUTURE_BOOKING_SEED_CATEGORY for booking in bookings)
+    assert all(booking.cancellation_reason is None for booking in bookings)
+    assert all(booking.start_time > as_utc_naive(fixed_now) for booking in bookings)
+    assert all((booking.start_time - as_utc_naive(fixed_now)).total_seconds() <= 336 * 60 * 60 for booking in bookings)

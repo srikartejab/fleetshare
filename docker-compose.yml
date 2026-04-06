@@ -1,6 +1,41 @@
 volumes:
   kong-pgdata:
 
+x-backend-env: &backend-env
+  PYTHONPATH: /app/packages/common/src:/app
+  TZ: ${TZ:-Asia/Singapore}
+  BILLING_TIMEZONE: ${BILLING_TIMEZONE:-Asia/Singapore}
+  RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
+  MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+  MINIO_BUCKET: ${MINIO_BUCKET:-fleetshare-evidence}
+  DAMAGE_BOOKING_LOOKAHEAD_HOURS: ${DAMAGE_BOOKING_LOOKAHEAD_HOURS:-336}
+  AZURE_VISION_MODE: ${AZURE_VISION_MODE:-mock}
+  AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+  AZURE_OPENAI_KEY: ${AZURE_OPENAI_KEY:-}
+  AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-gpt-4o-mini}
+  AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING:-}
+  VEHICLE_SERVICE_URL: http://vehicle-service:8000
+  VEHICLE_GRPC_TARGET: vehicle-service:50051
+  BOOKING_SERVICE_URL: http://booking-service:8000
+  TRIP_SERVICE_URL: http://trip-service:8000
+  RECORD_SERVICE_URL: http://record-service:8000
+  MAINTENANCE_SERVICE_URL: http://maintenance-service:8000
+  PRICING_SERVICE_URL: http://pricing-service:8000
+  PAYMENT_SERVICE_URL: http://payment-service:8000
+  NOTIFICATION_SERVICE_URL: http://notification-service:8000
+  SEARCH_SERVICE_URL: http://search-available-vehicles-service:8000
+  PROCESS_BOOKING_SERVICE_URL: http://process-booking-service:8000
+  EXTERNAL_DAMAGE_SERVICE_URL: http://external-damage-service:8000
+  START_TRIP_SERVICE_URL: http://start-trip-service:8000
+  INTERNAL_DAMAGE_SERVICE_URL: http://internal-damage-service:8000
+  END_TRIP_SERVICE_URL: http://end-trip-service:8000
+  HANDLE_DAMAGE_SERVICE_URL: http://handle-damage-service:8000
+  RENEWAL_RECONCILIATION_SERVICE_URL: http://renewal-reconciliation-service:8000
+  TRIP_EXPERIENCE_SERVICE_URL: http://trip-experience-service:8000
+  OPS_CONSOLE_SERVICE_URL: http://ops-console-service:8000
+
 services:
   mysql:
     image: mysql:8.4
@@ -134,40 +169,8 @@ services:
       context: .
       dockerfile: Dockerfile.backend
     command: python -m uvicorn fleetshare_common.apps.vehicle_service:app --host 0.0.0.0 --port 8000
-    environment: &backend-env
-      PYTHONPATH: /app/packages/common/src:/app
-      TZ: ${TZ:-Asia/Singapore}
-      BILLING_TIMEZONE: ${BILLING_TIMEZONE:-Asia/Singapore}
-      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
-      MINIO_BUCKET: ${MINIO_BUCKET:-fleetshare-evidence}
-      DAMAGE_BOOKING_LOOKAHEAD_HOURS: ${DAMAGE_BOOKING_LOOKAHEAD_HOURS:-336}
-      AZURE_VISION_MODE: ${AZURE_VISION_MODE:-mock}
-      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
-      AZURE_OPENAI_KEY: ${AZURE_OPENAI_KEY:-}
-      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-gpt-4o-mini}
-      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING:-}
-      VEHICLE_SERVICE_URL: http://vehicle-service:8000
-      VEHICLE_GRPC_TARGET: vehicle-service:50051
-      BOOKING_SERVICE_URL: http://booking-service:8000
-      TRIP_SERVICE_URL: http://trip-service:8000
-      RECORD_SERVICE_URL: http://record-service:8000
-      MAINTENANCE_SERVICE_URL: http://maintenance-service:8000
-      PRICING_SERVICE_URL: http://pricing-service:8000
-      PAYMENT_SERVICE_URL: http://payment-service:8000
-      NOTIFICATION_SERVICE_URL: http://notification-service:8000
-      SEARCH_SERVICE_URL: http://search-available-vehicles-service:8000
-      PROCESS_BOOKING_SERVICE_URL: http://process-booking-service:8000
-      EXTERNAL_DAMAGE_SERVICE_URL: http://external-damage-service:8000
-      START_TRIP_SERVICE_URL: http://start-trip-service:8000
-      INTERNAL_DAMAGE_SERVICE_URL: http://internal-damage-service:8000
-      END_TRIP_SERVICE_URL: http://end-trip-service:8000
-      HANDLE_DAMAGE_SERVICE_URL: http://handle-damage-service:8000
-      RENEWAL_RECONCILIATION_SERVICE_URL: http://renewal-reconciliation-service:8000
-      TRIP_EXPERIENCE_SERVICE_URL: http://trip-experience-service:8000
-      OPS_CONSOLE_SERVICE_URL: http://ops-console-service:8000
+    environment:
+      <<: *backend-env
       SERVICE_NAME: vehicle-service
       DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/vehicle_db
     depends_on:
@@ -283,7 +286,6 @@ services:
     environment:
       <<: *backend-env
       SERVICE_NAME: search-available-vehicles-service
-      DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/search_db
     depends_on: [vehicle-service, booking-service, pricing-service]
 
   process-booking-service:
@@ -294,7 +296,6 @@ services:
     environment:
       <<: *backend-env
       SERVICE_NAME: process-booking-service
-      DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/process_booking_db
     depends_on: [vehicle-service, booking-service, pricing-service, payment-service]
 
   trip-experience-service:
@@ -305,7 +306,6 @@ services:
     environment:
       <<: *backend-env
       SERVICE_NAME: trip-experience-service
-      DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/trip_experience_db
     depends_on:
       - vehicle-service
       - booking-service
@@ -324,7 +324,6 @@ services:
     environment:
       <<: *backend-env
       SERVICE_NAME: external-damage-service
-      DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/external_damage_db
     depends_on: [record-service, vehicle-service,  rabbitmq]
 
   start-trip-service:
@@ -335,7 +334,6 @@ services:
     environment:
       <<: *backend-env
       SERVICE_NAME: start-trip-service
-      DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/start_trip_db
     depends_on: [trip-service, booking-service, record-service, internal-damage-service, vehicle-service]
 
   internal-damage-service:
@@ -346,7 +344,6 @@ services:
     environment:
       <<: *backend-env
       SERVICE_NAME: internal-damage-service
-      DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/internal_damage_db
     depends_on: [record-service, vehicle-service, rabbitmq]
 
   end-trip-service:
@@ -357,7 +354,6 @@ services:
     environment:
       <<: *backend-env
       SERVICE_NAME: end-trip-service
-      DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/end_trip_db
     depends_on: [trip-service, booking-service, pricing-service, vehicle-service, rabbitmq]
 
   handle-damage-service:
@@ -368,10 +364,7 @@ services:
     environment:
       <<: *backend-env
       SERVICE_NAME: handle-damage-service
-      DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/handle_damage_db
     depends_on:
-      mysql:
-        condition: service_healthy
       rabbitmq:
         condition: service_started
       maintenance-service:
@@ -387,10 +380,7 @@ services:
     environment:
       <<: *backend-env
       SERVICE_NAME: renewal-reconciliation-service
-      DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/renewal_reconciliation_db
     depends_on:
-      mysql:
-        condition: service_healthy
       rabbitmq:
         condition: service_started
       booking-service:
@@ -408,7 +398,6 @@ services:
     environment:
       <<: *backend-env
       SERVICE_NAME: ops-console-service
-      DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-fleetshare_root}@mysql:3306/ops_console_db
     depends_on:
       - vehicle-service
       - booking-service

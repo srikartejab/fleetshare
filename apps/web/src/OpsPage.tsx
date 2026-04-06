@@ -162,6 +162,21 @@ function evidenceSummary(record: Pick<RecordItem, 'evidenceCount' | 'evidenceUrl
   return count > 0 ? `${count} image${count === 1 ? '' : 's'}` : 'No images'
 }
 
+function disruptionNotificationMeta(notification: Notification) {
+  const payload = notification.payload
+  if (!payload) return null
+  const primaryBookingCancelled = payload.primaryBookingCancelled === true
+  const futureBookingsCancelledCount =
+    typeof payload.futureBookingsCancelledCount === 'number' ? payload.futureBookingsCancelledCount : null
+  if (!primaryBookingCancelled && !futureBookingsCancelledCount) {
+    return null
+  }
+  return {
+    primaryBookingCancelled,
+    futureBookingsCancelledCount: futureBookingsCancelledCount ?? 0,
+  }
+}
+
 export function OpsPage({
   activeUserId,
   onCustomerDataChanged,
@@ -744,30 +759,39 @@ export function OpsPage({
                   </div>
                 </div>
                 <div className="customer-list-stack">
-                  {latestNotifications.map((notification) => (
-                    <article className="customer-transaction-card" key={notification.notificationId}>
-                      <div className="customer-transaction-card__top">
-                        <div>
-                          <p className="customer-transaction-card__eyebrow">{notification.audience}</p>
-                          <strong>{notification.subject}</strong>
+                  {latestNotifications.map((notification) => {
+                    const disruptionMeta = disruptionNotificationMeta(notification)
+                    return (
+                      <article className="customer-transaction-card" key={notification.notificationId}>
+                        <div className="customer-transaction-card__top">
+                          <div>
+                            <p className="customer-transaction-card__eyebrow">{notification.audience}</p>
+                            <strong>{notification.subject}</strong>
+                          </div>
+                          <OpsStatusTag status={notification.severity ?? notification.audience} />
                         </div>
-                        <OpsStatusTag status={notification.severity ?? notification.audience} />
-                      </div>
-                      <p className="customer-transaction-card__detail">{notification.message}</p>
-                      <p className="customer-transaction-card__subtitle">
-                        {joinMeta([
-                          notification.customerName ?? notification.userId,
-                          notification.vehicleName ?? (notification.vehicleId ? `Vehicle ${notification.vehicleId}` : null),
-                          notification.bookingCode ?? (notification.bookingId ? `Booking #${notification.bookingId}` : null),
-                        ])}
-                      </p>
-                      <div className="customer-pill-row">
-                        <span className="customer-status-tag">{formatDateTime(notification.createdAt)}</span>
-                        {notification.tripId ? <span className="customer-status-tag">Trip #{notification.tripId}</span> : null}
-                        {notification.stationName ? <span className="customer-status-tag">{notification.stationName}</span> : null}
-                      </div>
-                    </article>
-                  ))}
+                        <p className="customer-transaction-card__detail">{notification.message}</p>
+                        <p className="customer-transaction-card__subtitle">
+                          {joinMeta([
+                            notification.customerName ?? notification.userId,
+                            notification.vehicleName ?? (notification.vehicleId ? `Vehicle ${notification.vehicleId}` : null),
+                            notification.bookingCode ?? (notification.bookingId ? `Booking #${notification.bookingId}` : null),
+                          ])}
+                        </p>
+                        <div className="customer-pill-row">
+                          <span className="customer-status-tag">{formatDateTime(notification.createdAt)}</span>
+                          {notification.tripId ? <span className="customer-status-tag">Trip #{notification.tripId}</span> : null}
+                          {notification.stationName ? <span className="customer-status-tag">{notification.stationName}</span> : null}
+                          {disruptionMeta?.primaryBookingCancelled ? <span className="customer-status-tag">Booking cancelled</span> : null}
+                          {(disruptionMeta?.futureBookingsCancelledCount ?? 0) > 0 ? (
+                            <span className="customer-status-tag">
+                              {disruptionMeta?.futureBookingsCancelledCount} future bookings also cancelled
+                            </span>
+                          ) : null}
+                        </div>
+                      </article>
+                    )
+                  })}
                   {latestNotifications.length === 0 ? <p className="customer-empty-copy">No operations notifications yet.</p> : null}
                 </div>
               </article>

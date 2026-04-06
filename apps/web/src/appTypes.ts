@@ -185,6 +185,13 @@ export type WalletLedgerEntry = {
   updatedAt?: string | null
 }
 
+export type NotificationPayload = Record<string, unknown> & {
+  severity?: string | null
+  primaryBookingCancelled?: boolean
+  futureBookingsCancelledCount?: number
+  cancelledBookingIds?: number[]
+}
+
 export type Notification = {
   notificationId: number
   userId: string
@@ -193,7 +200,7 @@ export type Notification = {
   audience: string
   subject: string
   message: string
-  payload?: Record<string, unknown>
+  payload?: NotificationPayload
   createdAt?: string | null
   bookingCode?: string | null
   customerName?: string | null
