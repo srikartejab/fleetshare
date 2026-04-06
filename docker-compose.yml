@@ -1,3 +1,6 @@
+volumes:
+  kong-pgdata:
+
 services:
   mysql:
     image: mysql:8.4
@@ -44,39 +47,87 @@ services:
       mysql:
         condition: service_healthy
 
-  kong:
-    image: kong:3.6
+  kong-database:
+    image: postgres:17.4
     environment:
-      KONG_DATABASE: "off"
-      KONG_DECLARATIVE_CONFIG: /kong/declarative/kong.yml
+      POSTGRES_DB: kong
+      POSTGRES_USER: kong
+      POSTGRES_PASSWORD: ${KONG_PG_PASSWORD:-password}
+      TZ: ${TZ:-Asia/Singapore}
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "kong"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - kong-pgdata:/var/lib/postgresql/data
+
+  kong-migration:
+    image: kong/kong-gateway:3.9
+    command: kong migrations bootstrap
+    restart: on-failure
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: ${KONG_PG_PASSWORD:-password}
+      TZ: ${TZ:-Asia/Singapore}
+    depends_on:
+      kong-database:
+        condition: service_healthy
+
+  kong:
+    image: kong/kong-gateway:3.9
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: ${KONG_PG_PASSWORD:-password}
       KONG_PROXY_ACCESS_LOG: /dev/stdout
       KONG_ADMIN_ACCESS_LOG: /dev/stdout
       KONG_PROXY_ERROR_LOG: /dev/stderr
       KONG_ADMIN_ERROR_LOG: /dev/stderr
       KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_ADMIN_GUI_LISTEN: 0.0.0.0:8002
+      KONG_ADMIN_GUI_URL: http://localhost:8002
       TZ: ${TZ:-Asia/Singapore}
     ports:
       - "8000:8000"
       - "8001:8001"
-    volumes:
-      - ./infrastructure/kong:/kong/declarative
+      - "8002:8002"
     depends_on:
-      - process-booking-service
-      - trip-experience-service
-      - ops-console-service
+      kong-migration:
+        condition: service_completed_successfully
+      process-booking-service:
+        condition: service_started
+      trip-experience-service:
+        condition: service_started
+      ops-console-service:
+        condition: service_started
+
+  kong-bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: python infrastructure/kong/bootstrap.py
+    restart: on-failure
+    environment:
+      PYTHONPATH: /app/packages/common/src:/app
+      KONG_ADMIN_URL: http://kong:8001
+      KONG_BOOTSTRAP_TIMEOUT_SECONDS: 90
+      TZ: ${TZ:-Asia/Singapore}
+    depends_on:
+      kong:
+        condition: service_started
 
   web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        VITE_API_BASE_URL: ${WEB_API_BASE_URL:-}
+        VITE_API_BASE_URL: ${WEB_API_BASE_URL:-http://localhost:8000}
     environment:
       TZ: ${TZ:-Asia/Singapore}
-    ports:
-      - "4173:80"
-    depends_on:
-      - kong
 
   vehicle-service:
     build:

@@ -39,6 +39,12 @@ def test_rerate_after_renewal_refunds_provisional_charge():
     assert rerate["revisedCharge"] == 0
 
 
+def test_rerate_after_renewal_uses_original_provisional_charge_when_hours_are_display_rounded():
+    rerate = rerate_after_renewal(2.77, original_provisional_charge=55.33)
+    assert rerate["refundAmount"] == 55.33
+    assert rerate["revisedCharge"] == 0
+
+
 def test_trip_adjustment_uses_compensation_for_disruption():
     result = trip_adjustment(True, 1.5)
     assert result["compensationRequired"] is True
@@ -483,6 +489,52 @@ def test_rerate_consumes_new_cycle_allowance_after_reconciliation(monkeypatch):
         2,
     )
     assert profile.hours_used_this_cycle == 1.95
+
+
+def test_rerate_keeps_refund_aligned_with_stored_provisional_charge(monkeypatch):
+    profile = SimpleNamespace(
+        user_id="user-1001",
+        display_name="Alicia Tan",
+        role="CUSTOMER",
+        demo_badge="Renews tonight",
+        plan_name="STANDARD_MONTHLY",
+        monthly_included_hours=6.0,
+        hours_used_this_cycle=0.0,
+        renewal_date=date(2026, 5, 1),
+    )
+    ledger = SimpleNamespace(
+        booking_id=1,
+        trip_id=1,
+        user_id="user-1001",
+        provisional_post_renewal_hours=2.77,
+        provisional_charge=55.33,
+        included_hours_after_renewal=0.0,
+        refund_amount=0.0,
+        renewal_pending=True,
+        reconciliation_status="PENDING",
+        final_charge=55.33,
+        start_time=datetime(2026, 4, 6, 15, 46),
+        end_time=datetime(2026, 4, 6, 18, 46),
+    )
+    db = _FakeDb([ledger])
+
+    monkeypatch.setattr(pricing_service, "get_profile_or_404", lambda _db, _user_id: profile)
+
+    result = pricing_service.rerate(
+        pricing_service.ReRatePayload(
+            bookingId=1,
+            tripId=1,
+            userId="user-1001",
+            newBillingCycleId="2026-05",
+            actualPostMidnightHours=2.77,
+        ),
+        db,
+    )
+
+    assert db.committed is True
+    assert result["refundAmount"] == 55.33
+    assert result["finalPrice"] == 0.0
+    assert profile.hours_used_this_cycle == 2.77
 
 
 def test_mock_ai_detects_severe_damage_keywords():

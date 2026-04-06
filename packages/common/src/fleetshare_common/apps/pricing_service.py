@@ -550,6 +550,7 @@ def rerate(payload: ReRatePayload, db: Session = Depends(get_db)):
         payload.actualPostMidnightHours,
         monthly_included_hours=profile.monthly_included_hours,
         hours_used_this_cycle=profile.hours_used_this_cycle,
+        original_provisional_charge=getattr(ledger, "provisional_charge", None) if ledger else None,
     )
     profile.hours_used_this_cycle = rerate_result["updatedEntitlementUsage"]
 

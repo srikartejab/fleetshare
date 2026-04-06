@@ -1,6 +1,12 @@
 _format_version: "3.0"
 
 services:
+  - name: web
+    url: http://web
+    routes:
+      - name: web-root
+        paths: ["/"]
+        strip_path: false
   - name: search-available-vehicles-service
     url: http://search-available-vehicles-service:8000
     routes:

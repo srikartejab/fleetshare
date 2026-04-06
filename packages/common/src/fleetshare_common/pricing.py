@@ -154,11 +154,15 @@ def rerate_after_renewal(
     actual_post_midnight_hours: float,
     monthly_included_hours: float = SUBSCRIPTION_INCLUDED_HOURS,
     hours_used_this_cycle: float = 0.0,
+    original_provisional_charge: float | None = None,
 ) -> dict[str, float]:
     remaining_hours = max(monthly_included_hours - hours_used_this_cycle, 0.0)
     eligible_hours = min(actual_post_midnight_hours, remaining_hours)
     revised_charge = round(max(actual_post_midnight_hours - eligible_hours, 0.0) * BASE_HOURLY_RATE, 2)
-    provisional_charge = round(actual_post_midnight_hours * BASE_HOURLY_RATE, 2)
+    provisional_charge = round(
+        original_provisional_charge if original_provisional_charge is not None else actual_post_midnight_hours * BASE_HOURLY_RATE,
+        2,
+    )
     refund = round(max(provisional_charge - revised_charge, 0.0), 2)
     updated_usage = round(hours_used_this_cycle + eligible_hours, 2)
     return {

@@ -31,18 +31,18 @@ docker compose up --build
 ```
 
 3. Open:
-   - UI: `http://localhost:4173`
-   - Kong proxy: `http://localhost:8000`
-   - Kong admin: `http://localhost:8001`
+   - UI via Kong: `http://localhost:8000`
+   - Kong Admin API: `http://localhost:8001`
+   - Kong Manager UI: `http://localhost:8002`
    - RabbitMQ UI: `http://localhost:15672`
    - MinIO console: `http://localhost:9001`
    - MySQL UI (Adminer): `http://localhost:8080`
 
 Local default access:
 
-- UI: no login
-- Kong proxy: no login
-- Kong admin: no login
+- UI via Kong: no login
+- Kong Admin API: no login
+- Kong Manager UI: no login
 - RabbitMQ UI: username `guest`, password `guest`
 - RabbitMQ AMQP: `amqp://guest:guest@rabbitmq:5672/`
 - MinIO console / S3: username `minioadmin`, password `minioadmin`
@@ -53,7 +53,8 @@ Local default access:
 ## Deployment Notes
 
 - Billing boundaries use `BILLING_TIMEZONE`, which defaults to `Asia/Singapore`. This controls renewal dates and post-midnight allowance logic even if the VM clock or container timezone differs.
-- The web app now defaults to same-origin API routing. Leave `WEB_API_BASE_URL` blank unless you explicitly want the frontend to call a different public API origin.
+- The frontend is built to call Kong at `http://localhost:8000` by default, and Kong is the intended public entrypoint for the UI and browser-facing APIs.
+- Kong services and routes are bootstrapped from `infrastructure/kong/kong.yml`. Kong Manager is available for inspection and temporary edits, but rerunning the Kong bootstrap will reapply the repo-defined baseline.
 - `APP_ENV` is informational only. The current runtime does not switch behavior based on `APP_ENV`.
 - MinIO remains the supported evidence store for this release. `AZURE_STORAGE_CONNECTION_STRING` is not used by the current code path.
 - `AZURE_VISION_MODE=azure` requires `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, and `AZURE_OPENAI_DEPLOYMENT`. If Azure AI is unavailable, the inspection flow will force manual review instead of silently using mock results.
@@ -61,6 +62,7 @@ Local default access:
 ## Demo Flow
 
 - Search and reserve a vehicle in the Customer view.
+- Open Kong Manager at `http://localhost:8002` if you want to inspect the configured services and routes.
 - Submit a pre-trip inspection with notes like `scratch` or `dent`.
 - Start a trip. For Scenario 3, inject `CRITICAL` telemetry first and then retry trip start.
 - End the trip manually or with `SEVERE_INTERNAL_FAULT`.
