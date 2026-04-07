@@ -1,8 +1,6 @@
 # US2A Pre-Trip External Damage
 
-## Verification Result
 
-This flow was re-verified against the implemented pre-trip inspection path, the external damage service behavior, and the severe pre-trip test and e2e scenario coverage.
 
 ## Scope / Boundary
 
@@ -24,7 +22,7 @@ It does not include:
 - compensation calculation internals
 - payment or notification consumer internals
 
-Those belong to `3a-handle-damage-recovery`.
+Those belong to `us3a-handle-damage-recovery`.
 
 ## Severe-Path Textual Flow
 
@@ -42,15 +40,3 @@ Those belong to `3a-handle-damage-recovery`.
 12. `Rental Execution Service` returns the final severe inspection response through Kong.
 13. Kong returns the final severe inspection response to the UI.
 
-## Key Code References
-
-- [rental_execution_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/rental_execution_service.py#L156)
-- [rental_execution_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/rental_execution_service.py#L252)
-- [external_damage_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/external_damage_service.py#L36)
-- [external_damage_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/external_damage_service.py#L63)
-- [record_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/record_service.py#L175)
-- [record_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/record_service.py#L241)
-- [vehicle_grpc.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/vehicle_grpc.py#L35)
-- [test_rental_execution_service.py](c:/Users/srika/Documents/esd/fleetshare/tests/test_rental_execution_service.py#L91)
-- [test_external_damage_service.py](c:/Users/srika/Documents/esd/fleetshare/tests/test_external_damage_service.py#L328)
-- [test_scenarios_e2e.py](c:/Users/srika/Documents/esd/fleetshare/tests/test_scenarios_e2e.py#L252)

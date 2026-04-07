@@ -22,7 +22,7 @@ It does not include:
 - handle-damage downstream recovery internals
 - end-trip processing internals
 
-Those belong to `3a-handle-damage-recovery` and `us2d-end-trip`.
+Those belong to `us3a-handle-damage-recovery` and `us2d-end-trip`.
 
 ## Severe-Path Textual Flow
 

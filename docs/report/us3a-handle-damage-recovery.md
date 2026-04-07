@@ -1,5 +1,4 @@
-# 3A Handle Damage Recovery
-
+# US3A Handle Damage Recovery
 
 
 ## Scope / Boundary
@@ -38,11 +37,5 @@ It does not include:
 11. On the synchronous pre-trip path, `Handle Damage Service` returns the recovery summary back to `Rental Execution Service`.
 12. On the asynchronous incident path, `Handle Damage Service` finishes consumer processing after publishing the downstream events.
 
-## Diagram Note
 
-The repo uses one RabbitMQ broker / topic exchange. In this diagram it is shown as a single RabbitMQ box with:
-
-- one inbound arrow into `Handle Damage Service` for consumed incident events
-- one outbound arrow from `Handle Damage Service` for published downstream events
-- one maintenance wrapper box plus one OutSystems backend box because the wrapper and backend are separate components in the codebase / deployment model
 

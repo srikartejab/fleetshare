@@ -1,4 +1,4 @@
-# 3B Notification Dispatch
+# US3B Notification Dispatch
 
 ## Scope / Boundary
 
