@@ -1,0 +1,78 @@
+<mxfile host="65bd71144e" compressed="false">
+    <diagram id="3a" name="3a-handle-damage-recovery">
+        <mxGraphModel dx="1362" dy="2564" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1100" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="trip" value="Trip Experience Service&#xa;(sync pre-trip handoff)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+                    <mxGeometry x="550" y="-40" width="300" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="handle" value="Handle Damage Service&#xa;(Composite Service)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="490" y="210" width="420" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="rabbit" value="RabbitMQ&#xa;(single broker / topic exchange)&#xa;incident.* in, payment.* + booking.* out" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1250" y="200" width="320" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="maintwrapper" value="&lt;p&gt;&lt;span style=&quot;font-weight: normal;&quot;&gt;Maintenance Service&lt;br&gt;&lt;/span&gt;&lt;/p&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+                    <mxGeometry x="900" y="480" width="230" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="outsystems" value="OutSystems Maintenance API" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1">
+                    <mxGeometry x="900" y="680" width="230" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="booking" value="Booking Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" vertex="1">
+                    <mxGeometry x="250" y="480" width="230" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="pricing" value="Pricing Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" vertex="1">
+                    <mxGeometry x="585" y="480" width="230" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="note" value="Default deployed path: Maintenance Service wrapper forwards ticket calls to OutSystems.&#xa;The code also supports a local backend mode, so OutSystems is the default backend, not the only possible backend." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+                    <mxGeometry x="1190" y="380" width="360" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="e1" value="1. Sync ingress&#xa;HTTP POST /handle-damage/external/pre-trip-resolution" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="trip" target="handle" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e2" value="2. Async ingress&#xa;AMQP consume incident.external_damage_detected&#xa;or incident.internal_fault_detected" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="rabbit" target="handle" edge="1">
+                    <mxGeometry y="50" relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1160" y="260"/>
+                        </Array>
+                        <mxPoint x="-1" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e3" value="3. Create maintenance ticket&#xa;HTTP POST /maintenance/tickets" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;exitX=1;exitY=1;exitDx=0;exitDy=0;" parent="1" source="handle" target="maintwrapper" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e4" value="4. Default backend path: forward to OutSystems&#xa;HTTP POST /tickets" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" parent="1" source="maintwrapper" target="outsystems" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e5" value="5. Cancel affected bookings&#xa;HTTP PUT /bookings/cancel-affected" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="handle" target="booking" edge="1">
+                    <mxGeometry x="0.2464" relative="1" as="geometry">
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e6" value="6. Compute compensation&#xa;HTTP POST /pricing/pre-trip-cancellation-compensation" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="handle" target="pricing" edge="1">
+                    <mxGeometry x="-0.0323" y="-40" relative="1" as="geometry">
+                        <mxPoint x="1" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e7" value="7. Publish payment.refund_required&#xa;payment.adjustment_required&#xa;booking.disruption_notification" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="handle" target="rabbit" edge="1">
+                    <mxGeometry x="0.0148" y="35" relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1170" y="260"/>
+                            <mxPoint x="1170" y="260"/>
+                        </Array>
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e8" value="8. Sync return to Trip Experience Service" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;dashed=1;" edge="1" parent="1" source="handle" target="trip">
+                    <mxGeometry x="-0.1998" relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="490"/>
+                        </Array>
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

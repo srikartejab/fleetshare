@@ -1,0 +1,28 @@
+<mxfile host="app.diagrams.net" modified="2026-04-07T00:00:00.000Z" agent="Codex" version="24.7.17" compressed="false">
+  <diagram id="us2c" name="us2c-in-trip-internal-damage-fault-detection">
+    <mxGraphModel dx="1700" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="manualui" value="FleetShare Customer UI&#xa;(manual fault report)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="840" y="20" width="300" height="80" as="geometry"/></mxCell>
+        <mxCell id="telemetry" value="Vehicle Service&#xa;(telemetry ingestion)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="120" y="20" width="260" height="80" as="geometry"/></mxCell>
+        <mxCell id="rabbitIn" value="RabbitMQ&#xa;vehicle.telemetry_alert" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="120" y="150" width="260" height="80" as="geometry"/></mxCell>
+        <mxCell id="kong" value="Kong API Gateway" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1f4e79;strokeColor=#12344d;fontColor=#ffffff;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="910" y="150" width="160" height="60" as="geometry"/></mxCell>
+        <mxCell id="trip" value="Trip Experience Service&#xa;(manual report path)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1"><mxGeometry x="820" y="270" width="340" height="80" as="geometry"/></mxCell>
+        <mxCell id="internal" value="Internal Damage Service&#xa;(Composite Service)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="490" y="390" width="520" height="90" as="geometry"/></mxCell>
+        <mxCell id="record" value="Record Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="180" y="610" width="220" height="70" as="geometry"/></mxCell>
+        <mxCell id="vehicle" value="Vehicle Service&#xa;(gRPC severe status update)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="520" y="610" width="240" height="70" as="geometry"/></mxCell>
+        <mxCell id="rabbitOut" value="RabbitMQ&#xa;incident / disruption events" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="900" y="610" width="290" height="80" as="geometry"/></mxCell>
+        <mxCell id="e1" value="1a. Telemetry received&#xa;HTTP POST /vehicles/telemetry" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="telemetry" target="rabbitIn"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e2" value="1b. Severe telemetry event&#xa;AMQP consume vehicle.telemetry_alert" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="rabbitIn" target="internal"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e3" value="1c. Manual fault report&#xa;HTTP POST /trip-experience/report-fault" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="manualui" target="kong"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e4" value="2. Route request" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="kong" target="trip"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e5" value="3. Forward manual report&#xa;HTTP POST /internal-damage/fault-alert" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="trip" target="internal"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e6" value="4. Create INTERNAL_FAULT record&#xa;HTTP POST /records" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="internal" target="record"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e7" value="5. Severe only: set MAINTENANCE_REQUIRED&#xa;gRPC UpdateVehicleStatus" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="internal" target="vehicle"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e8" value="6. Publish incident.internal_fault_detected&#xa;AMQP" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="internal" target="rabbitOut"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e9" value="7. Publish booking.disruption_notification&#xa;AMQP when trip context is known" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;dashed=1;" edge="1" parent="1" source="internal" target="rabbitOut"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1030" y="520"/></Array></mxGeometry></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

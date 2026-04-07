@@ -21,8 +21,9 @@ FleetShare addresses three car-sharing pain points in Singapore:
 - Customer performs a pre-trip inspection and uploads evidence.
 - Record Service stores the case.
 - The AI adapter classifies damage severity and confidence.
-- Severe incidents publish `incident.external_damage_detected`.
-- Handle Damage Service opens maintenance tickets, cancels affected bookings, and triggers refund/notification events.
+- For pre-trip severe damage, `Trip Experience Service` resolves the incident synchronously by calling `Handle Damage Service`.
+- `Handle Damage Service` opens maintenance tickets, cancels affected bookings, and triggers refund/notification events.
+- `incident.external_damage_detected` is published for severe post-trip damage, not for the pre-trip inspection path.
 
 ## User Scenario 3
 
