@@ -2,7 +2,7 @@ import { startTransition, useEffect, useMemo, useState, type ReactNode } from 'r
 import { Link } from 'react-router-dom'
 
 import {
-  fetchJson,
+  opsFetchJson,
   formatDateTime,
   formatHours,
   formatMoney,
@@ -212,7 +212,7 @@ export function OpsPage({
   const [renewalUserId, setRenewalUserId] = useState(activeUserId || 'user-1001')
 
   async function refresh() {
-    const dashboard = await fetchJson<OpsDashboardResponse>('/ops-console/dashboard')
+    const dashboard = await opsFetchJson<OpsDashboardResponse>('/ops-console/dashboard')
     startTransition(() => {
       setVehicles(dashboard.vehicles)
       setVehicleStatusDrafts(Object.fromEntries(dashboard.vehicles.map((vehicle) => [vehicle.id, vehicle.status])))
@@ -231,7 +231,7 @@ export function OpsPage({
     setSelectedTicketId(ticketId)
     setTicketDetailBusy(true)
     try {
-      const detail = await fetchJson<OpsTicketDetailResponse>(`/ops-console/tickets/${ticketId}`)
+      const detail = await opsFetchJson<OpsTicketDetailResponse>(`/ops-console/tickets/${ticketId}`)
       startTransition(() => {
         setTicketDetail(detail)
       })
@@ -505,7 +505,7 @@ export function OpsPage({
                           className="customer-button customer-button--primary"
                           onClick={() =>
                             void runAction(async () => {
-                              await fetchJson(`/ops-console/fleet/${vehicle.id}/status`, {
+                              await opsFetchJson(`/ops-console/fleet/${vehicle.id}/status`, {
                                 method: 'PATCH',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -879,7 +879,7 @@ export function OpsPage({
                     className="customer-button customer-button--primary"
                     onClick={() =>
                       void runAction(async () => {
-                        await fetchJson('/ops-console/fleet/telemetry', {
+                        await opsFetchJson('/ops-console/fleet/telemetry', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
@@ -921,7 +921,7 @@ export function OpsPage({
                     className="customer-button customer-button--primary"
                     onClick={() =>
                       void runAction(async () => {
-                        await fetchJson('/ops-console/renewal/simulate', {
+                        await opsFetchJson('/ops-console/renewal/simulate', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ userId: renewalUserId }),

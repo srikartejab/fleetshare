@@ -13,6 +13,12 @@ services:
       - name: search-available-routes
         paths: ["/search-vehicles"]
         strip_path: false
+    plugins:
+      - name: rate-limiting
+        config:
+          minute: 10
+          policy: local
+          limit_by: ip
   - name: process-booking-service
     url: http://process-booking-service:8000
     routes:
@@ -31,3 +37,17 @@ services:
       - name: ops-console-routes
         paths: ["/ops-console"]
         strip_path: false
+    plugins:
+      - name: key-auth
+        config:
+          key_names:
+            - X-Mechanic-Key
+          hide_credentials: true
+          key_in_header: true
+          key_in_query: false
+          key_in_body: false
+
+consumers:
+  - username: mechanic-dashboard
+    keyauth_credentials:
+      - key: ops-demo-key-fleetshare

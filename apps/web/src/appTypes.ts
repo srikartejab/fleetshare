@@ -473,6 +473,18 @@ function parseDateOnly(value: string) {
   return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12))
 }
 
+const OPS_API_KEY = import.meta.env.VITE_OPS_API_KEY ?? 'ops-demo-key-fleetshare'
+
+export function opsFetchJson<T>(path: string, options?: RequestInit): Promise<T> {
+  return fetchJson<T>(path, {
+    ...options,
+    headers: {
+      ...options?.headers,
+      'X-Mechanic-Key': OPS_API_KEY,
+    },
+  })
+}
+
 export async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
   const method = (options?.method ?? 'GET').toUpperCase()
   const retryableStatuses = new Set([404, 408, 429, 502, 503, 504])
