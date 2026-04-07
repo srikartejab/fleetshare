@@ -30,6 +30,8 @@ FleetShare is a university microservices project for a smart car-sharing platfor
 docker compose up --build
 ```
 
+If you are running Docker Desktop with very low resources, increase memory first. The full stack is not reliable at roughly `2 GB` total Docker memory; on this machine MySQL was being OOM-killed and the rest of the services then failed to resolve `mysql`.
+
 3. Open:
    - UI via Kong: `http://localhost:8000`
    - Kong Admin API: `http://localhost:8001`

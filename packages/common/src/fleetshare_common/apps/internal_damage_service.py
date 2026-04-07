@@ -74,6 +74,19 @@ def resolve_active_trip_context(settings, vehicle_id: int) -> dict | None:
         return None
 
 
+def _ticket_created_recently(ticket: dict) -> bool:
+    created_at = ticket.get("createdAt")
+    if not created_at:
+        return False
+    try:
+        normalized = str(created_at).replace("Z", "+00:00")
+        parsed = as_utc_naive(datetime.fromisoformat(normalized))
+    except ValueError:
+        return False
+    cutoff = as_utc_naive(utcnow() - timedelta(minutes=RECENT_WINDOW_MINUTES))
+    return parsed >= cutoff
+
+
 def has_open_ticket(settings, vehicle_id: int, fault_fingerprint: str) -> bool:
     tickets = get_json(f"{settings.maintenance_service_url}/maintenance/tickets")
     if not isinstance(tickets, list):
@@ -84,7 +97,7 @@ def has_open_ticket(settings, vehicle_id: int, fault_fingerprint: str) -> bool:
         if ticket["status"] in {"RESOLVED", "CLOSED"}:
             continue
         normalized_type = re.sub(r"[^a-z0-9]+", "_", str(ticket.get("damageType", "")).lower()).strip("_")
-        if normalized_type == fault_fingerprint:
+        if normalized_type == fault_fingerprint and _ticket_created_recently(ticket):
             return True
     return False
 

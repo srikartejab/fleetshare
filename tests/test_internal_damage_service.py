@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from fleetshare_common.apps import internal_damage_service
+from fleetshare_common.timeutils import utcnow
 
 
 def _settings():
@@ -89,3 +90,51 @@ def test_open_ticket_suppresses_duplicate_fault_without_publish(monkeypatch):
     assert result["duplicateSuppressed"] is True
     assert result["incidentPublished"] is False
     assert published == []
+
+
+def test_stale_open_ticket_does_not_suppress_new_fault(monkeypatch):
+    published = []
+
+    monkeypatch.setattr(internal_damage_service, "get_settings", _settings)
+    monkeypatch.setattr(internal_damage_service, "build_context", lambda *_args, **_kwargs: (11, 21, "user-1"))
+    monkeypatch.setattr(internal_damage_service, "post_json", lambda *_args, **_kwargs: {"recordId": 778})
+    monkeypatch.setattr(
+        internal_damage_service,
+        "get_json",
+        lambda *_args, **_kwargs: [
+            {
+                "ticketId": 12,
+                "vehicleId": 7,
+                "damageType": "battery_warn",
+                "status": "OPEN",
+                "createdAt": "2026-04-06T01:00:00Z",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        internal_damage_service,
+        "publish_event",
+        lambda event_type, payload, *, event_id=None: published.append((event_type, payload, event_id)),
+    )
+    monkeypatch.setattr(internal_damage_service, "update_vehicle_status", lambda *_args, **_kwargs: None)
+    internal_damage_service._recent_fault_cache.clear()
+
+    result = internal_damage_service.process_internal_damage(
+        internal_damage_service.InternalDamagePayload(
+            bookingId=11,
+            tripId=21,
+            vehicleId=7,
+            userId="user-1",
+            faultCode="BATTERY_WARN",
+            notes="battery warning light",
+        ),
+        snapshot={"batteryLevel": 10, "createdAt": utcnow().isoformat().replace("+00:00", "Z")},
+    )
+
+    assert result["blocked"] is True
+    assert result["duplicateSuppressed"] is False
+    assert result["incidentPublished"] is True
+    assert [event_type for event_type, _payload, _event_id in published] == [
+        "incident.internal_fault_detected",
+        "booking.disruption_notification",
+    ]

@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useEffectEvent, useRef, useState } from 'rea
 import { Link, NavLink, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import {
+  fetchJson,
   formatDateOnly,
   formatDateTime,
   formatHours,
@@ -881,8 +882,54 @@ export function BookingDetailsPage({
   vehicles: Vehicle[]
 }) {
   const { bookingId } = useParams()
-  const booking = bookings.find((item) => String(item.bookingId) === bookingId) ?? null
-  const vehicle = vehicles.find((item) => item.id === booking?.vehicleId) ?? null
+  const [fallbackBooking, setFallbackBooking] = useState<Booking | null>(null)
+  const [fallbackVehicle, setFallbackVehicle] = useState<Vehicle | null>(null)
+  const [loadingFallback, setLoadingFallback] = useState(false)
+
+  useEffect(() => {
+    if (!bookingId) {
+      setFallbackBooking(null)
+      setFallbackVehicle(null)
+      setLoadingFallback(false)
+      return
+    }
+    if (bookings.some((item) => String(item.bookingId) === bookingId)) {
+      setFallbackBooking(null)
+      setFallbackVehicle(null)
+      setLoadingFallback(false)
+      return
+    }
+
+    let cancelled = false
+    setLoadingFallback(true)
+    void fetchJson<{ booking: Booking; vehicle: Vehicle }>(`/process-booking/bookings/${bookingId}`)
+      .then((detail) => {
+        if (cancelled) {
+          return
+        }
+        setFallbackBooking(detail.booking)
+        setFallbackVehicle(detail.vehicle)
+      })
+      .catch(() => {
+        if (cancelled) {
+          return
+        }
+        setFallbackBooking(null)
+        setFallbackVehicle(null)
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingFallback(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [bookingId, bookings])
+
+  const booking = bookings.find((item) => String(item.bookingId) === bookingId) ?? fallbackBooking
+  const vehicle = vehicles.find((item) => item.id === booking?.vehicleId) ?? fallbackVehicle
   const pricing = booking?.pricingSnapshot
   const trip = booking ? trips.find((item) => item.bookingId === booking.bookingId) ?? null : null
   const relatedPayments = booking ? payments.filter((item) => item.bookingId === booking.bookingId) : []
@@ -901,6 +948,10 @@ export function BookingDetailsPage({
         : disruptedBooking
           ? 'Disrupted trip'
         : booking?.status ?? 'Booking'
+
+  if (!booking && loadingFallback) {
+    return <EmptyState body="We are loading the confirmed booking details now." title="Loading booking details" />
+  }
 
   if (!booking) {
     return <EmptyState actionLabel="Back to bookings" actionTo="/app/trips" body="This booking is not loaded in the current session yet." title="Booking not found" />
@@ -1126,7 +1177,7 @@ export function TripsPage({
             <article className="customer-card customer-card--info">
               <p className="customer-page-header__eyebrow">Booking status</p>
               <h2>Current booking is already in progress</h2>
-              <p>Booking #{activeTrip.bookingId} has already moved into the live trip flow, so there is no separate upcoming booking card to show here.</p>
+              <p>Booking #{activeTrip.bookingId} has already moved into the live trip flow</p>
             </article>
           ) : (
             <EmptyState actionLabel="Find a vehicle" actionTo="/app/discover" body="You do not have any upcoming bookings. Reserve a vehicle to start the trip flow." title="No upcoming bookings" />

@@ -1,6 +1,6 @@
 <mxfile host="65bd71144e" compressed="false">
     <diagram id="us2a" name="us2a-pre-trip-external-damage">
-        <mxGraphModel dx="626" dy="1607" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+        <mxGraphModel dx="463" dy="1399" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -23,13 +23,13 @@
                     <mxGeometry x="200" y="740" width="220" height="70" as="geometry"/>
                 </mxCell>
                 <mxCell id="ai" value="AI Assessment Adapter&lt;br&gt;Azure OpenAI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
-                    <mxGeometry x="640" y="560" width="220" height="80" as="geometry"/>
+                    <mxGeometry x="630" y="560" width="220" height="80" as="geometry"/>
                 </mxCell>
                 <mxCell id="vehicle" value="Vehicle Service&#xa;(gRPC status update)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" vertex="1">
                     <mxGeometry x="1010" y="550" width="220" height="70" as="geometry"/>
                 </mxCell>
                 <mxCell id="handle" value="Handle Damage Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" parent="1" vertex="1">
-                    <mxGeometry x="1450" y="140" width="290" height="80" as="geometry"/>
+                    <mxGeometry x="1220" y="140" width="290" height="80" as="geometry"/>
                 </mxCell>
                 <mxCell id="e1" value="1. Submit pre-trip inspection&#xa;HTTP POST /rental-execution/pre-trip-inspection" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="ui" target="kong" edge="1">
                     <mxGeometry x="-0.2727" relative="1" as="geometry">
@@ -47,7 +47,9 @@
                     </mxGeometry>
                 </mxCell>
                 <mxCell id="e4" value="4. Create EXTERNAL_DAMAGE record&#xa;HTTP POST /records/ingest" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="external" target="record" edge="1">
-                    <mxGeometry relative="1" as="geometry"/>
+                    <mxGeometry x="-0.2105" y="-20" relative="1" as="geometry">
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
                 </mxCell>
                 <mxCell id="e5" value="5. Store uploaded evidence" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="record" target="store" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
@@ -56,10 +58,11 @@
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
                 <mxCell id="e7" value="7. Patch final severity / reviewState&#xa;HTTP PATCH /records/{recordId}" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="external" target="record" edge="1">
-                    <mxGeometry relative="1" as="geometry">
+                    <mxGeometry x="-0.2632" y="30" relative="1" as="geometry">
                         <Array as="points">
-                            <mxPoint x="570" y="500"/>
+                            <mxPoint x="310" y="410"/>
                         </Array>
+                        <mxPoint as="offset"/>
                     </mxGeometry>
                 </mxCell>
                 <mxCell id="e8" value="8. Severe only: set UNDER_INSPECTION&#xa;gRPC UpdateVehicleStatus" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="external" target="vehicle" edge="1">
@@ -67,20 +70,6 @@
                 </mxCell>
                 <mxCell id="e9" value="9. Return severe blocked assessment" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="external" target="trip" edge="1">
                     <mxGeometry x="-0.3333" relative="1" as="geometry">
-                        <mxPoint as="offset"/>
-                    </mxGeometry>
-                </mxCell>
-                <mxCell id="e10" value="10. Severe handoff&#xa;HTTP POST /handle-damage/external/pre-trip-resolution" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#000000;" parent="1" source="trip" target="handle" edge="1">
-                    <mxGeometry x="-0.0189" y="20" relative="1" as="geometry">
-                        <mxPoint as="offset"/>
-                    </mxGeometry>
-                </mxCell>
-                <mxCell id="e11" value="11. Recovery summary response" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" parent="1" source="handle" target="trip" edge="1">
-                    <mxGeometry x="0.0189" y="20" relative="1" as="geometry">
-                        <Array as="points">
-                            <mxPoint x="1450" y="180"/>
-                        </Array>
-                        <mxPoint x="1420" y="230" as="sourcePoint"/>
                         <mxPoint as="offset"/>
                     </mxGeometry>
                 </mxCell>
@@ -94,6 +83,22 @@
                 <mxCell id="e13" value="13. Return final response" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;dashed=1;" edge="1" parent="1" source="kong" target="ui">
                     <mxGeometry x="-0.6364" relative="1" as="geometry">
                         <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="3" value="" style="endArrow=classic;startArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="trip" target="handle">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="1070" y="310" as="sourcePoint"/>
+                        <mxPoint x="1120" y="260" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="4" value="&lt;span style=&quot;color: rgb(0, 0, 0);&quot;&gt;11. Recovery summary response&lt;/span&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="3">
+                    <mxGeometry x="-0.0392" y="1" relative="1" as="geometry">
+                        <mxPoint y="-29" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="5" value="&lt;span style=&quot;color: rgb(0, 0, 0);&quot;&gt;10. Severe handoff&lt;/span&gt;&lt;br style=&quot;color: rgb(63, 63, 63); scrollbar-color: rgb(226, 226, 226) rgb(251, 251, 251);&quot;&gt;&lt;span style=&quot;color: rgb(0, 0, 0);&quot;&gt;HTTP POST /handle-damage/external/pre-trip-resolution&lt;/span&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="3">
+                    <mxGeometry x="0.2942" y="-2" relative="1" as="geometry">
+                        <mxPoint x="-44" y="28" as="offset"/>
                     </mxGeometry>
                 </mxCell>
             </root>

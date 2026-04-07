@@ -41,6 +41,16 @@ x-backend-env: &backend-env
 services:
   mysql:
     image: mysql:8.4
+    command:
+      - mysqld
+      - --innodb-buffer-pool-size=64M
+      - --innodb-log-buffer-size=8M
+      - --innodb-redo-log-capacity=33554432
+      - --tmp-table-size=16M
+      - --max-heap-table-size=16M
+      - --table-open-cache=128
+      - --performance_schema=OFF
+      - --mysqlx=OFF
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-fleetshare_root}
       TZ: ${TZ:-Asia/Singapore}

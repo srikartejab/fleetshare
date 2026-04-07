@@ -119,6 +119,23 @@ function mergeNotifications(...sources: Notification[][]) {
   })
 }
 
+function mergeBookings(...sources: Booking[][]) {
+  const merged = new Map<number, Booking>()
+  for (const source of sources) {
+    for (const booking of source) {
+      if (!booking?.bookingId) {
+        continue
+      }
+      const current = merged.get(booking.bookingId) ?? {}
+      merged.set(booking.bookingId, {
+        ...current,
+        ...booking,
+      } as Booking)
+    }
+  }
+  return [...merged.values()].sort((left, right) => right.bookingId - left.bookingId)
+}
+
 function shouldPollTripStatus(pathname: string) {
   return pathname.startsWith('/app/trips') && pathname !== '/app/trips/unlock-processing'
 }
@@ -310,7 +327,7 @@ function App() {
 
     startTransition(() => {
       setCustomerSummary(homeData.customerSummary ?? walletData.customerSummary ?? accountData.customerSummary)
-      setBookings(homeData.bookings.length ? homeData.bookings : walletData.bookings)
+      setBookings(mergeBookings(tripStatusData.bookings, homeData.bookings, walletData.bookings))
       setTrips(tripStatusData.trips)
       setPayments(walletData.payments)
       setWalletLedger(walletData.ledgerEntries)
