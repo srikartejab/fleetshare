@@ -34,6 +34,10 @@ def as_utc_naive(value: datetime) -> datetime:
     return as_utc(value).replace(tzinfo=None)
 
 
+def utcnow_naive() -> datetime:
+    return utcnow().replace(tzinfo=None)
+
+
 def as_billing_time(value: datetime) -> datetime:
     return as_utc(value).astimezone(billing_timezone())
 

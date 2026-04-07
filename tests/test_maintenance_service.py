@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
@@ -65,6 +66,41 @@ def test_local_mode_keeps_source_event_id_idempotency(monkeypatch):
     assert first.json()["ticketId"] == second.json()["ticketId"]
     assert first.json()["sourceEventId"] == "evt-source-1"
     assert len(tickets.json()) == 1
+
+
+def test_local_ticket_detail_serializes_created_at_as_utc_z(monkeypatch):
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        future=True,
+    )
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+
+    maintenance_service._local_engine = engine
+    maintenance_service._local_session_factory = session_local
+    maintenance_service.LocalBase.metadata.create_all(bind=engine)
+    maintenance_service.ensure_source_event_id_column()
+
+    with session_local() as db:
+        ticket = maintenance_service.MaintenanceTicket(
+            vehicle_id=11,
+            damage_severity="SEVERE",
+            damage_type="BATTERY",
+            recommended_action="Tow to depot",
+            created_at=datetime(2026, 4, 7, 10, 42),
+        )
+        db.add(ticket)
+        db.commit()
+        ticket_id = ticket.id
+
+    monkeypatch.setattr(maintenance_service, "_backend_mode", lambda: "local")
+
+    with TestClient(maintenance_service.app) as client:
+        response = client.get(f"/maintenance/tickets/{ticket_id}")
+
+    assert response.status_code == 200
+    assert response.json()["createdAt"] == "2026-04-07T10:42:00Z"
 
 
 def test_outsystems_list_normalizes_fields_and_sets_backend_header(monkeypatch):

@@ -9,12 +9,13 @@ from typing import Any
 import httpx
 from fastapi import HTTPException, Response
 from pydantic import BaseModel
-from sqlalchemy import DateTime, Integer, String, create_engine, func, inspect, text
+from sqlalchemy import DateTime, Integer, String, create_engine, inspect, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 from fleetshare_common.app import create_app
 from fleetshare_common.settings import get_settings
+from fleetshare_common.timeutils import iso, utcnow_naive
 
 app = create_app("Maintenance Service", "Maintenance ticket wrapper service.")
 logger = logging.getLogger("fleetshare.maintenance")
@@ -39,7 +40,7 @@ class MaintenanceTicket(LocalBase):
     opened_by_event_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
     source_event_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(64), default="OPEN")
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
 
 
 class TicketPayload(BaseModel):
@@ -222,7 +223,7 @@ def _ticket_to_dict(ticket: MaintenanceTicket) -> dict[str, Any]:
         "openedByEventType": ticket.opened_by_event_type,
         "sourceEventId": ticket.source_event_id,
         "status": ticket.status,
-        "createdAt": ticket.created_at.isoformat() if ticket.created_at else None,
+        "createdAt": iso(ticket.created_at),
     }
 
 

@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 import pytest
 
@@ -129,3 +130,26 @@ def test_record_evidence_download_rejects_missing_evidence_index(monkeypatch):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Evidence item not found"
+
+
+def test_record_list_serializes_created_and_updated_at_as_utc_z():
+    record_service.initialize_schema_with_retry(record_service.Base.metadata)
+    with SessionLocal() as db:
+        db.query(record_service.Record).delete()
+        db.add(
+            record_service.Record(
+                booking_id=21,
+                vehicle_id=8,
+                record_type="EXTERNAL_DAMAGE",
+                created_at=datetime(2026, 4, 7, 10, 42),
+                updated_at=datetime(2026, 4, 7, 10, 43),
+            )
+        )
+        db.commit()
+
+    with TestClient(record_service.app) as client:
+        response = client.get("/records", params={"bookingId": 21})
+
+    assert response.status_code == 200
+    assert response.json()[0]["createdAt"] == "2026-04-07T10:42:00Z"
+    assert response.json()[0]["updatedAt"] == "2026-04-07T10:43:00Z"

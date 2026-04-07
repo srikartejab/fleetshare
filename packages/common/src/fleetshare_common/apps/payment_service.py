@@ -4,13 +4,13 @@ from datetime import datetime
 
 from fastapi import Depends
 from pydantic import BaseModel
-from sqlalchemy import JSON, DateTime, Float, Integer, String, func
+from sqlalchemy import JSON, DateTime, Float, Integer, String
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from fleetshare_common.app import create_app
 from fleetshare_common.database import Base, get_db, initialize_schema_with_retry, session_scope
 from fleetshare_common.messaging import start_consumer
-from fleetshare_common.timeutils import iso
+from fleetshare_common.timeutils import iso, utcnow_naive
 
 app = create_app("Payment Service", "Atomic simulated payment execution service.")
 
@@ -27,7 +27,7 @@ class PaymentRecord(Base):
     status: Mapped[str] = mapped_column(String(64), default="SUCCESS")
     event_id: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     payload_json: Mapped[dict] = mapped_column(JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
 
 
 class PaymentPayload(BaseModel):

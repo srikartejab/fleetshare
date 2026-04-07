@@ -4,13 +4,13 @@ from datetime import datetime
 
 from fastapi import Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String, func
+from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from fleetshare_common.app import create_app
 from fleetshare_common.contracts import BookingStatus
 from fleetshare_common.database import Base, get_db, initialize_schema_with_retry
-from fleetshare_common.timeutils import as_utc_naive, iso
+from fleetshare_common.timeutils import as_utc_naive, iso, utcnow_naive
 
 app = create_app("Booking Service", "Atomic booking reservation service.")
 
@@ -35,8 +35,8 @@ class Booking(Base):
     booking_note: Mapped[str | None] = mapped_column(String(255), nullable=True)
     cancellation_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, onupdate=utcnow_naive)
 
 
 class VehicleReservationLock(Base):

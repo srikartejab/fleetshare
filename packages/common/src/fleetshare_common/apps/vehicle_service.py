@@ -7,7 +7,7 @@ from datetime import datetime
 import grpc
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import DateTime, Integer, String, func
+from sqlalchemy import DateTime, Integer, String
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from fleetshare_common.app import create_app
@@ -16,6 +16,7 @@ from fleetshare_common.database import Base, SessionLocal, get_db, initialize_sc
 from fleetshare_common.generated import vehicle_pb2, vehicle_pb2_grpc
 from fleetshare_common.messaging import publish_event
 from fleetshare_common.station_catalog import STATION_CATALOG, get_station
+from fleetshare_common.timeutils import iso, utcnow_naive
 
 app = create_app("Vehicle Service", "Atomic vehicle state and telemetry service.")
 
@@ -29,7 +30,7 @@ class Vehicle(Base):
     zone: Mapped[str] = mapped_column(String(64))
     vehicle_type: Mapped[str] = mapped_column(String(64), default="SEDAN")
     status: Mapped[str] = mapped_column(String(64), default=VehicleStatus.AVAILABLE.value)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, onupdate=utcnow_naive)
 
 
 class TelemetrySnapshot(Base):
@@ -41,7 +42,7 @@ class TelemetrySnapshot(Base):
     tire_pressure_ok: Mapped[str] = mapped_column(String(16), default="true")
     severity: Mapped[str] = mapped_column(String(32), default="INFO")
     fault_code: Mapped[str] = mapped_column(String(128), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
 
 
 class VehicleStatusPayload(BaseModel):
@@ -274,7 +275,7 @@ def latest_telemetry(vehicle_id: int, db: Session = Depends(get_db)):
         "tirePressureOk": snapshot.tire_pressure_ok == "true",
         "severity": snapshot.severity,
         "faultCode": snapshot.fault_code,
-        "createdAt": snapshot.created_at.isoformat(),
+        "createdAt": iso(snapshot.created_at),
     }
 
 

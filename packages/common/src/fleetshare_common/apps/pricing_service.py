@@ -5,7 +5,7 @@ from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
 from fastapi import Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import Boolean, Date, DateTime, Float, Integer, String, func
+from sqlalchemy import Boolean, Date, DateTime, Float, Integer, String
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from fleetshare_common.app import create_app
@@ -18,7 +18,7 @@ from fleetshare_common.pricing import (
     rerate_after_renewal,
     trip_adjustment,
 )
-from fleetshare_common.timeutils import as_utc_naive, billing_today, iso, utcnow
+from fleetshare_common.timeutils import as_utc_naive, billing_today, iso, utcnow, utcnow_naive
 
 app = create_app("Pricing Service", "Atomic pricing and re-rating service.")
 
@@ -34,8 +34,8 @@ class CustomerProfile(Base):
     monthly_included_hours: Mapped[float] = mapped_column(Float, default=6.0)
     hours_used_this_cycle: Mapped[float] = mapped_column(Float, default=0.0)
     subscription_end_date: Mapped[date] = mapped_column("renewal_date", Date)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, onupdate=utcnow_naive)
 
 
 class UsageLedger(Base):
@@ -60,8 +60,8 @@ class UsageLedger(Base):
     discount_amount: Mapped[float] = mapped_column(Float, default=0.0)
     renewal_pending: Mapped[bool] = mapped_column(Boolean, default=False)
     reconciliation_status: Mapped[str] = mapped_column(String(64), default="NONE")
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, onupdate=utcnow_naive)
 
 
 class ReRatePayload(BaseModel):

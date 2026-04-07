@@ -7,12 +7,13 @@ from uuid import uuid4
 from botocore.exceptions import ClientError
 from fastapi import Depends, File, Form, HTTPException, Response, UploadFile
 from pydantic import BaseModel, Field
-from sqlalchemy import JSON, DateTime, Float, Integer, String, func
+from sqlalchemy import JSON, DateTime, Float, Integer, String
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from fleetshare_common.app import create_app
 from fleetshare_common.database import Base, get_db, initialize_schema_with_retry
 from fleetshare_common.object_store import download_bytes, upload_bytes
+from fleetshare_common.timeutils import iso, utcnow_naive
 
 app = create_app("Record Service", "Atomic evidence and record management service.")
 
@@ -31,8 +32,8 @@ class Record(Base):
     confidence: Mapped[float] = mapped_column(Float, default=0.0)
     evidence_urls: Mapped[list] = mapped_column(JSON, default=list)
     detected_damage: Mapped[list] = mapped_column(JSON, default=list)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, onupdate=utcnow_naive)
 
 
 class RecordPayload(BaseModel):
@@ -73,8 +74,8 @@ def record_to_dict(record: Record) -> dict:
         "confidence": record.confidence,
         "evidenceUrls": record.evidence_urls,
         "detectedDamage": record.detected_damage,
-        "createdAt": record.created_at.isoformat() if record.created_at else None,
-        "updatedAt": record.updated_at.isoformat() if record.updated_at else None,
+        "createdAt": iso(record.created_at),
+        "updatedAt": iso(record.updated_at),
     }
 
 

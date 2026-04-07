@@ -36,3 +36,9 @@ def test_as_billing_time_uses_configured_timezone(monkeypatch):
     assert local_time.minute == 30
 
     timeutils.billing_timezone.cache_clear()
+
+
+def test_utcnow_naive_drops_timezone_after_normalizing_to_utc(monkeypatch):
+    monkeypatch.setattr(timeutils, "utcnow", lambda: datetime(2026, 4, 7, 10, 45, tzinfo=timezone.utc))
+
+    assert timeutils.utcnow_naive() == datetime(2026, 4, 7, 10, 45)

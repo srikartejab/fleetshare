@@ -4,7 +4,7 @@ from datetime import datetime
 
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import JSON, DateTime, Float, Integer, String, func
+from sqlalchemy import JSON, DateTime, Float, Integer, String
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from fleetshare_common.app import create_app
@@ -12,7 +12,7 @@ from fleetshare_common.contracts import TripStatus
 from fleetshare_common.database import Base, get_db, initialize_schema_with_retry
 from fleetshare_common.messaging import publish_event
 from fleetshare_common.pricing import post_midnight_hours
-from fleetshare_common.timeutils import as_utc_naive, iso, utcnow
+from fleetshare_common.timeutils import as_utc_naive, iso, utcnow, utcnow_naive
 
 app = create_app("Trip Service", "Atomic trip lifecycle service.")
 
@@ -31,7 +31,7 @@ class Trip(Base):
     disruption_reason: Mapped[str | None] = mapped_column(String(128), nullable=True)
     subscription_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
     duration_hours: Mapped[float] = mapped_column(Float, default=0.0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
 
 
 class TripStartPayload(BaseModel):

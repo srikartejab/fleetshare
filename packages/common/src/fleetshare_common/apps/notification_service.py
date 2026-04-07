@@ -4,12 +4,13 @@ from datetime import datetime
 
 from fastapi import Depends
 from pydantic import BaseModel
-from sqlalchemy import JSON, DateTime, Integer, String, func
+from sqlalchemy import JSON, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from fleetshare_common.app import create_app
 from fleetshare_common.database import Base, get_db, initialize_schema_with_retry, session_scope
 from fleetshare_common.messaging import start_consumer
+from fleetshare_common.timeutils import iso, utcnow_naive
 
 app = create_app("Notification Service", "Atomic in-app notification service.")
 
@@ -26,7 +27,7 @@ class Notification(Base):
     message: Mapped[str] = mapped_column(String(500))
     event_id: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     payload_json: Mapped[dict] = mapped_column(JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
 
 
 class DirectNotificationPayload(BaseModel):
@@ -64,7 +65,7 @@ def list_notifications(userId: str | None = None, audience: str | None = None, d
             "subject": item.subject,
             "message": item.message,
             "payload": item.payload_json,
-            "createdAt": item.created_at.isoformat() if item.created_at else None,
+            "createdAt": iso(item.created_at),
         }
         for item in query.order_by(Notification.id.desc()).all()
     ]
