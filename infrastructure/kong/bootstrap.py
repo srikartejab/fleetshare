@@ -110,6 +110,33 @@ def _delete_stale_services(desired_service_names: set[str]):
         _admin_request("DELETE", f"/services/{service['id']}", expected_statuses={204, 404})
 
 
+def _ensure_service_plugin(service_name: str, plugin: dict[str, Any]) -> None:
+    plugin_name = plugin["name"]
+    existing = _admin_request("GET", f"/services/{service_name}/plugins", expected_statuses={200}).json().get("data", [])
+    match = next((p for p in existing if p.get("name") == plugin_name), None)
+    payload: dict[str, Any] = {"name": plugin_name, "tags": [MANAGED_TAG]}
+    if "config" in plugin:
+        payload["config"] = plugin["config"]
+    if match:
+        _admin_request("PATCH", f"/plugins/{match['id']}", expected_statuses={200}, json=payload)
+    else:
+        _admin_request("POST", f"/services/{service_name}/plugins", expected_statuses={201}, json=payload)
+
+
+def _get_or_create_consumer(username: str) -> dict[str, Any]:
+    existing = _admin_request("GET", f"/consumers/{username}", expected_statuses={200, 404})
+    if existing.status_code == 404:
+        return _admin_request("POST", "/consumers", expected_statuses={201}, json={"username": username, "tags": [MANAGED_TAG]}).json()
+    return existing.json()
+
+
+def _ensure_keyauth_credential(username: str, key: str) -> None:
+    creds = _admin_request("GET", f"/consumers/{username}/key-auth", expected_statuses={200}).json().get("data", [])
+    if any(c.get("key") == key for c in creds):
+        return
+    _admin_request("POST", f"/consumers/{username}/key-auth", expected_statuses={201}, json={"key": key})
+
+
 def sync():
     _wait_for_admin()
     config = _load_config()
@@ -123,9 +150,17 @@ def sync():
         for route in service.get("routes", []):
             desired_route_names.add(route["name"])
             _get_or_create_route(service_name, route)
+        for plugin in service.get("plugins", []):
+            _ensure_service_plugin(service_name, plugin)
 
     _delete_stale_routes(desired_route_names)
     _delete_stale_services(desired_service_names)
+
+    for consumer in config.get("consumers", []):
+        username = consumer["username"]
+        _get_or_create_consumer(username)
+        for cred in consumer.get("keyauth_credentials", []):
+            _ensure_keyauth_credential(username, cred["key"])
 
 
 if __name__ == "__main__":
