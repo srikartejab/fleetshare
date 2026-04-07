@@ -52,7 +52,7 @@ export function LandingPage({
           <p className="mini-label">What this demo shows</p>
           <ul className="feature-list">
             <li>Allowance-aware vehicle search</li>
-            <li>Overnight renewal with provisional charges</li>
+            <li>Overnight billing-cycle rollover with provisional charges</li>
             <li>Trip, payments, and notification lifecycle</li>
           </ul>
         </div>
@@ -77,7 +77,7 @@ export function LandingPage({
               </div>
               <div>
                 <span>Renewal</span>
-                <strong>{formatDateOnly(customer.renewalDate)}</strong>
+                <strong>{formatDateOnly(customer.subscriptionEndDate)}</strong>
               </div>
             </div>
             <button
@@ -181,8 +181,8 @@ export function HomePage({
             <strong>{customerSummary ? formatHours(customerSummary.hoursUsedThisCycle) : '...'}</strong>
           </div>
           <div>
-            <span>Renewal date</span>
-            <strong>{customerSummary ? formatDateOnly(customerSummary.renewalDate) : '...'}</strong>
+            <span>Subscription ends on</span>
+            <strong>{customerSummary ? formatDateOnly(customerSummary.subscriptionEndDate) : '...'}</strong>
           </div>
         </div>
       </section>
@@ -356,7 +356,7 @@ export function DiscoverPage({
                 <div className="notice-card">
                   <strong>Renewal boundary detected</strong>
                   <p>
-                    {formatHours(vehicle.provisionalPostMidnightHours)} will be charged provisionally now and may be re-rated after renewal on {formatDateOnly(vehicle.renewalDate)}.
+                    {formatHours(vehicle.provisionalPostMidnightHours)} will be charged provisionally now and may be re-rated after the subscription ends on {formatDateOnly(vehicle.subscriptionEndDate)}.
                   </p>
                 </div>
               ) : null}
@@ -594,8 +594,8 @@ export function BookingDetailsPage({
             <strong>{booking.status}</strong>
           </div>
           <div>
-            <span>Renewal date</span>
-            <strong>{customerSummary ? formatDateOnly(customerSummary.renewalDate) : 'N/A'}</strong>
+            <span>Subscription ends on</span>
+            <strong>{customerSummary ? formatDateOnly(customerSummary.subscriptionEndDate) : 'N/A'}</strong>
           </div>
         </div>
       </section>
@@ -1236,7 +1236,7 @@ export function AccountPage({
             </div>
             <div>
               <span>Renews</span>
-              <strong>{formatDateOnly(customerSummary?.renewalDate)}</strong>
+              <strong>{formatDateOnly(customerSummary?.subscriptionEndDate)}</strong>
             </div>
           </div>
         </article>

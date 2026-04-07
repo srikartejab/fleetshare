@@ -111,7 +111,7 @@ def test_handle_trip_ended_event_targets_only_the_ended_booking(monkeypatch):
                 "pricingSnapshot": {"nextBillingCycleId": "2026-05"},
             }
         if url.endswith("/pricing/customers/user-1001/summary"):
-            return {"renewalDate": "2026-05-01"}
+            return {"subscriptionEndDate": "2026-05-01"}
         raise AssertionError(f"Unexpected GET {url} {params}")
 
     monkeypatch.setattr(renewal_reconciliation_service, "get_settings", _settings)

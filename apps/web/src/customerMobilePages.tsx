@@ -84,7 +84,7 @@ function vehicleTypeLabel(vehicle?: Vehicle | null) {
   }
 }
 
-function formatRenewalDisplayDate(value?: string | null) {
+function formatSubscriptionEndDisplayDate(value?: string | null) {
   return formatDateOnly(value)
 }
 
@@ -93,12 +93,12 @@ function bookingChargeNotice(
   customerSummary: CustomerSummary | null,
   reconciliationStatus?: string | null,
 ) {
-  const renewalDateLabel = formatRenewalDisplayDate(pricing.renewalDate ?? customerSummary?.renewalDate)
+  const subscriptionEndDateLabel = formatSubscriptionEndDisplayDate(pricing.subscriptionEndDate ?? customerSummary?.subscriptionEndDate)
   if (pricing.provisionalPostMidnightHours > 0) {
     if (reconciliationStatus === 'COMPLETED') {
-      return `This trip crossed your renewal on ${renewalDateLabel}. Eligible after-renewal hours have already been moved into the new cycle allowance, and any refund has been applied automatically.`
+      return `This trip crossed the subscription boundary after ${subscriptionEndDateLabel}. Eligible after-midnight hours have already been moved into the new cycle allowance, and any refund has been applied automatically.`
     }
-    return `This trip crosses your renewal on ${renewalDateLabel}. ${formatHours(pricing.provisionalPostMidnightHours)} after renewal is charged now provisionally. If the renewal succeeds, FleetShare automatically re-rates that portion, refunds any overcharge, and deducts the covered hours from the new cycle allowance.`
+    return `This trip crosses into the next billing cycle after ${subscriptionEndDateLabel}. ${formatHours(pricing.provisionalPostMidnightHours)} after midnight is charged now provisionally. If the renewal succeeds, FleetShare automatically re-rates that portion, refunds any overcharge, and deducts the covered hours from the new cycle allowance.`
   }
 
   return `This quote uses ${formatHours(pricing.includedHoursApplied)} from the current cycle and bills ${formatHours(pricing.billableHours)} outside the included allowance.`
@@ -145,8 +145,8 @@ function BookingPricingBreakdown({
           <strong>{formatHours(pricing.includedHoursRemainingAfter)}</strong>
         </div>
         <div className="customer-keyvalue-row">
-          <span>Renewal date</span>
-          <strong>{formatRenewalDisplayDate(pricing.renewalDate ?? customerSummary?.renewalDate)}</strong>
+          <span>Subscription ends on</span>
+          <strong>{formatSubscriptionEndDisplayDate(pricing.subscriptionEndDate ?? customerSummary?.subscriptionEndDate)}</strong>
         </div>
       </div>
       <p className={`customer-inline-notice ${pricing.provisionalPostMidnightHours > 0 ? 'customer-inline-notice--warning' : ''}`}>
@@ -494,7 +494,7 @@ export function LandingPage({
               </div>
               <div>
                 <span>Renewal</span>
-                <strong>{formatRenewalDisplayDate(customer.renewalDate)}</strong>
+                <strong>{formatSubscriptionEndDisplayDate(customer.subscriptionEndDate)}</strong>
               </div>
             </div>
             <button
@@ -594,7 +594,7 @@ export function HomePage({
           </div>
           <div>
             <span>Renews</span>
-            <strong>{formatRenewalDisplayDate(customerSummary?.renewalDate)}</strong>
+            <strong>{formatSubscriptionEndDisplayDate(customerSummary?.subscriptionEndDate)}</strong>
           </div>
           <div>
             <span>Hourly rate</span>
@@ -2381,7 +2381,7 @@ export function WalletPage({
           </div>
           <div>
             <span>Renews</span>
-            <strong>{formatRenewalDisplayDate(customerSummary?.renewalDate)}</strong>
+            <strong>{formatSubscriptionEndDisplayDate(customerSummary?.subscriptionEndDate)}</strong>
           </div>
           <div>
             <span>Hourly rate</span>
@@ -2463,7 +2463,7 @@ export function AccountPage({
           </div>
           <div>
             <span>Renews</span>
-            <strong>{formatRenewalDisplayDate(customerSummary?.renewalDate)}</strong>
+            <strong>{formatSubscriptionEndDisplayDate(customerSummary?.subscriptionEndDate)}</strong>
           </div>
         </div>
       </section>

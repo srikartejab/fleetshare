@@ -93,7 +93,7 @@ def search_available_vehicles(
                 "billableHours": quote["billableHours"],
                 "provisionalPostMidnightHours": quote["provisionalPostMidnightHours"],
                 "provisionalCharge": quote["provisionalCharge"],
-                "renewalDate": quote["renewalDate"],
+                "subscriptionEndDate": quote["subscriptionEndDate"],
             }
         )
 

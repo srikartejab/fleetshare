@@ -295,7 +295,7 @@ function App() {
         monthlyIncludedHours: 0,
         hoursUsedThisCycle: 0,
         remainingHoursThisCycle: 0,
-        renewalDate: new Date().toISOString().slice(0, 10),
+        subscriptionEndDate: new Date().toISOString().slice(0, 10),
         hourlyRate: 0,
       },
       bookings: [],
@@ -490,7 +490,7 @@ function App() {
         billableHours: vehicle.billableHours ?? 0,
         provisionalPostMidnightHours: vehicle.provisionalPostMidnightHours ?? 0,
         provisionalCharge: vehicle.provisionalCharge ?? 0,
-        renewalDate: vehicle.renewalDate ?? customerSummary?.renewalDate,
+        subscriptionEndDate: vehicle.subscriptionEndDate ?? customerSummary?.subscriptionEndDate,
         customerSummary: customerSummary ?? undefined,
       },
     })

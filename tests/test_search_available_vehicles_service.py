@@ -85,7 +85,7 @@ def test_search_available_vehicles_returns_station_aggregation(monkeypatch):
                 "billableHours": 0.0,
                 "provisionalPostMidnightHours": 0.0,
                 "provisionalCharge": 0.0,
-                "renewalDate": "2026-03-20T00:00:00Z",
+                "subscriptionEndDate": "2026-03-20T00:00:00Z",
             }
         raise AssertionError(f"Unexpected URL {url}")
 

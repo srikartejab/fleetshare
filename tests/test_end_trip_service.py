@@ -11,7 +11,7 @@ def test_end_trip_service_separates_renewal_reconciliation_from_refund_queue(mon
             return {
                 "bookingId": 101,
                 "endTime": "2026-04-02T02:10:00Z",
-                "pricingSnapshot": {"renewalDate": "2026-04-01"},
+                "pricingSnapshot": {"subscriptionEndDate": "2026-04-01"},
             }
         return {
             "tripId": 201,

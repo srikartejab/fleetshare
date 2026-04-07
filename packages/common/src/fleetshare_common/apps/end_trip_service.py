@@ -54,7 +54,7 @@ def process_end_trip(payload: EndTripPayload):
             "userId": payload.userId,
             "startedAt": updated_trip["startedAt"],
             "endedAt": updated_trip["endedAt"],
-            "quotedRenewalDate": booking.get("pricingSnapshot", {}).get("renewalDate"),
+            "quotedSubscriptionEndDate": booking.get("pricingSnapshot", {}).get("subscriptionEndDate"),
             "disrupted": disrupted,
             "endReason": payload.endReason,
         },

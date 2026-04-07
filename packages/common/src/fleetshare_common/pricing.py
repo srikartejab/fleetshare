@@ -42,13 +42,13 @@ def post_midnight_hours(start: datetime, end: datetime) -> float:
     return hours_between(midnight, local_end)
 
 
-def hours_after_renewal_boundary(start: datetime, end: datetime, renewal_date: date | None = None) -> float:
-    if renewal_date is None:
+def hours_after_subscription_end_boundary(start: datetime, end: datetime, subscription_end_date: date | None = None) -> float:
+    if subscription_end_date is None:
         return post_midnight_hours(start, end)
 
     local_start = as_billing_time(start)
     local_end = as_billing_time(end)
-    boundary = datetime.combine(renewal_date + timedelta(days=1), time.min, tzinfo=billing_timezone())
+    boundary = datetime.combine(subscription_end_date + timedelta(days=1), time.min, tzinfo=billing_timezone())
     if local_end <= boundary:
         return 0.0
     if local_start >= boundary:
@@ -61,10 +61,10 @@ def booking_quote(
     end: datetime,
     monthly_included_hours: float = SUBSCRIPTION_INCLUDED_HOURS,
     hours_used_this_cycle: float = 0.0,
-    renewal_date: date | None = None,
+    subscription_end_date: date | None = None,
 ) -> QuoteResult:
     total_hours = hours_between(start, end)
-    provisional_post_midnight = hours_after_renewal_boundary(start, end, renewal_date)
+    provisional_post_midnight = hours_after_subscription_end_boundary(start, end, subscription_end_date)
     current_cycle_hours = max(total_hours - provisional_post_midnight, 0.0)
     included_remaining_before = max(monthly_included_hours - hours_used_this_cycle, 0.0)
     included_hours_applied = min(current_cycle_hours, included_remaining_before)

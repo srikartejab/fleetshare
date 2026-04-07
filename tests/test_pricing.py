@@ -16,7 +16,7 @@ def test_booking_quote_detects_cross_cycle():
     quote = booking_quote(
         datetime(2026, 4, 1, 15, 0, tzinfo=UTC),
         datetime(2026, 4, 1, 18, 0, tzinfo=UTC),
-        renewal_date=date(2026, 4, 1),
+        subscription_end_date=date(2026, 4, 1),
     )
     assert quote.cross_cycle_booking is True
     assert quote.provisional_post_midnight_hours == 2.0
@@ -26,7 +26,7 @@ def test_booking_quote_uses_singapore_midnight_for_naive_utc_values():
     quote = booking_quote(
         datetime(2026, 4, 1, 15, 0),
         datetime(2026, 4, 1, 18, 0),
-        renewal_date=date(2026, 4, 1),
+        subscription_end_date=date(2026, 4, 1),
     )
     assert quote.cross_cycle_booking is True
     assert quote.current_cycle_hours == 1.0
@@ -132,11 +132,11 @@ def test_finalize_trip_pricing_returns_used_allowance_on_internal_fault(monkeypa
         user_id="user-1001",
         display_name="Alicia Tan",
         role="CUSTOMER",
-        demo_badge="Renews tonight",
+        demo_badge="Subscription ends today",
         plan_name="STANDARD_MONTHLY",
         monthly_included_hours=6.0,
         hours_used_this_cycle=5.0,
-        renewal_date=date(2026, 3, 19),
+        subscription_end_date=date(2026, 3, 19),
     )
     payload = pricing_service.FinalizeTripPayload(
         bookingId=11,
@@ -170,7 +170,7 @@ def test_seed_customers_uses_billing_today(monkeypatch):
     pricing_service.seed_customers()
 
     assert fake_session.committed is True
-    assert [profile.renewal_date for profile in fake_session.added] == [
+    assert [profile.subscription_end_date for profile in fake_session.added] == [
         date(2026, 4, 1),
         date(2026, 4, 9),
         date(2026, 4, 15),
@@ -183,11 +183,11 @@ def test_finalize_trip_pricing_internal_fault_clears_renewal_pending_and_restore
         user_id="user-1001",
         display_name="Alicia Tan",
         role="CUSTOMER",
-        demo_badge="Renews tonight",
+        demo_badge="Subscription ends today",
         plan_name="STANDARD_MONTHLY",
         monthly_included_hours=6.0,
         hours_used_this_cycle=5.0,
-        renewal_date=date(2026, 4, 1),
+        subscription_end_date=date(2026, 4, 1),
     )
     payload = pricing_service.FinalizeTripPayload(
         bookingId=13,
@@ -195,7 +195,7 @@ def test_finalize_trip_pricing_internal_fault_clears_renewal_pending_and_restore
         userId="user-1001",
         startedAt=datetime(2026, 4, 1, 15, 10),
         endedAt=datetime(2026, 4, 1, 18, 10),
-        quotedRenewalDate=date(2026, 4, 1),
+        quotedSubscriptionEndDate=date(2026, 4, 1),
         disrupted=True,
         endReason="SEVERE_INTERNAL_FAULT",
     )
@@ -224,7 +224,7 @@ def test_finalize_trip_pricing_only_keeps_uncompensated_allowance_usage(monkeypa
         plan_name="STANDARD_MONTHLY",
         monthly_included_hours=6.0,
         hours_used_this_cycle=0.0,
-        renewal_date=date(2026, 3, 27),
+        subscription_end_date=date(2026, 3, 27),
     )
     payload = pricing_service.FinalizeTripPayload(
         bookingId=12,
@@ -351,11 +351,11 @@ def test_apply_customer_renewal_is_idempotent_for_current_cycle(monkeypatch):
         user_id="user-1001",
         display_name="Alicia Tan",
         role="CUSTOMER",
-        demo_badge="Renews tonight",
+        demo_badge="Subscription ends today",
         plan_name="STANDARD_MONTHLY",
         monthly_included_hours=6.0,
         hours_used_this_cycle=5.0,
-        renewal_date=date(2026, 4, 1),
+        subscription_end_date=date(2026, 4, 1),
     )
     db = _FakeDb()
 
@@ -371,7 +371,7 @@ def test_apply_customer_renewal_is_idempotent_for_current_cycle(monkeypatch):
     assert result["billingCycleId"] == "2026-04"
     assert result["idempotent"] is True
     assert profile.hours_used_this_cycle == 5.0
-    assert profile.renewal_date == date(2026, 4, 1)
+    assert profile.subscription_end_date == date(2026, 4, 1)
 
 
 def test_apply_customer_renewal_rejects_inconsistent_target_cycle(monkeypatch):
@@ -379,11 +379,11 @@ def test_apply_customer_renewal_rejects_inconsistent_target_cycle(monkeypatch):
         user_id="user-1001",
         display_name="Alicia Tan",
         role="CUSTOMER",
-        demo_badge="Renews tonight",
+        demo_badge="Subscription ends today",
         plan_name="STANDARD_MONTHLY",
         monthly_included_hours=6.0,
         hours_used_this_cycle=5.0,
-        renewal_date=date(2026, 4, 1),
+        subscription_end_date=date(2026, 4, 1),
     )
     db = _FakeDb()
 
@@ -404,11 +404,11 @@ def test_rerate_returns_existing_completed_result_idempotently(monkeypatch):
         user_id="user-1001",
         display_name="Alicia Tan",
         role="CUSTOMER",
-        demo_badge="Renews tonight",
+        demo_badge="Subscription ends today",
         plan_name="STANDARD_MONTHLY",
         monthly_included_hours=6.0,
         hours_used_this_cycle=1.5,
-        renewal_date=date(2026, 4, 1),
+        subscription_end_date=date(2026, 4, 1),
     )
     ledger = SimpleNamespace(
         booking_id=15,
@@ -445,11 +445,11 @@ def test_rerate_consumes_new_cycle_allowance_after_reconciliation(monkeypatch):
         user_id="user-1001",
         display_name="Alicia Tan",
         role="CUSTOMER",
-        demo_badge="Renews tonight",
+        demo_badge="Subscription ends today",
         plan_name="STANDARD_MONTHLY",
         monthly_included_hours=6.0,
         hours_used_this_cycle=0.0,
-        renewal_date=date(2026, 5, 1),
+        subscription_end_date=date(2026, 5, 1),
     )
     ledger = SimpleNamespace(
         booking_id=1,
@@ -496,11 +496,11 @@ def test_rerate_keeps_refund_aligned_with_stored_provisional_charge(monkeypatch)
         user_id="user-1001",
         display_name="Alicia Tan",
         role="CUSTOMER",
-        demo_badge="Renews tonight",
+        demo_badge="Subscription ends today",
         plan_name="STANDARD_MONTHLY",
         monthly_included_hours=6.0,
         hours_used_this_cycle=0.0,
-        renewal_date=date(2026, 5, 1),
+        subscription_end_date=date(2026, 5, 1),
     )
     ledger = SimpleNamespace(
         booking_id=1,

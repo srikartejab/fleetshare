@@ -13,7 +13,7 @@ export type CustomerSummary = {
   monthlyIncludedHours: number
   hoursUsedThisCycle: number
   remainingHoursThisCycle: number
-  renewalDate: string
+  subscriptionEndDate: string
   hourlyRate: number
 }
 
@@ -31,7 +31,7 @@ export type PricingSnapshot = {
   billableHours: number
   provisionalPostMidnightHours: number
   provisionalCharge: number
-  renewalDate?: string
+  subscriptionEndDate?: string
   customerSummary?: CustomerSummary
 }
 
@@ -62,7 +62,7 @@ export type Vehicle = {
   billableHours?: number
   provisionalPostMidnightHours?: number
   provisionalCharge?: number
-  renewalDate?: string
+  subscriptionEndDate?: string
 }
 
 export type ReservationDraft = {

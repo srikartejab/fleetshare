@@ -33,7 +33,7 @@ def simulate_renewal(payload: RenewalPayload):
     concrete_cycle_id = (
         payload.newBillingCycleId
         if payload.newBillingCycleId not in {"", "next"}
-        else billing_cycle_id_for_date(date.fromisoformat(summary["renewalDate"]) + relativedelta(months=1))
+        else billing_cycle_id_for_date(date.fromisoformat(summary["subscriptionEndDate"]) + relativedelta(months=1))
     )
     publish_event(
         "subscription.renewed",
@@ -48,7 +48,7 @@ def billing_cycle_id_for_date(value: date) -> str:
 
 
 def active_billing_cycle_id_from_summary(summary: dict) -> str:
-    return billing_cycle_id_for_date(date.fromisoformat(summary["renewalDate"]))
+    return billing_cycle_id_for_date(date.fromisoformat(summary["subscriptionEndDate"]))
 
 
 def fetch_customer_summary(settings, user_id: str) -> dict:

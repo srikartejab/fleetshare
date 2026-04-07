@@ -173,8 +173,8 @@ def test_scenario_1_booking_trip_and_renewal_reconciliation(client: httpx.Client
     user_id = "user-1001"
     summary = customer_home(client, user_id)["customerSummary"]
     singapore = timezone(timedelta(hours=8))
-    renewal_date = datetime.fromisoformat(summary["renewalDate"]).replace(tzinfo=singapore)
-    start_time = renewal_date.replace(hour=23, minute=0, second=0, microsecond=0)
+    subscription_end_date = datetime.fromisoformat(summary["subscriptionEndDate"]).replace(tzinfo=singapore)
+    start_time = subscription_end_date.replace(hour=23, minute=0, second=0, microsecond=0)
     end_time = start_time + timedelta(hours=3)
 
     reserve, booking, vehicle = reserve_and_confirm(

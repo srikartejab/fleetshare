@@ -33,7 +33,7 @@ class CustomerProfile(Base):
     plan_name: Mapped[str] = mapped_column(String(64), default="STANDARD_MONTHLY")
     monthly_included_hours: Mapped[float] = mapped_column(Float, default=6.0)
     hours_used_this_cycle: Mapped[float] = mapped_column(Float, default=0.0)
-    renewal_date: Mapped[date] = mapped_column(Date)
+    subscription_end_date: Mapped[date] = mapped_column("renewal_date", Date)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -82,7 +82,7 @@ class FinalizeTripPayload(BaseModel):
     userId: str
     startedAt: datetime
     endedAt: datetime
-    quotedRenewalDate: date | None = None
+    quotedSubscriptionEndDate: date | None = None
     disrupted: bool = False
     endReason: str | None = None
 
@@ -120,11 +120,11 @@ def seed_customers():
                     user_id="user-1001",
                     display_name="Alicia Tan",
                     role="CUSTOMER",
-                    demo_badge="Renews tonight",
+                    demo_badge="Subscription ends today",
                     plan_name="STANDARD_MONTHLY",
                     monthly_included_hours=6.0,
                     hours_used_this_cycle=5.0,
-                    renewal_date=today,
+                    subscription_end_date=today,
                 ),
                 CustomerProfile(
                     user_id="user-1002",
@@ -134,7 +134,7 @@ def seed_customers():
                     plan_name="STANDARD_MONTHLY",
                     monthly_included_hours=6.0,
                     hours_used_this_cycle=2.0,
-                    renewal_date=today + relativedelta(days=8),
+                    subscription_end_date=today + relativedelta(days=8),
                 ),
                 CustomerProfile(
                     user_id="user-1003",
@@ -144,7 +144,7 @@ def seed_customers():
                     plan_name="STANDARD_MONTHLY",
                     monthly_included_hours=6.0,
                     hours_used_this_cycle=5.5,
-                    renewal_date=today + relativedelta(days=14),
+                    subscription_end_date=today + relativedelta(days=14),
                 ),
                 CustomerProfile(
                     user_id="ops-maint-1",
@@ -154,7 +154,7 @@ def seed_customers():
                     plan_name="OPERATIONS",
                     monthly_included_hours=0.0,
                     hours_used_this_cycle=0.0,
-                    renewal_date=today + relativedelta(months=1),
+                    subscription_end_date=today + relativedelta(months=1),
                 ),
             ]
         )
@@ -185,22 +185,22 @@ def summary_from_profile(profile: CustomerProfile) -> dict:
         "monthlyIncludedHours": round(profile.monthly_included_hours, 2),
         "hoursUsedThisCycle": round(profile.hours_used_this_cycle, 2),
         "remainingHoursThisCycle": round(remaining, 2),
-        "renewalDate": profile.renewal_date.isoformat(),
+        "subscriptionEndDate": profile.subscription_end_date.isoformat(),
         "hourlyRate": BASE_HOURLY_RATE,
     }
 
 
-def billing_cycle_id_for_renewal_date(renewal_date: date) -> str:
-    return renewal_date.strftime("%Y-%m")
+def billing_cycle_id_for_subscription_end_date(subscription_end_date: date) -> str:
+    return subscription_end_date.strftime("%Y-%m")
 
 
-def next_billing_cycle_id_for_renewal_date(renewal_date: date) -> str:
-    return billing_cycle_id_for_renewal_date(renewal_date + relativedelta(months=1))
+def next_billing_cycle_id_for_subscription_end_date(subscription_end_date: date) -> str:
+    return billing_cycle_id_for_subscription_end_date(subscription_end_date + relativedelta(months=1))
 
 
 def quote_to_dict(user_id: str, quote, profile: CustomerProfile) -> dict:
-    current_cycle_id = billing_cycle_id_for_renewal_date(profile.renewal_date)
-    next_cycle_id = next_billing_cycle_id_for_renewal_date(profile.renewal_date)
+    current_cycle_id = billing_cycle_id_for_subscription_end_date(profile.subscription_end_date)
+    next_cycle_id = next_billing_cycle_id_for_subscription_end_date(profile.subscription_end_date)
     return {
         "userId": user_id,
         "estimatedPrice": quote.estimated_price,
@@ -308,8 +308,8 @@ def get_customer_ledger(user_id: str, db: Session = Depends(get_db)):
 @app.post("/pricing/customers/{user_id}/renewal")
 def apply_customer_renewal(user_id: str, payload: RenewalPayload, db: Session = Depends(get_db)):
     profile = get_profile_or_404(db, user_id)
-    current_billing_cycle_id = billing_cycle_id_for_renewal_date(profile.renewal_date)
-    next_billing_cycle_id = next_billing_cycle_id_for_renewal_date(profile.renewal_date)
+    current_billing_cycle_id = billing_cycle_id_for_subscription_end_date(profile.subscription_end_date)
+    next_billing_cycle_id = next_billing_cycle_id_for_subscription_end_date(profile.subscription_end_date)
     target_billing_cycle_id = payload.newBillingCycleId if payload.newBillingCycleId not in {"", "next"} else next_billing_cycle_id
 
     if target_billing_cycle_id == current_billing_cycle_id:
@@ -324,11 +324,11 @@ def apply_customer_renewal(user_id: str, payload: RenewalPayload, db: Session = 
 
     previous_billing_cycle_id = current_billing_cycle_id
     profile.hours_used_this_cycle = 0.0
-    profile.renewal_date = profile.renewal_date + relativedelta(months=1)
+    profile.subscription_end_date = profile.subscription_end_date + relativedelta(months=1)
     db.commit()
     return {
         **summary_from_profile(profile),
-        "billingCycleId": billing_cycle_id_for_renewal_date(profile.renewal_date),
+        "billingCycleId": billing_cycle_id_for_subscription_end_date(profile.subscription_end_date),
         "previousBillingCycleId": previous_billing_cycle_id,
         "idempotent": False,
     }
@@ -349,13 +349,13 @@ def get_quote(
         endTime,
         monthly_included_hours=profile.monthly_included_hours,
         hours_used_this_cycle=profile.hours_used_this_cycle,
-        renewal_date=profile.renewal_date,
+        subscription_end_date=profile.subscription_end_date,
     )
     return {
         "vehicleId": vehicleId,
         "subscriptionPlanId": subscriptionPlanId,
         **quote_to_dict(userId, quote, profile),
-        "renewalDate": profile.renewal_date.isoformat(),
+        "subscriptionEndDate": profile.subscription_end_date.isoformat(),
         "customerSummary": summary_from_profile(profile),
     }
 
@@ -369,13 +369,13 @@ def finalize_trip_pricing(payload: FinalizeTripPayload, db: Session = Depends(ge
 
     normalized_start = as_utc_naive(payload.startedAt)
     normalized_end = as_utc_naive(payload.endedAt)
-    renewal_boundary_date = payload.quotedRenewalDate or profile.renewal_date
+    subscription_end_boundary_date = payload.quotedSubscriptionEndDate or profile.subscription_end_date
     quote = booking_quote(
         normalized_start,
         normalized_end,
         monthly_included_hours=profile.monthly_included_hours,
         hours_used_this_cycle=profile.hours_used_this_cycle,
-        renewal_date=renewal_boundary_date,
+        subscription_end_date=subscription_end_boundary_date,
     )
     adjustment = trip_adjustment(payload.disrupted, quote.total_hours, quote.estimated_price, payload.endReason)
     restored_allowance_hours = refunded_included_hours(

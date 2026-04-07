@@ -54,7 +54,7 @@ Local default access:
 
 ## Deployment Notes
 
-- Billing boundaries use `BILLING_TIMEZONE`, which defaults to `Asia/Singapore`. This controls renewal dates and post-midnight allowance logic even if the VM clock or container timezone differs.
+- Billing boundaries use `BILLING_TIMEZONE`, which defaults to `Asia/Singapore`. This controls subscription end dates and post-midnight allowance logic even if the VM clock or container timezone differs.
 - The frontend is built to call Kong at `http://localhost:8000` by default, and Kong is the intended public entrypoint for the UI and browser-facing APIs.
 - Kong services and routes are bootstrapped from `infrastructure/kong/kong.yml`. Kong Manager is available for inspection and temporary edits, but rerunning the Kong bootstrap will reapply the repo-defined baseline.
 - `APP_ENV` is informational only. The current runtime does not switch behavior based on `APP_ENV`.
