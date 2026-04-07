@@ -76,7 +76,7 @@ export function LandingPage({
                 <strong>{formatHours(customer.hoursUsedThisCycle)}</strong>
               </div>
               <div>
-                <span>Renewal</span>
+                <span>Subscription end date</span>
                 <strong>{formatDateOnly(customer.subscriptionEndDate)}</strong>
               </div>
             </div>
@@ -181,7 +181,7 @@ export function HomePage({
             <strong>{customerSummary ? formatHours(customerSummary.hoursUsedThisCycle) : '...'}</strong>
           </div>
           <div>
-            <span>Subscription ends on</span>
+            <span>Subscription end date</span>
             <strong>{customerSummary ? formatDateOnly(customerSummary.subscriptionEndDate) : '...'}</strong>
           </div>
         </div>
@@ -594,7 +594,7 @@ export function BookingDetailsPage({
             <strong>{booking.status}</strong>
           </div>
           <div>
-            <span>Subscription ends on</span>
+            <span>Subscription end date</span>
             <strong>{customerSummary ? formatDateOnly(customerSummary.subscriptionEndDate) : 'N/A'}</strong>
           </div>
         </div>
@@ -797,8 +797,7 @@ export function TripsPage({
             </>
           ) : activeTrip ? (
             <div className="notice-card notice-card--success">
-              <strong>Current booking is already in progress</strong>
-              <p>Booking #{activeTrip.bookingId} has already moved into the live trip flow</p>
+              <strong>Current booking is in progress</strong>
             </div>
           ) : (
             <div className="empty-card"><p>No upcoming bookings. Reserve a car first.</p></div>
@@ -1235,7 +1234,7 @@ export function AccountPage({
               <strong>{formatHours(customerSummary?.remainingHoursThisCycle ?? 0)}</strong>
             </div>
             <div>
-              <span>Renews</span>
+              <span>Subscription end date</span>
               <strong>{formatDateOnly(customerSummary?.subscriptionEndDate)}</strong>
             </div>
           </div>

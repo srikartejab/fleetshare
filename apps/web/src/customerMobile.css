@@ -144,10 +144,12 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
+  width: 100%;
 }
 
 .customer-entry-stats div,
 .customer-stat-grid div {
+  min-width: 0;
   padding: 0.8rem 0.9rem;
   border-radius: 1rem;
   background: rgba(238, 245, 252, 0.95);
@@ -312,8 +314,15 @@
 }
 
 .customer-hero-card--blue {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 1rem;
   background: linear-gradient(180deg, #2b91d8, #1670bb);
   color: #fff;
+}
+
+.customer-hero-card--blue > div {
+  min-width: 0;
 }
 
 .customer-hero-card--blue h2,
@@ -481,9 +490,9 @@
 }
 
 .customer-keyvalue-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  align-items: start;
   gap: 1rem;
   padding: 0.72rem 0;
   border-bottom: 1px solid var(--customer-line);
@@ -494,12 +503,13 @@
 }
 
 .customer-keyvalue-row span {
-  flex: 0 0 5.5rem;
+  min-width: 0;
+  line-height: 1.35;
 }
 
 .customer-keyvalue-row strong {
-  flex: 1 1 auto;
   text-align: right;
+  line-height: 1.35;
   overflow-wrap: anywhere;
   word-break: break-word;
 }

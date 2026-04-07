@@ -393,7 +393,6 @@ export function OpsPage({
                 <div>
                   <p className="customer-page-header__eyebrow">Current shift</p>
                   <h2>Fleet health at a glance</h2>
-                  <p>Start here for the highest-signal operational metrics before moving into tickets or actions.</p>
                 </div>
                 <div className="customer-stat-grid">
                   <OpsMetricCard label="Fleet size" value={vehicles.length} />

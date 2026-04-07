@@ -137,6 +137,7 @@ services:
       KONG_ADMIN_LISTEN: 0.0.0.0:8001
       KONG_ADMIN_GUI_LISTEN: 0.0.0.0:8002
       KONG_ADMIN_GUI_URL: http://localhost:8002
+      KONG_NGINX_MAIN_WORKER_PROCESSES: "2"
       TZ: ${TZ:-Asia/Singapore}
     ports:
       - "8000:8000"

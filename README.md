@@ -52,14 +52,6 @@ Local default access:
 - MySQL through Adminer: system `MySQL`, server `mysql`, username `root`, password `fleetshare_root`
 - MySQL through Adminer: database can be left blank to browse all schemas, or set to a schema like `pricing_db`
 
-## Deployment Notes
-
-- Billing boundaries use `BILLING_TIMEZONE`, which defaults to `Asia/Singapore`. This controls subscription end dates and post-midnight allowance logic even if the VM clock or container timezone differs.
-- The frontend is built to call Kong at `http://localhost:8000` by default, and Kong is the intended public entrypoint for the UI and browser-facing APIs.
-- Kong services and routes are bootstrapped from `infrastructure/kong/kong.yml`. Kong Manager is available for inspection and temporary edits, but rerunning the Kong bootstrap will reapply the repo-defined baseline.
-- `APP_ENV` is informational only. The current runtime does not switch behavior based on `APP_ENV`.
-- MinIO remains the supported evidence store for this release. `AZURE_STORAGE_CONNECTION_STRING` is not used by the current code path.
-- `AZURE_VISION_MODE=azure` requires `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, and `AZURE_OPENAI_DEPLOYMENT`. If Azure AI is unavailable, the inspection flow will force manual review instead of silently using mock results.
 
 ## Demo Flow
 
@@ -112,6 +104,5 @@ python scripts/run_scenario_tests.py --keep-up
 
 ## Important Notes
 
-- `Vehicle Service` is implemented in Python first so the surrounding contracts stay stable; it is intentionally isolated so it can later be ported to OutSystems.
 - Payment and notifications are simulated but persisted.
-- Azure OpenAI powers the production inspection path; local development can stay on `AZURE_VISION_MODE=mock`.
+

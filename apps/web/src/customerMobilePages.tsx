@@ -145,18 +145,13 @@ function BookingPricingBreakdown({
           <strong>{formatHours(pricing.includedHoursRemainingAfter)}</strong>
         </div>
         <div className="customer-keyvalue-row">
-          <span>Subscription ends on</span>
+          <span>Subscription end date</span>
           <strong>{formatSubscriptionEndDisplayDate(pricing.subscriptionEndDate ?? customerSummary?.subscriptionEndDate)}</strong>
         </div>
       </div>
       <p className={`customer-inline-notice ${pricing.provisionalPostMidnightHours > 0 ? 'customer-inline-notice--warning' : ''}`}>
         {bookingChargeNotice(pricing, customerSummary, reconciliationStatus)}
       </p>
-      {pricing.provisionalPostMidnightHours > 0 ? (
-        <p className="customer-inline-notice customer-inline-notice--warning">
-          After midnight, hours may be moved into your renewed allowance and any temporary charge will be refunded after reconciliation.
-        </p>
-      ) : null}
     </>
   )
 }
@@ -364,14 +359,14 @@ function EmptyState({
   actionTo,
 }: {
   title: string
-  body: string
+  body?: string
   actionLabel?: string
   actionTo?: string
 }) {
   return (
     <article className="customer-card customer-card--empty">
       <h2>{title}</h2>
-      <p>{body}</p>
+      {body ? <p>{body}</p> : null}
       {actionLabel && actionTo ? (
         <Link className="customer-button customer-button--primary link-button" to={actionTo}>
           {actionLabel}
@@ -493,7 +488,7 @@ export function LandingPage({
                 <strong>{formatHours(customer.remainingHoursThisCycle)}</strong>
               </div>
               <div>
-                <span>Renewal</span>
+                <span>Subscription end date</span>
                 <strong>{formatSubscriptionEndDisplayDate(customer.subscriptionEndDate)}</strong>
               </div>
             </div>
@@ -577,7 +572,6 @@ export function HomePage({
     <div className="customer-page-stack">
       <PageHeader
         eyebrow="Dashboard"
-        subtitle="Subscription, next trip, and customer inbox in one mobile layout."
         title={customerSummary ? `${formatHours(customerSummary.remainingHoursThisCycle)} remaining this cycle` : 'Loading subscription'}
       />
 
@@ -585,7 +579,6 @@ export function HomePage({
         <div>
           <p className="customer-page-header__eyebrow">Plan overview</p>
           <h2>{planLabel(customerSummary?.planName)}</h2>
-          <p>Your discover results and end-trip billing both feed from this allowance summary.</p>
         </div>
         <div className="customer-stat-grid">
           <div>
@@ -593,7 +586,7 @@ export function HomePage({
             <strong>{formatHours(customerSummary?.hoursUsedThisCycle ?? 0)}</strong>
           </div>
           <div>
-            <span>Renews</span>
+            <span>Subscription end date</span>
             <strong>{formatSubscriptionEndDisplayDate(customerSummary?.subscriptionEndDate)}</strong>
           </div>
           <div>
@@ -635,7 +628,7 @@ export function HomePage({
             <BookingTimeline endTime={nextBooking.endTime} location={nextBooking.pickupLocation} startTime={nextBooking.startTime} />
           </>
         ) : (
-          <EmptyState actionLabel="Find a vehicle" actionTo="/app/discover" body="No booking is queued yet for this customer profile." title="Nothing booked yet" />
+          <EmptyState actionLabel="Find a vehicle" actionTo="/app/discover" title="Nothing booked yet" />
         )}
       </article>
 
@@ -1176,8 +1169,7 @@ export function TripsPage({
           ) : activeTrip ? (
             <article className="customer-card customer-card--info">
               <p className="customer-page-header__eyebrow">Booking status</p>
-              <h2>Current booking is already in progress</h2>
-              <p>Booking #{activeTrip.bookingId} has already moved into the live trip flow</p>
+              <h2>Current booking is in progress</h2>
             </article>
           ) : (
             <EmptyState actionLabel="Find a vehicle" actionTo="/app/discover" body="You do not have any upcoming bookings. Reserve a vehicle to start the trip flow." title="No upcoming bookings" />
@@ -1423,7 +1415,7 @@ export function PreTripInspectionResultPage({
       <PageHeader backTo="/app/trips" eyebrow="Pre-trip step 2 of 3" title={inspection.canUnlock ? 'Inspection complete' : 'Inspection result'} />
       <section className={`customer-card customer-card--${cardTone}`}>
         <p className="customer-page-header__eyebrow">Assessment</p>
-        <h2>{inspection.canUnlock ? 'You can unlock now' : inspection.manualReview ? 'Manual review required' : inspection.blocked ? 'Vehicle is blocked' : 'Inspection noted an issue'}</h2>
+        <h2>{inspection.canUnlock ? 'You can unlock the car now' : inspection.manualReview ? 'Manual review required' : inspection.blocked ? 'Vehicle is blocked' : 'Inspection noted an issue'}</h2>
         <p>{inspection.warningMessage}</p>
         <div className="customer-pill-row">
           <span className={`customer-status-tag ${inspection.canUnlock ? 'customer-status-tag--success' : 'customer-status-tag--warning'}`}>
@@ -2216,11 +2208,39 @@ function titleCaseWords(value: string) {
     .replace(/\b\w/g, (character) => character.toUpperCase())
 }
 
+function bookingLedgerSummary(entries: WalletLedgerEntry[]) {
+  const hasLedger = entries.length > 0
+  const hasRestoration = entries.some((entry) => (entry.restoredIncludedHours ?? 0) > 0 || entry.reconciliationStatus === 'RESTORED')
+  const hasRenewalSettlement = entries.some(
+    (entry) =>
+      entry.entryType === 'RENEWAL' ||
+      entry.reconciliationStatus === 'COMPLETED' ||
+      entry.includedHoursAfterRenewal > 0,
+  )
+  const hasUsageOnlySettlement = hasLedger && !hasRestoration && !hasRenewalSettlement
+
+  return {
+    hasLedger,
+    hasRestoration,
+    hasRenewalSettlement,
+    hasUsageOnlySettlement,
+    shouldShowSyntheticDebit: !hasUsageOnlySettlement,
+    countsAsOutstandingHold: !hasLedger,
+  }
+}
+
 function outstandingAllowanceHold(bookings: Booking[], ledgerEntries: WalletLedgerEntry[]) {
-  const ledgerBookingIds = new Set(ledgerEntries.map((entry) => entry.bookingId))
+  const ledgerEntriesByBookingId = new Map<number, WalletLedgerEntry[]>()
+  for (const entry of ledgerEntries) {
+    const existing = ledgerEntriesByBookingId.get(entry.bookingId) ?? []
+    existing.push(entry)
+    ledgerEntriesByBookingId.set(entry.bookingId, existing)
+  }
+
   return bookings.reduce((total, booking) => {
     const includedHoursApplied = booking.pricingSnapshot?.includedHoursApplied ?? 0
-    if (includedHoursApplied <= 0 || ledgerBookingIds.has(booking.bookingId)) {
+    const ledgerSummary = bookingLedgerSummary(ledgerEntriesByBookingId.get(booking.bookingId) ?? [])
+    if (includedHoursApplied <= 0 || !ledgerSummary.countsAsOutstandingHold) {
       return total
     }
     if (booking.status === 'CANCELLED' || booking.status === 'RECONCILED') {
@@ -2243,7 +2263,7 @@ export function WalletPage({
 }) {
   const bookingsById = new Map(bookings.map((booking) => [booking.bookingId, booking]))
   const paymentsByBookingId = new Map<number, Payment[]>()
-  const ledgerBookingIds = new Set(ledgerEntries.map((entry) => entry.bookingId))
+  const ledgerEntriesByBookingId = new Map<number, WalletLedgerEntry[]>()
   const allowanceHoldHours = outstandingAllowanceHold(bookings, ledgerEntries)
   const walletRemainingHours = Math.max((customerSummary?.remainingHoursThisCycle ?? 0) - allowanceHoldHours, 0)
 
@@ -2254,9 +2274,16 @@ export function WalletPage({
     paymentsByBookingId.set(payment.bookingId, existing)
   }
 
+  for (const entry of ledgerEntries) {
+    const existing = ledgerEntriesByBookingId.get(entry.bookingId) ?? []
+    existing.push(entry)
+    ledgerEntriesByBookingId.set(entry.bookingId, existing)
+  }
+
   const bookingHourTransactions = bookings.flatMap((booking) => {
     const includedHoursApplied = booking.pricingSnapshot?.includedHoursApplied ?? 0
-    if (includedHoursApplied <= 0 || ledgerBookingIds.has(booking.bookingId)) {
+    const ledgerSummary = bookingLedgerSummary(ledgerEntriesByBookingId.get(booking.bookingId) ?? [])
+    if (includedHoursApplied <= 0 || !ledgerSummary.shouldShowSyntheticDebit) {
       return []
     }
 
@@ -2275,7 +2302,7 @@ export function WalletPage({
       chips: [booking.status, 'Allowance hold'],
     }
 
-    if (booking.status !== 'CANCELLED' && booking.status !== 'RECONCILED') {
+    if (ledgerSummary.hasLedger || (booking.status !== 'CANCELLED' && booking.status !== 'RECONCILED')) {
       return [reservedHours]
     }
 
@@ -2369,7 +2396,6 @@ export function WalletPage({
     <div className="customer-page-stack">
       <PageHeader
         eyebrow="E-Wallet"
-        subtitle="All money movement, hour usage, refunds, and renewal reconciliations for this customer profile."
         title="Transaction history"
       />
 
@@ -2380,7 +2406,7 @@ export function WalletPage({
             <strong>{formatHours(walletRemainingHours)}</strong>
           </div>
           <div>
-            <span>Renews</span>
+            <span>Subscription end date</span>
             <strong>{formatSubscriptionEndDisplayDate(customerSummary?.subscriptionEndDate)}</strong>
           </div>
           <div>
@@ -2446,7 +2472,6 @@ export function AccountPage({
         <div>
           <p className="customer-page-header__eyebrow">Plan status</p>
           <h2>{planLabel(customerSummary?.planName)}</h2>
-          <p>Your current included-hour balance and billing adjustments are summarized here.</p>
         </div>
         <div className="customer-stat-grid">
           <div>
@@ -2462,7 +2487,7 @@ export function AccountPage({
             <strong>{formatHours(customerSummary?.remainingHoursThisCycle ?? 0)}</strong>
           </div>
           <div>
-            <span>Renews</span>
+            <span>Subscription end date</span>
             <strong>{formatSubscriptionEndDisplayDate(customerSummary?.subscriptionEndDate)}</strong>
           </div>
         </div>

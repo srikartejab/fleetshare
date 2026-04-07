@@ -25,9 +25,9 @@ function markerIcon(count: number, selected: boolean): DivIcon {
   const tone = selected ? 'search-marker--selected' : count > 0 ? 'search-marker--available' : 'search-marker--empty'
   return divIcon({
     className: 'search-marker-icon',
-    html: `<div class="search-marker ${tone}"><span>${count}</span></div>`,
-    iconSize: [44, 52],
-    iconAnchor: [22, 50],
+    html: `<div class="search-marker-hitbox"><div class="search-marker ${tone}"><span>${count}</span></div></div>`,
+    iconSize: [60, 68],
+    iconAnchor: [30, 58],
   })
 }
 
@@ -41,7 +41,7 @@ function MapViewportController({
   const map = useMap()
 
   useEffect(() => {
-    map.flyTo([center.latitude, center.longitude], zoom, { duration: 0.6 })
+    map.setView([center.latitude, center.longitude], zoom, { animate: false })
   }, [center.latitude, center.longitude, map, zoom])
 
   return null
@@ -83,7 +83,7 @@ function vehicleBadge(vehicle: Vehicle) {
   return 'Popular'
 }
 
-function CarIllustration({ accent = '#f6a623' }: { accent?: string }) {
+function CarIllustration() {
   return (
     <svg aria-hidden="true" className="station-card__car" viewBox="0 0 220 118">
       <defs>
@@ -100,7 +100,6 @@ function CarIllustration({ accent = '#f6a623' }: { accent?: string }) {
       <path d="M36 73c6-23 19-35 38-38l40-7c16-3 31 1 45 11l17 13c6 4 10 11 10 19v10H28l8-8Z" fill="url(#car-body)" />
       <path d="M80 34h45c10 0 20 3 28 9l13 9H65l15-18Z" fill="#eaf1fb" />
       <path d="M98 37h24l24 15H87l11-15Z" fill="#93a8c5" opacity="0.72" />
-      <path d="M28 81h160c-3 11-11 18-24 21H56c-14-2-23-10-28-21Z" fill={accent} opacity="0.12" />
       <circle cx="66" cy="84" r="17" fill="#15243d" />
       <circle cx="66" cy="84" r="8" fill="#dfe6f1" />
       <circle cx="155" cy="84" r="17" fill="#15243d" />
@@ -331,8 +330,10 @@ export function SearchExperiencePage({
   const availabilitySummary = searchResponse?.availabilitySummary ?? (busy ? 'Finding nearby vehicles...' : 'Tap Find to load nearby vehicles')
 
   function selectStation(stationId: string) {
-      setSelectedStationId(stationId)
-      setSearchForm((current) => ({ ...current, pickupLocation: stationId }))
+    if (stationId === selectedStationId) {
+      return
+    }
+    setSelectedStationId(stationId)
   }
 
   return (
@@ -476,7 +477,7 @@ export function SearchExperiencePage({
                     <p>{activeVehicle.model} or similar</p>
                   </div>
                   <div className="station-card__hero-cta">
-                    <CarIllustration accent={selectedStation.availableVehicleCount > 0 ? '#f8a53a' : '#9ba6b5'} />
+                    <CarIllustration />
                   </div>
                 </div>
                 <div className="station-card__meta">
@@ -494,22 +495,6 @@ export function SearchExperiencePage({
                   </span>
                 </div>
                 <div className="station-card__action-row">
-                  {hasVehicleCarousel ? (
-                    <div className="station-card__carousel-dots" aria-label={`Vehicle ${selectedVehicleIndex + 1} of ${stationVehicles.length}`}>
-                      {stationVehicles.map((vehicle, index) => (
-                        <button
-                          aria-label={`Show ${vehicle.model}`}
-                          aria-pressed={index === selectedVehicleIndex}
-                          className={`station-card__carousel-dot ${index === selectedVehicleIndex ? 'station-card__carousel-dot--active' : ''}`}
-                          key={vehicle.vehicleId ?? vehicle.id}
-                          onClick={() => setSelectedVehicleIndex(index)}
-                          type="button"
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <div />
-                  )}
                   <button
                     className="reserve-button"
                     onClick={() => {
@@ -531,7 +516,7 @@ export function SearchExperiencePage({
                     <h2>{selectedStation.stationName}</h2>
                     <p>No cars free right now at this station.</p>
                   </div>
-                  <CarIllustration accent="#7d8796" />
+                  <CarIllustration />
                 </div>
                 <div className="station-card__divider" />
                 <div className="station-card__footer station-card__footer--empty">

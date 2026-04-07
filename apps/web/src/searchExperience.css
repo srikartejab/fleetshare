@@ -299,6 +299,7 @@
   color: #fff;
   font-size: 0.92rem;
   text-align: center;
+  pointer-events: none;
 }
 
 .availability-pill--loading {
@@ -314,6 +315,14 @@
   border: 0;
 }
 
+.search-marker-hitbox {
+  display: grid;
+  place-items: center;
+  width: 3.75rem;
+  height: 4.25rem;
+  touch-action: manipulation;
+}
+
 .search-marker {
   position: relative;
   display: grid;
@@ -324,6 +333,7 @@
   font-weight: 800;
   box-shadow: 0 8px 18px rgba(36, 55, 85, 0.22);
   clip-path: polygon(50% 100%, 0 74%, 0 0, 100% 0, 100% 74%);
+  pointer-events: none;
 }
 
 .search-marker::before {
@@ -367,6 +377,7 @@
   background: rgba(255, 255, 255, 0.96);
   border-radius: 1rem;
   box-shadow: var(--search-shadow);
+  pointer-events: none;
 }
 
 .search-map-shell--with-card .map-utility-bar {
@@ -380,6 +391,7 @@
   width: 3rem;
   color: #2f79b2;
   cursor: pointer;
+  pointer-events: auto;
 }
 
 .map-utility-bar button + button {
@@ -417,8 +429,7 @@
 }
 
 .station-card__carousel,
-.station-card__carousel-controls,
-.station-card__carousel-dots {
+.station-card__carousel-controls {
   display: flex;
   align-items: center;
 }
@@ -440,8 +451,7 @@
   gap: 0.45rem;
 }
 
-.station-card__carousel-button,
-.station-card__carousel-dot {
+.station-card__carousel-button {
   border: 0;
   background: transparent;
   color: inherit;
@@ -515,31 +525,12 @@
   gap: 0.35rem;
 }
 
-.station-card__carousel-dots {
-  gap: 0.35rem;
-  padding: 0;
-}
-
 .station-card__action-row {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: flex-end;
   gap: 0.85rem;
   padding: 0 0.95rem 0.55rem;
-}
-
-.station-card__carousel-dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  padding: 0;
-  border-radius: 999px;
-  background: rgba(47, 109, 162, 0.2);
-  cursor: pointer;
-}
-
-.station-card__carousel-dot--active {
-  width: 1.4rem;
-  background: linear-gradient(90deg, var(--search-orange), var(--search-orange-deep));
 }
 
 .station-card__divider {
