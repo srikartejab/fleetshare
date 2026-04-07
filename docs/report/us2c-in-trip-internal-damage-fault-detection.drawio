@@ -1,10 +1,10 @@
 <mxfile host="65bd71144e" compressed="false">
     <diagram id="us2c" name="us2c-in-trip-internal-damage-fault-detection">
-        <mxGraphModel dx="1643" dy="2015" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1100" math="0" shadow="0">
+        <mxGraphModel dx="1369" dy="1863" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1100" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
-                <mxCell id="internal" value="Internal Damage Service&#xa;(shared severe-path assessment)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" parent="1" vertex="1">
+                <mxCell id="internal" value="Internal Damage Service&#xa;(telemetry fault assessment)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" parent="1" vertex="1">
                     <mxGeometry x="620" y="-40" width="420" height="90" as="geometry"/>
                 </mxCell>
                 <mxCell id="rabbit" value="RabbitMQ&#xa;(single broker / fleetshare.events)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" parent="1" vertex="1">
@@ -17,55 +17,68 @@
                     <mxGeometry x="180" y="380" width="220" height="70" as="geometry"/>
                 </mxCell>
                 <mxCell id="record" value="Record Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" vertex="1">
-                    <mxGeometry x="450" y="380" width="220" height="70" as="geometry"/>
+                    <mxGeometry x="480" y="380" width="220" height="70" as="geometry"/>
                 </mxCell>
                 <mxCell id="maintenance" value="Maintenance Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" vertex="1">
                     <mxGeometry x="715" y="380" width="230" height="70" as="geometry"/>
                 </mxCell>
-                <mxCell id="e4" value="1. Telemetry trigger&#xa;POST /vehicles/telemetry&#xa;May publish vehicle.telemetry_alert" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;entryX=1;entryY=0.25;entryDx=0;entryDy=0;" parent="1" source="vehicle" target="rabbit" edge="1">
-                    <mxGeometry x="-0.5536" relative="1" as="geometry">
+                <mxCell id="e4" value="1. Store telemetry snapshot&#xa;POST /vehicles/telemetry&#xa;Publish vehicle.telemetry_alert only if attention is required" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;entryX=1;entryY=0.25;entryDx=0;entryDy=0;" parent="1" source="vehicle" target="rabbit" edge="1">
+                    <mxGeometry x="-0.21" y="20" relative="1" as="geometry">
                         <Array as="points">
-                            <mxPoint x="1350" y="415"/>
-                            <mxPoint x="1350" y="-337"/>
+                            <mxPoint x="1310" y="415"/>
+                            <mxPoint x="1310" y="-337"/>
                         </Array>
                         <mxPoint as="offset"/>
                         <mxPoint x="1480" y="120" as="targetPoint"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e5" value="2. Telemetry consumer path&lt;br&gt;Async consume vehicle.telemetry_alert&lt;br&gt;No direct UI response" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" parent="1" source="rabbit" target="internal" edge="1">
-                    <mxGeometry x="0.0152" y="-30" relative="1" as="geometry">
+                <mxCell id="e5" value="2. Consume telemetry alert&lt;br&gt;Async vehicle.telemetry_alert path&lt;br&gt;No direct UI response" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" parent="1" source="rabbit" target="internal" edge="1">
+                    <mxGeometry x="0.0192" relative="1" as="geometry">
                         <Array as="points">
-                            <mxPoint x="1180" y="5"/>
+                            <mxPoint x="1110" y="-315"/>
+                            <mxPoint x="1110" y="5"/>
                         </Array>
                         <mxPoint as="offset"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e6" value="4. Resolve active trip context&#xa;Telemetry path: GET /bookings/vehicle/{vehicleId}/active" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="internal" target="booking" edge="1">
+                <mxCell id="e6" value="3. Resolve active trip context&#xa;GET /bookings/vehicle/{vehicleId}/active" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="internal" target="booking" edge="1">
                     <mxGeometry x="0.4326" y="10" relative="1" as="geometry">
                         <mxPoint as="offset"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e7" value="8. Severe path: gRPC UpdateVehicleStatus" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;exitX=0.75;exitY=1;exitDx=0;exitDy=0;" parent="1" source="internal" target="vehicle" edge="1">
-                    <mxGeometry x="0.104" y="10" relative="1" as="geometry">
+                <mxCell id="e7" value="5. If SEVERE, update vehicle status&#xa;gRPC UpdateVehicleStatus(MAINTENANCE_REQUIRED)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;exitX=0.75;exitY=1;exitDx=0;exitDy=0;" parent="1" source="internal" target="vehicle" edge="1">
+                    <mxGeometry x="0.0459" y="20" relative="1" as="geometry">
                         <mxPoint as="offset"/>
-                    </mxGeometry>
-                </mxCell>
-                <mxCell id="e8" value="7. Write INTERNAL_FAULT record&#xa;HTTP POST /records" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;exitX=0.25;exitY=1;exitDx=0;exitDy=0;" parent="1" source="internal" target="record" edge="1">
-                    <mxGeometry relative="1" as="geometry">
-                        <mxPoint x="720" y="80" as="sourcePoint"/>
                         <Array as="points">
-                            <mxPoint x="725" y="215"/>
-                            <mxPoint x="560" y="215"/>
+                            <mxPoint x="935" y="170"/>
+                            <mxPoint x="1150" y="170"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e9" value="9. Duplicate suppression check&#xa;HTTP GET /maintenance/tickets" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="internal" target="maintenance" edge="1">
+                <mxCell id="e8" value="4. Assess event payload and write INTERNAL_FAULT record&#xa;HTTP POST /records" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;exitX=0.25;exitY=1;exitDx=0;exitDy=0;" parent="1" source="internal" target="record" edge="1">
+                    <mxGeometry x="0.0753" y="-25" relative="1" as="geometry">
+                        <mxPoint x="710" y="80" as="sourcePoint"/>
+                        <Array as="points">
+                            <mxPoint x="725" y="175"/>
+                            <mxPoint x="590" y="175"/>
+                        </Array>
+                        <mxPoint x="610" y="410" as="targetPoint"/>
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e9" value="6. Duplicate suppression check&#xa;HTTP GET /maintenance/tickets + recent-fault cache" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="internal" target="maintenance" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="e10" value="10. Publish incident.internal_fault_detected&#xa;11. Also publish booking.disruption_notification&#xa;when trip context exists" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="internal" target="rabbit" edge="1">
+                <mxCell id="e10" value="7. If not suppressed, publish incident.internal_fault_detected&#xa;and booking.disruption_notification" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="internal" target="rabbit" edge="1">
                     <mxGeometry x="0.0435" y="-10" relative="1" as="geometry">
                         <mxPoint as="offset"/>
                     </mxGeometry>
+                </mxCell>
+                <mxCell id="note1" value="Early exits inside Internal Damage Service:&#xa;- no active in-progress booking -&gt; stop&#xa;- non-severe assessment -&gt; no vehicle status update or incident publish&#xa;- duplicate severe fault -&gt; keep record but skip incident publish" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+                    <mxGeometry x="400" y="-640" width="450" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="note2" value="Demo / e2e note: Ops Console POST /ops-console/fleet/telemetry only proxies to Vehicle Service.&#xa;Manual POST /rental-execution/report-fault is a separate path and is not shown here." style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+                    <mxGeometry x="920" y="-650" width="420" height="90" as="geometry"/>
                 </mxCell>
             </root>
         </mxGraphModel>
