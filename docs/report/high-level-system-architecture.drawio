@@ -1,0 +1,718 @@
+<mxfile host="65bd71144e" compressed="false">
+    <diagram id="highlevel" name="high-level-system-architecture">
+        <mxGraphModel dx="3000" dy="1700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="3300" pageHeight="1500" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="zone-clients" value="Clients" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f9ff;strokeColor=#6c8ebf;dashed=1;fontStyle=1;align=left;verticalAlign=top;spacingTop=8;spacingLeft=8;" parent="1" vertex="1">
+                    <mxGeometry x="20" y="40" width="290" height="210" as="geometry"/>
+                </mxCell>
+                <mxCell id="zone-edge" value="Ingress / Edge" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef5fb;strokeColor=#1f4e79;dashed=1;fontStyle=1;align=left;verticalAlign=top;spacingTop=8;spacingLeft=8;" parent="1" vertex="1">
+                    <mxGeometry x="340" y="40" width="540" height="330" as="geometry"/>
+                </mxCell>
+                <mxCell id="zone-composite" value="Browser-Facing Composite Services" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3f1;strokeColor=#b85450;dashed=1;fontStyle=1;align=left;verticalAlign=top;spacingTop=8;spacingLeft=8;" parent="1" vertex="1">
+                    <mxGeometry x="920" y="40" width="560" height="390" as="geometry"/>
+                </mxCell>
+                <mxCell id="zone-workflow" value="Workflow / Orchestration Services" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff8f6;strokeColor=#b85450;dashed=1;fontStyle=1;align=left;verticalAlign=top;spacingTop=8;spacingLeft=8;" parent="1" vertex="1">
+                    <mxGeometry x="920" y="470" width="560" height="590" as="geometry"/>
+                </mxCell>
+                <mxCell id="zone-external" value="External Platforms" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f6f0fa;strokeColor=#9673a6;dashed=1;fontStyle=1;align=left;verticalAlign=top;spacingTop=8;spacingLeft=8;" parent="1" vertex="1">
+                    <mxGeometry x="2360" y="40" width="360" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="zone-infra" value="Messaging / Storage / Infra" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f2fbf2;strokeColor=#82b366;dashed=1;fontStyle=1;align=left;verticalAlign=top;spacingTop=8;spacingLeft=8;" parent="1" vertex="1">
+                    <mxGeometry x="2360" y="710" width="360" height="650" as="geometry"/>
+                </mxCell>
+                <mxCell id="zone-domain" value="Domain / Owner Services" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffdf2;strokeColor=#d6b656;dashed=1;fontStyle=1;align=left;verticalAlign=top;spacingTop=8;spacingLeft=8;" parent="1" vertex="1">
+                    <mxGeometry x="1720" y="40" width="560" height="660" as="geometry"/>
+                </mxCell>
+                <mxCell id="customer-browser" value="Customer Browser" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="55" y="95" width="220" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="ops-browser" value="Ops / Mechanic Browser" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="55" y="165" width="220" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="kong-gateway" value="Kong Gateway" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1f4e79;strokeColor=#12344d;fontColor=#ffffff;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="560" y="215" width="170" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="kong-admin-api" value="Kong Admin API&#xa;:8001" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe2f3;strokeColor=#6c8ebf;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="560" y="80" width="150" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="kong-manager-ui" value="Kong Manager UI&#xa;:8002" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe2f3;strokeColor=#6c8ebf;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="560" y="145" width="150" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="web" value="Web SPA&#xa;React + TypeScript + Vite build&#xa;served by Nginx" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe2f3;strokeColor=#6c8ebf;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="730" y="215" width="120" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="kong-bootstrap" value="Kong Bootstrap&#xa;container" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="390" y="250" width="140" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="kong-migration" value="Kong Migration&#xa;container" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="390" y="170" width="140" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="kong-postgres" value="Kong Postgres&#xa;database" style="shape=cylinder;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="390" y="80" width="140" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="search-service" value="Search Available Vehicles Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="980" y="90" width="180" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="process-service" value="Process Booking Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1240" y="170" width="180" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="rental-service" value="Rental Execution Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="980" y="250" width="180" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="ops-console" value="Ops Console Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1240" y="330" width="180" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="external-damage" value="External Damage Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f4cccc;strokeColor=#b85450;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="980" y="530" width="180" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="start-trip" value="Start Trip Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f4cccc;strokeColor=#b85450;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1240" y="610" width="180" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="internal-damage" value="Internal Damage Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f4cccc;strokeColor=#b85450;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="980" y="690" width="180" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="end-trip" value="End Trip Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f4cccc;strokeColor=#b85450;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1240" y="770" width="180" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="handle-damage" value="Handle Damage Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f4cccc;strokeColor=#b85450;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="980" y="850" width="180" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="renewal-reconciliation" value="Renewal Reconciliation Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f4cccc;strokeColor=#b85450;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1240" y="930" width="180" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="outsystems" value="OutSystems Maintenance API&#xa;active default backend" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="2400" y="95" width="220" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="azure-openai" value="Azure OpenAI damage assessment&#xa;optional / conditional" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="2400" y="185" width="220" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="rabbitmq" value="RabbitMQ&#xa;AMQP + Management UI" style="shape=cylinder;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="2400" y="760" width="210" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="mysql" value="MySQL 8.4&#xa;owner-service schemas" style="shape=cylinder;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="2400" y="910" width="210" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="minio" value="MinIO&#xa;S3 evidence + Console" style="shape=cylinder;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="2400" y="1060" width="210" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="adminer" value="Adminer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="2400" y="1180" width="160" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="vehicle" value="Vehicle Service&#xa;HTTP + gRPC :50051" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1760" y="90" width="160" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="booking" value="Booking Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1760" y="220" width="160" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="trip" value="Trip Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1760" y="350" width="160" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="record" value="Record Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="2020" y="140" width="160" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="maintenance" value="Maintenance Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="2020" y="270" width="160" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="pricing" value="Pricing Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="2020" y="400" width="160" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="payment" value="Payment Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1760" y="480" width="160" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="notification" value="Notification Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="2020" y="530" width="160" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="legend" value="Legend&#xa;Gray solid = HTTP / REST&#xa;Blue dashed = gRPC&#xa;Purple dashed = event bus&#xa;Gray dashed = optional / fallback" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="2380" y="1270" width="250" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="e-browser-customer" value="HTTP via Kong" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#666666;" parent="1" source="customer-browser" target="kong-gateway" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="320" y="95"/>
+                            <mxPoint x="320" y="250"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-browser-ops" value="/ops-console&#xa;key-auth: X-Mechanic-Key" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#666666;" parent="1" source="ops-browser" target="kong-gateway" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="320" y="155"/>
+                            <mxPoint x="320" y="270"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-kong-admin" value="admin surface" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#666666;" parent="1" source="kong-gateway" target="kong-admin-api" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e-kong-manager" value="manager UI" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#666666;" parent="1" source="kong-gateway" target="kong-manager-ui" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e-kong-web" value="/" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#666666;" parent="1" source="kong-gateway" target="web" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="835" y="195"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-kong-search" value="/search-vehicles" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#666666;" parent="1" source="kong-gateway" target="search-service" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="890" y="310"/>
+                            <mxPoint x="890" y="115"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-kong-process" value="/process-booking" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#666666;" parent="1" source="kong-gateway" target="process-service" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="900" y="310"/>
+                            <mxPoint x="900" y="195"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-kong-rental" value="/rental-execution" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#666666;" parent="1" source="kong-gateway" target="rental-service" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="910" y="310"/>
+                            <mxPoint x="910" y="275"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-kong-ops" value="/ops-console" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#666666;" parent="1" source="kong-gateway" target="ops-console" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="920" y="310"/>
+                            <mxPoint x="920" y="355"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-kong-pg" value="config / state" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#666666;" parent="1" source="kong-gateway" target="kong-postgres" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e-kong-bootstrap" value="bootstrap routes / consumers" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#666666;" parent="1" source="kong-bootstrap" target="kong-admin-api" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e-kong-migration-db" value="bootstrap schema" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#666666;" parent="1" source="kong-migration" target="kong-postgres" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e-kong-migration-kong" value="prepare Kong DB" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#666666;" parent="1" source="kong-migration" target="kong-gateway" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e-search-vehicle" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="search-service" target="vehicle" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1650" y="115"/>
+                            <mxPoint x="1650" y="120"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-search-booking" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="search-service" target="booking" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1675" y="115"/>
+                            <mxPoint x="1675" y="250"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-search-pricing" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="search-service" target="pricing" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1980" y="115"/>
+                            <mxPoint x="1980" y="430"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-process-booking" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="process-service" target="booking" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1675" y="195"/>
+                            <mxPoint x="1675" y="250"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-process-pricing" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="process-service" target="pricing" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1980" y="195"/>
+                            <mxPoint x="1980" y="430"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-process-payment" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="process-service" target="payment" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1725" y="195"/>
+                            <mxPoint x="1725" y="510"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-process-vehicle" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="process-service" target="vehicle" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1650" y="195"/>
+                            <mxPoint x="1650" y="120"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-rental-external" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="rental-service" target="external-damage" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1070" y="555"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-rental-start" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="rental-service" target="start-trip" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1200" y="275"/>
+                            <mxPoint x="1200" y="635"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-rental-internal" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="rental-service" target="internal-damage" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1070" y="715"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-rental-end" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="rental-service" target="end-trip" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1200" y="275"/>
+                            <mxPoint x="1200" y="795"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-ops-vehicle" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="ops-console" target="vehicle" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1650" y="355"/>
+                            <mxPoint x="1650" y="120"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-ops-booking" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="ops-console" target="booking" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1675" y="355"/>
+                            <mxPoint x="1675" y="250"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-ops-trip" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="ops-console" target="trip" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1700" y="355"/>
+                            <mxPoint x="1700" y="380"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-ops-record" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="ops-console" target="record" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1930" y="355"/>
+                            <mxPoint x="1930" y="170"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-ops-maintenance" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="ops-console" target="maintenance" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1955" y="355"/>
+                            <mxPoint x="1955" y="300"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-ops-pricing" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="ops-console" target="pricing" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1980" y="355"/>
+                            <mxPoint x="1980" y="430"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-ops-payment" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="ops-console" target="payment" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1725" y="355"/>
+                            <mxPoint x="1725" y="510"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-ops-notification" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="ops-console" target="notification" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="2005" y="355"/>
+                            <mxPoint x="2005" y="560"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-ops-renewal" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="ops-console" target="renewal-reconciliation" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1450" y="355"/>
+                            <mxPoint x="1450" y="955"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-ext-record" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="external-damage" target="record" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1930" y="555"/>
+                            <mxPoint x="1930" y="170"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-start-booking" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="start-trip" target="booking" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1675" y="635"/>
+                            <mxPoint x="1675" y="250"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-start-record" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="start-trip" target="record" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1930" y="635"/>
+                            <mxPoint x="1930" y="170"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-start-trip-http" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="start-trip" target="trip" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1700" y="635"/>
+                            <mxPoint x="1700" y="380"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-start-internal" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="start-trip" target="internal-damage" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1220" y="635"/>
+                            <mxPoint x="1220" y="715"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-internal-booking" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="internal-damage" target="booking" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1675" y="715"/>
+                            <mxPoint x="1675" y="250"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-internal-record" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="internal-damage" target="record" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1930" y="715"/>
+                            <mxPoint x="1930" y="170"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-internal-maintenance" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="internal-damage" target="maintenance" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1955" y="715"/>
+                            <mxPoint x="1955" y="300"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-end-booking" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="end-trip" target="booking" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1675" y="795"/>
+                            <mxPoint x="1675" y="250"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-end-trip-http" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="end-trip" target="trip" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1700" y="795"/>
+                            <mxPoint x="1700" y="380"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-end-pricing" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="end-trip" target="pricing" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1980" y="795"/>
+                            <mxPoint x="1980" y="430"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-handle-maintenance" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="handle-damage" target="maintenance" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1955" y="875"/>
+                            <mxPoint x="1955" y="300"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-handle-booking" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="handle-damage" target="booking" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1675" y="875"/>
+                            <mxPoint x="1675" y="250"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-handle-pricing" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="handle-damage" target="pricing" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1980" y="875"/>
+                            <mxPoint x="1980" y="430"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-handle-payment" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="handle-damage" target="payment" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1725" y="875"/>
+                            <mxPoint x="1725" y="510"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-renewal-booking" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="renewal-reconciliation" target="booking" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1675" y="955"/>
+                            <mxPoint x="1675" y="250"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-renewal-trip" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="renewal-reconciliation" target="trip" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1700" y="955"/>
+                            <mxPoint x="1700" y="380"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-renewal-pricing" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#999999;" parent="1" source="renewal-reconciliation" target="pricing" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1980" y="955"/>
+                            <mxPoint x="1980" y="430"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-grpc-search" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#2e75b6;dashed=1;" parent="1" source="search-service" target="vehicle" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1500" y="115"/>
+                            <mxPoint x="1500" y="120"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-grpc-process" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#2e75b6;dashed=1;" parent="1" source="process-service" target="vehicle" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1525" y="195"/>
+                            <mxPoint x="1525" y="120"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-grpc-start" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#2e75b6;dashed=1;" parent="1" source="start-trip" target="vehicle" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1550" y="635"/>
+                            <mxPoint x="1550" y="120"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-grpc-end" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#2e75b6;dashed=1;" parent="1" source="end-trip" target="vehicle" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1575" y="795"/>
+                            <mxPoint x="1575" y="120"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-grpc-external" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#2e75b6;dashed=1;" parent="1" source="external-damage" target="vehicle" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1600" y="555"/>
+                            <mxPoint x="1600" y="120"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-grpc-internal" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#2e75b6;dashed=1;" parent="1" source="internal-damage" target="vehicle" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1625" y="715"/>
+                            <mxPoint x="1625" y="120"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-rabbit-vehicle" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=classic;startFill=1;endArrow=classic;endFill=1;strokeColor=#9673a6;dashed=1;" parent="1" source="vehicle" target="rabbitmq" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="2340" y="120"/>
+                            <mxPoint x="2340" y="800"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-rabbit-payment" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=classic;startFill=1;endArrow=classic;endFill=1;strokeColor=#9673a6;dashed=1;" parent="1" source="payment" target="rabbitmq" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="2340" y="510"/>
+                            <mxPoint x="2340" y="800"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-rabbit-notification" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=classic;startFill=1;endArrow=classic;endFill=1;strokeColor=#9673a6;dashed=1;" parent="1" source="notification" target="rabbitmq" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="2340" y="560"/>
+                            <mxPoint x="2340" y="800"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-rabbit-internal" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=classic;startFill=1;endArrow=classic;endFill=1;strokeColor=#9673a6;dashed=1;" parent="1" source="internal-damage" target="rabbitmq" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="2340" y="715"/>
+                            <mxPoint x="2340" y="800"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-rabbit-handle" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=classic;startFill=1;endArrow=classic;endFill=1;strokeColor=#9673a6;dashed=1;" parent="1" source="handle-damage" target="rabbitmq" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="2340" y="875"/>
+                            <mxPoint x="2340" y="800"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-rabbit-renewal" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=classic;startFill=1;endArrow=classic;endFill=1;strokeColor=#9673a6;dashed=1;" parent="1" source="renewal-reconciliation" target="rabbitmq" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="2340" y="955"/>
+                            <mxPoint x="2340" y="800"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-rabbit-end" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=classic;startFill=1;endArrow=classic;endFill=1;strokeColor=#9673a6;dashed=1;" parent="1" source="end-trip" target="rabbitmq" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="2340" y="795"/>
+                            <mxPoint x="2340" y="800"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-rabbit-external" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=classic;startFill=1;endArrow=classic;endFill=1;strokeColor=#9673a6;dashed=1;" parent="1" source="external-damage" target="rabbitmq" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1200" y="650"/>
+                            <mxPoint x="2340" y="650"/>
+                            <mxPoint x="2340" y="800"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-record-minio" value="inspection evidence objects" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#666666;" parent="1" source="record" target="minio" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="2340" y="170"/>
+                            <mxPoint x="2340" y="1100"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-adminer-mysql" value="DB UI" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#666666;" parent="1" source="adminer" target="mysql" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="2480" y="1205"/>
+                            <mxPoint x="2480" y="955"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-mysql-vehicle" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#82b366;" parent="1" source="vehicle" target="mysql" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="2340" y="120"/>
+                            <mxPoint x="2340" y="955"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-mysql-booking" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#82b366;" parent="1" source="booking" target="mysql" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="2340" y="250"/>
+                            <mxPoint x="2340" y="955"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-mysql-trip" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#82b366;" parent="1" source="trip" target="mysql" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="2340" y="380"/>
+                            <mxPoint x="2340" y="955"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-mysql-record" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#82b366;" parent="1" source="record" target="mysql" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="2340" y="170"/>
+                            <mxPoint x="2340" y="955"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-mysql-maintenance" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#82b366;dashed=1;" parent="1" source="maintenance" target="mysql" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="2340" y="300"/>
+                            <mxPoint x="2340" y="955"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-mysql-pricing" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#82b366;" parent="1" source="pricing" target="mysql" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="2340" y="430"/>
+                            <mxPoint x="2340" y="955"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-mysql-payment" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#82b366;" parent="1" source="payment" target="mysql" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="2340" y="510"/>
+                            <mxPoint x="2340" y="955"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-mysql-notification" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#82b366;" parent="1" source="notification" target="mysql" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="2340" y="560"/>
+                            <mxPoint x="2340" y="955"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-maint-outs" value="REST wrapper&#xa;active default mode" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#666666;" parent="1" source="maintenance" target="outsystems" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="2340" y="300"/>
+                            <mxPoint x="2340" y="125"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e-ext-azure" value="optional AI assessment" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#666666;dashed=1;" parent="1" source="external-damage" target="azure-openai" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1200" y="650"/>
+                            <mxPoint x="2340" y="650"/>
+                            <mxPoint x="2340" y="215"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>
