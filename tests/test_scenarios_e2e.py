@@ -77,7 +77,7 @@ def customer_account(client: httpx.Client, user_id: str) -> dict:
 
 
 def trip_status(client: httpx.Client, user_id: str) -> dict:
-    return request_json(client, "GET", f"/trip-experience/customers/{user_id}/status")
+    return request_json(client, "GET", f"/rental-execution/customers/{user_id}/status")
 
 
 def ops_incidents(client: httpx.Client) -> dict:
@@ -155,7 +155,7 @@ def submit_minor_inspection(client: httpx.Client, *, booking_id: int, vehicle_id
     inspection = request_json(
         client,
         "POST",
-        "/trip-experience/pre-trip-inspection",
+        "/rental-execution/pre-trip-inspection",
         data={
             "bookingId": str(booking_id),
             "vehicleId": str(vehicle_id),
@@ -194,7 +194,7 @@ def test_scenario_1_booking_trip_and_renewal_reconciliation(client: httpx.Client
     started = request_json(
         client,
         "POST",
-        "/trip-experience/start",
+        "/rental-execution/start",
         json={"bookingId": reserve["bookingId"], "vehicleId": vehicle["vehicleId"], "userId": user_id, "notes": ""},
     )
     log(f"unlock command accepted and trip started; trip id {started['tripId']}")
@@ -202,7 +202,7 @@ def test_scenario_1_booking_trip_and_renewal_reconciliation(client: httpx.Client
     ended = request_json(
         client,
         "POST",
-        "/trip-experience/end",
+        "/rental-execution/end",
         json={
             "tripId": started["tripId"],
             "bookingId": reserve["bookingId"],
@@ -281,7 +281,7 @@ def test_scenario_2_external_damage_recovery_flow(client: httpx.Client):
     inspection = request_json(
         client,
         "POST",
-        "/trip-experience/pre-trip-inspection",
+        "/rental-execution/pre-trip-inspection",
         data={
             "bookingId": str(reserve["bookingId"]),
             "vehicleId": str(vehicle["vehicleId"]),
@@ -405,7 +405,7 @@ def test_scenario_3_telemetry_fault_recovery_flow(client: httpx.Client):
     started = request_json(
         client,
         "POST",
-        "/trip-experience/start",
+        "/rental-execution/start",
         json={"bookingId": reserve["bookingId"], "vehicleId": vehicle["vehicleId"], "userId": active_user_id, "notes": "start trip"},
     )
     log(f"active trip started; trip id {started['tripId']}")

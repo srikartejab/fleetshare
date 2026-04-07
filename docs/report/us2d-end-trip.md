@@ -6,7 +6,7 @@ This flow was re-verified against the implemented end-trip orchestration, the pr
 
 ## Scope / Boundary
 
-This diagram covers the implemented end-trip processing path in `Trip Experience Service` and `End Trip Service`.
+This diagram covers the implemented end-trip processing path in `Rental Execution Service` and `End Trip Service`.
 
 It includes:
 
@@ -26,9 +26,9 @@ It does not expand:
 
 ## Textual Flow
 
-1. The customer triggers end trip from the FleetShare UI through `POST /trip-experience/end` via Kong.
-2. Kong routes the request to `Trip Experience Service`.
-3. `Trip Experience Service` forwards the request to `End Trip Service` at `POST /end-trip/request`.
+1. The customer triggers end trip from the FleetShare UI through `POST /rental-execution/end` via Kong.
+2. Kong routes the request to `Rental Execution Service`.
+3. `Rental Execution Service` forwards the request to `End Trip Service` at `POST /end-trip/request`.
 4. `End Trip Service` loads the booking and trip state.
 5. If the trip is not already ended, `End Trip Service` locks the vehicle through the vehicle gRPC adapter.
 6. `End Trip Service` patches the trip status through `Trip Service` to `ENDED`, including `endReason` and `disruptionReason` when applicable.
@@ -38,11 +38,11 @@ It does not expand:
 10. If the pricing result contains a refund, `End Trip Service` publishes `payment.refund_required` to RabbitMQ.
 11. If the pricing result contains a discount, `End Trip Service` publishes `payment.adjustment_required` to RabbitMQ.
 12. If either refund or discount is present, `End Trip Service` also publishes `booking.disruption_notification` to RabbitMQ.
-13. `End Trip Service` returns the final end-trip result to `Trip Experience Service`, which returns it to the UI.
+13. `End Trip Service` returns the final end-trip result to `Rental Execution Service`, which returns it to the UI.
 
 ## Key Code References
 
-- [trip_experience_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/trip_experience_service.py#L369)
+- [rental_execution_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/rental_execution_service.py#L369)
 - [end_trip_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/end_trip_service.py#L24)
 - [end_trip_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/end_trip_service.py#L123)
 - [vehicle_grpc.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/vehicle_grpc.py#L28)

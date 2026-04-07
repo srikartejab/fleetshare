@@ -11,7 +11,7 @@ This diagram covers the successful trip-start path after a cleared pre-trip insp
 It includes:
 
 - UI entry through Kong
-- `Trip Experience Service` handoff to `Start Trip Service`
+- `Rental Execution Service` handoff to `Start Trip Service`
 - latest inspection re-check
 - internal damage validation
 - vehicle unlock through gRPC
@@ -26,9 +26,9 @@ It does not include:
 
 ## Textual Flow
 
-1. The customer submits the unlock / start request from the FleetShare UI to `POST /trip-experience/start` through Kong.
-2. Kong routes the request to `Trip Experience Service`.
-3. `Trip Experience Service` forwards the request to `Start Trip Service` at `POST /trips/start`.
+1. The customer submits the unlock / start request from the FleetShare UI to `POST /rental-execution/start` through Kong.
+2. Kong routes the request to `Rental Execution Service`.
+3. `Rental Execution Service` forwards the request to `Start Trip Service` at `POST /trips/start`.
 4. `Start Trip Service` loads the booking and verifies that the requesting user owns it and that the booking is still `CONFIRMED`.
 5. `Start Trip Service` queries `Record Service` for the latest `EXTERNAL_DAMAGE` inspection record and confirms that the inspection is already cleared.
 6. `Start Trip Service` calls `Internal Damage Service` at `POST /internal-damage/validate`.
@@ -37,11 +37,11 @@ It does not include:
 9. `Start Trip Service` unlocks the vehicle through the vehicle gRPC adapter.
 10. `Start Trip Service` creates the trip through `Trip Service` at `POST /trips/start`.
 11. `Start Trip Service` patches the booking status through `Booking Service` to `IN_PROGRESS` and stores the new `tripId`.
-12. `Start Trip Service` returns `STARTED` to `Trip Experience Service`, which returns the final start result to the UI.
+12. `Start Trip Service` returns `STARTED` to `Rental Execution Service`, which returns the final start result to the UI.
 
 ## Key Code References
 
-- [trip_experience_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/trip_experience_service.py#L328)
+- [rental_execution_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/rental_execution_service.py#L328)
 - [start_trip_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/start_trip_service.py#L21)
 - [start_trip_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/start_trip_service.py#L43)
 - [internal_damage_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/internal_damage_service.py#L151)

@@ -6,7 +6,7 @@ This flow was re-verified against the implemented pre-trip inspection path, the 
 
 ## Scope / Boundary
 
-This diagram stops at the severe-path handoff from `Trip Experience Service` to `Handle Damage Service`.
+This diagram stops at the severe-path handoff from `Rental Execution Service` to `Handle Damage Service`.
 
 It includes:
 
@@ -28,28 +28,29 @@ Those belong to `3a-handle-damage-recovery`.
 
 ## Severe-Path Textual Flow
 
-1. The customer submits the pre-trip inspection from the FleetShare UI to `POST /trip-experience/pre-trip-inspection` through Kong.
-2. Kong routes the request to `Trip Experience Service`.
-3. `Trip Experience Service` forwards the multipart form to `External Damage Service` at `POST /damage-assessment/external`.
+1. The customer submits the pre-trip inspection from the FleetShare UI to `POST /rental-execution/pre-trip-inspection` through Kong.
+2. Kong routes the request to `Rental Execution Service`.
+3. `Rental Execution Service` forwards the multipart form to `External Damage Service` at `POST /damage-assessment/external`.
 4. `External Damage Service` creates an `EXTERNAL_DAMAGE` record through `Record Service` at `POST /records/ingest`.
 5. `Record Service` stores the uploaded evidence in object storage and persists the pending record metadata.
 6. `External Damage Service` runs `assess_damage(...)` and determines the inspection result.
 7. `External Damage Service` patches the record through `PATCH /records/{recordId}` with the final `severity`, `reviewState`, `confidence`, and `detectedDamage`.
 8. On the severe path, `External Damage Service` updates the vehicle status to `UNDER_INSPECTION` through the vehicle gRPC adapter.
-9. `External Damage Service` returns the blocked severe assessment result to `Trip Experience Service`.
-10. `Trip Experience Service` synchronously calls `Handle Damage Service` at `POST /handle-damage/external/pre-trip-resolution`.
-11. `Handle Damage Service` returns a recovery summary to `Trip Experience Service`.
-12. `Trip Experience Service` returns the final severe inspection response to the UI.
+9. `External Damage Service` returns the blocked severe assessment result to `Rental Execution Service`.
+10. `Rental Execution Service` synchronously calls `Handle Damage Service` at `POST /handle-damage/external/pre-trip-resolution`.
+11. `Handle Damage Service` returns a recovery summary to `Rental Execution Service`.
+12. `Rental Execution Service` returns the final severe inspection response through Kong.
+13. Kong returns the final severe inspection response to the UI.
 
 ## Key Code References
 
-- [trip_experience_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/trip_experience_service.py#L156)
-- [trip_experience_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/trip_experience_service.py#L252)
+- [rental_execution_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/rental_execution_service.py#L156)
+- [rental_execution_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/rental_execution_service.py#L252)
 - [external_damage_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/external_damage_service.py#L36)
 - [external_damage_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/external_damage_service.py#L63)
 - [record_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/record_service.py#L175)
 - [record_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/record_service.py#L241)
 - [vehicle_grpc.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/vehicle_grpc.py#L35)
-- [test_trip_experience_service.py](c:/Users/srika/Documents/esd/fleetshare/tests/test_trip_experience_service.py#L91)
+- [test_rental_execution_service.py](c:/Users/srika/Documents/esd/fleetshare/tests/test_rental_execution_service.py#L91)
 - [test_external_damage_service.py](c:/Users/srika/Documents/esd/fleetshare/tests/test_external_damage_service.py#L328)
 - [test_scenarios_e2e.py](c:/Users/srika/Documents/esd/fleetshare/tests/test_scenarios_e2e.py#L252)

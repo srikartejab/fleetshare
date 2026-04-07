@@ -9,7 +9,7 @@ This diagram covers the generic recovery work performed by `Handle Damage Servic
 It includes:
 
 - sync and async ingress into `Handle Damage Service`
-- sync return to `Trip Experience Service` on the pre-trip severe path
+- sync return to `Rental Execution Service` on the pre-trip severe path
 - maintenance ticket creation through the wrapper service
 - cancellation of affected bookings
 - pre-trip compensation calculation
@@ -35,7 +35,7 @@ It does not include:
 8. For each affected booking, `Handle Damage Service` publishes `payment.adjustment_required` when an apology credit or discount is due.
 9. For each affected booking, `Handle Damage Service` publishes `booking.disruption_notification` for the customer audience.
 10. `Handle Damage Service` also publishes `booking.disruption_notification` for the ops audience with the opened maintenance ticket information.
-11. On the synchronous pre-trip path, `Handle Damage Service` returns the recovery summary back to `Trip Experience Service`.
+11. On the synchronous pre-trip path, `Handle Damage Service` returns the recovery summary back to `Rental Execution Service`.
 12. On the asynchronous incident path, `Handle Damage Service` finishes consumer processing after publishing the downstream events.
 
 ## Diagram Note
@@ -45,5 +45,4 @@ The repo uses one RabbitMQ broker / topic exchange. In this diagram it is shown 
 - one inbound arrow into `Handle Damage Service` for consumed incident events
 - one outbound arrow from `Handle Damage Service` for published downstream events
 - one maintenance wrapper box plus one OutSystems backend box because the wrapper and backend are separate components in the codebase / deployment model
-
 

@@ -10,7 +10,7 @@ from fleetshare_common.app import create_app
 from fleetshare_common.http import get_json, post_json
 from fleetshare_common.settings import get_settings
 
-app = create_app("Trip Experience Service", "Public trip workflow composite service.")
+app = create_app("Rental Execution Service", "Public rental execution composite service.")
 
 
 class PreTripCancellationPayload(BaseModel):
@@ -198,7 +198,7 @@ async def _post_multipart(url: str, fields: dict[str, Any], photos: list[UploadF
     return response.json()
 
 
-@app.get("/trip-experience/customers/{user_id}/status")
+@app.get("/rental-execution/customers/{user_id}/status")
 def get_trip_status(user_id: str):
     settings = get_settings()
     bookings = get_json(f"{settings.booking_service_url}/bookings", {"userId": user_id})
@@ -249,7 +249,7 @@ def get_trip_status(user_id: str):
     }
 
 
-@app.post("/trip-experience/pre-trip-inspection")
+@app.post("/rental-execution/pre-trip-inspection")
 async def pre_trip_inspection(
     bookingId: int = Form(...),
     vehicleId: int = Form(...),
@@ -278,7 +278,7 @@ async def pre_trip_inspection(
     return _inspection_response(inspection=inspection, booking=booking, vehicle=vehicle)
 
 
-@app.post("/trip-experience/pre-trip/cancel")
+@app.post("/rental-execution/pre-trip/cancel")
 def cancel_pre_trip_booking(payload: PreTripCancellationPayload):
     settings = get_settings()
     cancellation = post_json(
@@ -325,7 +325,7 @@ def cancel_pre_trip_booking(payload: PreTripCancellationPayload):
     }
 
 
-@app.post("/trip-experience/start")
+@app.post("/rental-execution/start")
 def start_trip(payload: TripStartPayload):
     settings = get_settings()
     return post_json(
@@ -334,7 +334,7 @@ def start_trip(payload: TripStartPayload):
     )
 
 
-@app.post("/trip-experience/report-fault")
+@app.post("/rental-execution/report-fault")
 def report_fault(payload: FaultReportPayload):
     settings = get_settings()
     return post_json(
@@ -343,7 +343,7 @@ def report_fault(payload: FaultReportPayload):
     )
 
 
-@app.post("/trip-experience/post-trip-inspection")
+@app.post("/rental-execution/post-trip-inspection")
 async def post_trip_inspection(
     bookingId: int = Form(...),
     tripId: int = Form(...),
@@ -366,7 +366,7 @@ async def post_trip_inspection(
     )
 
 
-@app.post("/trip-experience/end")
+@app.post("/rental-execution/end")
 def end_trip(payload: EndTripPayload):
     settings = get_settings()
     return post_json(

@@ -17,7 +17,7 @@ def test_kong_exposes_only_browser_facing_composite_routes():
         for path in route.get("paths", [])
     }
 
-    assert public_paths == {"/", "/search-vehicles", "/process-booking", "/trip-experience", "/ops-console"}
+    assert public_paths == {"/", "/search-vehicles", "/process-booking", "/rental-execution", "/ops-console"}
 
 
 def test_only_owner_services_have_database_urls_in_compose():
@@ -45,7 +45,7 @@ def test_db_less_composites_do_not_import_shared_database_layer():
     db_less_services = [
         "search_available_vehicles_service.py",
         "process_booking_service.py",
-        "trip_experience_service.py",
+        "rental_execution_service.py",
         "external_damage_service.py",
         "start_trip_service.py",
         "internal_damage_service.py",

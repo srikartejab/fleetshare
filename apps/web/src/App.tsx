@@ -29,7 +29,7 @@ import type {
   SearchResponse,
   Trip,
   TripDisruptionAdvisory,
-  TripExperienceStatusResponse,
+  RentalExecutionStatusResponse,
   Vehicle,
   VehicleFilters,
   WalletLedgerEntry,
@@ -290,7 +290,7 @@ function App() {
       payments: [],
       ledgerEntries: [],
     }
-    const emptyTripStatus: TripExperienceStatusResponse = {
+    const emptyTripStatus: RentalExecutionStatusResponse = {
       bookings: [],
       trips: [],
       vehicles,
@@ -301,7 +301,7 @@ function App() {
     const [homeData, walletData, tripStatusData, accountData] = await Promise.all([
       fetchOrDefault<CustomerHomeResponse>(`/process-booking/customers/${query}/home`, emptyHome),
       fetchOrDefault<CustomerWalletResponse>(`/process-booking/customers/${query}/wallet`, emptyWallet),
-      fetchOrDefault<TripExperienceStatusResponse>(`/trip-experience/customers/${query}/status`, emptyTripStatus),
+      fetchOrDefault<RentalExecutionStatusResponse>(`/rental-execution/customers/${query}/status`, emptyTripStatus),
       fetchOrDefault<CustomerAccountResponse>(`/process-booking/customers/${query}/account`, {
         customerSummary: emptyHome.customerSummary,
         notifications: [],
@@ -325,7 +325,7 @@ function App() {
     if (!userId) {
       return
     }
-    const tripStatusData = await fetchJson<TripExperienceStatusResponse>(`/trip-experience/customers/${encodeURIComponent(userId)}/status`)
+    const tripStatusData = await fetchJson<RentalExecutionStatusResponse>(`/rental-execution/customers/${encodeURIComponent(userId)}/status`)
     startTransition(() => {
       setBookings(tripStatusData.bookings)
       setTrips(tripStatusData.trips)
@@ -545,7 +545,7 @@ function App() {
     setBusy(true)
     setStatus('Assessing the reported issue...')
     try {
-      const result = await fetchJson<InternalDamageResult>('/trip-experience/report-fault', {
+      const result = await fetchJson<InternalDamageResult>('/rental-execution/report-fault', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -593,7 +593,7 @@ function App() {
       if (request.photo) {
         formData.append('photos', request.photo)
       }
-      const result = await fetchJson<InspectionSubmissionResult>('/trip-experience/pre-trip-inspection', {
+      const result = await fetchJson<InspectionSubmissionResult>('/rental-execution/pre-trip-inspection', {
         method: 'POST',
         body: formData,
       })
@@ -620,7 +620,7 @@ function App() {
       setReportedProblem(null)
       setPostTripInspectionResult(null)
       setEndTripResult(null)
-      await fetchJson('/trip-experience/start', {
+      await fetchJson('/rental-execution/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -655,7 +655,7 @@ function App() {
       if (photo) {
         formData.append('photos', photo)
       }
-      const result = await fetchJson<PostTripInspectionResult>('/trip-experience/post-trip-inspection', {
+      const result = await fetchJson<PostTripInspectionResult>('/rental-execution/post-trip-inspection', {
         method: 'POST',
         body: formData,
       })
@@ -692,7 +692,7 @@ function App() {
     }
     setBusy(true)
     try {
-      const result = await fetchJson<EndTripResult>('/trip-experience/end', {
+      const result = await fetchJson<EndTripResult>('/rental-execution/end', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -898,7 +898,7 @@ function App() {
                   latestInspectionResult={latestInspectionResult}
                   onCancelModerateDamage={(bookingId, vehicleId) =>
                     runCustomerAction(async () => {
-                      const result = await fetchJson<InspectionCancellationResult>('/trip-experience/pre-trip/cancel', {
+                      const result = await fetchJson<InspectionCancellationResult>('/rental-execution/pre-trip/cancel', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({

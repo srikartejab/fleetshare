@@ -19,11 +19,11 @@ services:
       - name: process-booking-routes
         paths: ["/process-booking"]
         strip_path: false
-  - name: trip-experience-service
-    url: http://trip-experience-service:8000
+  - name: rental-execution-service
+    url: http://rental-execution-service:8000
     routes:
-      - name: trip-experience-routes
-        paths: ["/trip-experience"]
+      - name: rental-execution-routes
+        paths: ["/rental-execution"]
         strip_path: false
   - name: ops-console-service
     url: http://ops-console-service:8000

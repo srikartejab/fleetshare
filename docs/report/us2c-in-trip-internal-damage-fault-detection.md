@@ -2,7 +2,7 @@
 
 ## Verification Result
 
-This flow was re-verified against both implemented entry paths into `Internal Damage Service`: telemetry-driven consumption from `vehicle.telemetry_alert` and manual fault reporting through `Trip Experience Service`. The severe path and duplicate-suppression behavior were cross-checked against the internal damage tests and the telemetry e2e scenario.
+This flow was re-verified against both implemented entry paths into `Internal Damage Service`: telemetry-driven consumption from `vehicle.telemetry_alert` and manual fault reporting through `Rental Execution Service`. The severe path and duplicate-suppression behavior were cross-checked against the internal damage tests and the telemetry e2e scenario.
 
 ## Scope / Boundary
 
@@ -28,7 +28,7 @@ Those belong to `3a-handle-damage-recovery` and `us2d-end-trip`.
 
 1. A severe internal issue enters through one of two implemented paths:
    - telemetry path: `Vehicle Service` receives telemetry and publishes `vehicle.telemetry_alert`
-   - manual path: the user reports a fault through `POST /trip-experience/report-fault`, and `Trip Experience Service` forwards it to `POST /internal-damage/fault-alert`
+   - manual path: the user reports a fault through `POST /rental-execution/report-fault`, and `Rental Execution Service` forwards it to `POST /internal-damage/fault-alert`
 2. `Internal Damage Service` resolves the active trip context and determines the latest snapshot data needed for assessment.
 3. `Internal Damage Service` runs the internal fault assessment and normalizes the fault family.
 4. `Internal Damage Service` creates an `INTERNAL_FAULT` record through `Record Service` at `POST /records`.
@@ -40,7 +40,7 @@ Those belong to `3a-handle-damage-recovery` and `us2d-end-trip`.
 
 ## Key Code References
 
-- [trip_experience_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/trip_experience_service.py#L337)
+- [rental_execution_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/rental_execution_service.py#L337)
 - [internal_damage_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/internal_damage_service.py#L37)
 - [internal_damage_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/internal_damage_service.py#L151)
 - [internal_damage_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/internal_damage_service.py#L255)

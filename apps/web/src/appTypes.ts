@@ -319,7 +319,7 @@ export type CustomerAccountResponse = {
   notifications: Notification[]
 }
 
-export type TripExperienceStatusResponse = {
+export type RentalExecutionStatusResponse = {
   bookings: Booking[]
   trips: Trip[]
   vehicles: Vehicle[]

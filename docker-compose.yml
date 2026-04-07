@@ -35,7 +35,7 @@ x-backend-env: &backend-env
   END_TRIP_SERVICE_URL: http://end-trip-service:8000
   HANDLE_DAMAGE_SERVICE_URL: http://handle-damage-service:8000
   RENEWAL_RECONCILIATION_SERVICE_URL: http://renewal-reconciliation-service:8000
-  TRIP_EXPERIENCE_SERVICE_URL: http://trip-experience-service:8000
+  RENTAL_EXECUTION_SERVICE_URL: http://rental-execution-service:8000
   OPS_CONSOLE_SERVICE_URL: http://ops-console-service:8000
 
 services:
@@ -137,7 +137,7 @@ services:
         condition: service_completed_successfully
       process-booking-service:
         condition: service_started
-      trip-experience-service:
+      rental-execution-service:
         condition: service_started
       ops-console-service:
         condition: service_started
@@ -300,14 +300,14 @@ services:
       SERVICE_NAME: process-booking-service
     depends_on: [vehicle-service, booking-service, pricing-service, payment-service]
 
-  trip-experience-service:
+  rental-execution-service:
     build:
       context: .
       dockerfile: Dockerfile.backend
-    command: python -m uvicorn fleetshare_common.apps.trip_experience_service:app --host 0.0.0.0 --port 8000
+    command: python -m uvicorn fleetshare_common.apps.rental_execution_service:app --host 0.0.0.0 --port 8000
     environment:
       <<: *backend-env
-      SERVICE_NAME: trip-experience-service
+      SERVICE_NAME: rental-execution-service
     depends_on:
       - vehicle-service
       - booking-service

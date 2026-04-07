@@ -4,7 +4,7 @@
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
-                <mxCell id="trip" value="Trip Experience Service&#xa;(sync pre-trip handoff)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+                <mxCell id="trip" value="Rental Execution Service&#xa;(sync pre-trip handoff)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
                     <mxGeometry x="550" y="-40" width="300" height="80" as="geometry"/>
                 </mxCell>
                 <mxCell id="handle" value="Handle Damage Service&#xa;(Composite Service)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" parent="1" vertex="1">
@@ -64,7 +64,7 @@
                         <mxPoint as="offset"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e8" value="8. Sync return to Trip Experience Service" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;dashed=1;" edge="1" parent="1" source="handle" target="trip">
+                <mxCell id="e8" value="8. Sync return to Rental Execution Service" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;dashed=1;" edge="1" parent="1" source="handle" target="trip">
                     <mxGeometry x="-0.1998" relative="1" as="geometry">
                         <Array as="points">
                             <mxPoint x="490"/>

@@ -19,17 +19,17 @@ FleetShare addresses three car-sharing pain points in Singapore:
 ## User Scenario 2
 
 - Customer performs a pre-trip inspection and uploads evidence.
-- Record Service stores the case.
-- The AI adapter classifies damage severity and confidence.
-- For pre-trip severe damage, `Trip Experience Service` resolves the incident synchronously by calling `Handle Damage Service`.
-- `Handle Damage Service` opens maintenance tickets, cancels affected bookings, and triggers refund/notification events.
-- `incident.external_damage_detected` is published for severe post-trip damage, not for the pre-trip inspection path.
+- Record Service stores the case and the damage assessment flow classifies severity.
+- For pre-trip severe damage, `Rental Execution Service` calls `Handle Damage Service` synchronously.
+- After a cleared inspection, the customer starts the trip through `Rental Execution Service` and `Start Trip Service`.
+- Severe post-trip damage uses the asynchronous incident path rather than the synchronous pre-trip resolution path.
 
 ## User Scenario 3
 
-- Telemetry or manual pickup faults are validated before trip activation.
-- Critical faults publish `incident.internal_fault_detected`.
-- The same downstream recovery pipeline cancels bookings, stores tickets, issues compensation, and notifies stakeholders.
+- During an active trip, telemetry alerts or manual fault reports are processed by `Internal Damage Service`.
+- Severe internal faults publish `incident.internal_fault_detected` and `booking.disruption_notification`.
+- The downstream recovery flow opens maintenance work, cancels affected future bookings, and triggers compensation and notification events.
+- The trip is then completed through the end-trip flow, which locks the vehicle, finalizes pricing, and publishes any required refund or adjustment events.
 
 ## Beyond The Labs
 

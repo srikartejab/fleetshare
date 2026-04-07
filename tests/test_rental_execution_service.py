@@ -2,7 +2,7 @@ import pytest
 
 TestClient = pytest.importorskip("fastapi.testclient").TestClient
 
-from fleetshare_common.apps import trip_experience_service
+from fleetshare_common.apps import rental_execution_service
 
 
 def test_trip_experience_status_filters_records_to_customer_bookings_and_trips(monkeypatch):
@@ -23,10 +23,10 @@ def test_trip_experience_status_filters_records_to_customer_bookings_and_trips(m
             return []
         raise AssertionError(f"Unexpected URL {url}")
 
-    monkeypatch.setattr(trip_experience_service, "get_json", fake_get_json)
+    monkeypatch.setattr(rental_execution_service, "get_json", fake_get_json)
 
-    with TestClient(trip_experience_service.app) as client:
-        response = client.get("/trip-experience/customers/user-1001/status")
+    with TestClient(rental_execution_service.app) as client:
+        response = client.get("/rental-execution/customers/user-1001/status")
 
     assert response.status_code == 200
     assert response.json() == {
@@ -67,10 +67,10 @@ def test_trip_experience_status_builds_live_trip_advisory(monkeypatch):
             ]
         raise AssertionError(f"Unexpected URL {url}")
 
-    monkeypatch.setattr(trip_experience_service, "get_json", fake_get_json)
+    monkeypatch.setattr(rental_execution_service, "get_json", fake_get_json)
 
-    with TestClient(trip_experience_service.app) as client:
-        response = client.get("/trip-experience/customers/user-1001/status")
+    with TestClient(rental_execution_service.app) as client:
+        response = client.get("/rental-execution/customers/user-1001/status")
 
     assert response.status_code == 200
     assert response.json()["liveTripAdvisory"] == {
@@ -142,13 +142,13 @@ def test_pre_trip_inspection_resolves_severe_damage_synchronously(monkeypatch):
             },
         }
 
-    monkeypatch.setattr(trip_experience_service, "_post_multipart", fake_post_multipart)
-    monkeypatch.setattr(trip_experience_service, "get_json", fake_get_json)
-    monkeypatch.setattr(trip_experience_service, "post_json", fake_post_json)
+    monkeypatch.setattr(rental_execution_service, "_post_multipart", fake_post_multipart)
+    monkeypatch.setattr(rental_execution_service, "get_json", fake_get_json)
+    monkeypatch.setattr(rental_execution_service, "post_json", fake_post_json)
 
-    with TestClient(trip_experience_service.app) as client:
+    with TestClient(rental_execution_service.app) as client:
         response = client.post(
-            "/trip-experience/pre-trip-inspection",
+            "/rental-execution/pre-trip-inspection",
             data={"bookingId": "101", "vehicleId": "7", "userId": "user-1001", "notes": "broken bumper"},
         )
 
@@ -207,12 +207,12 @@ def test_pre_trip_cancel_returns_completed_resolution(monkeypatch):
             return {"id": 9, "vehicleId": 9, "model": "BYD Atto 3"}
         raise AssertionError(f"Unexpected GET {url} {params}")
 
-    monkeypatch.setattr(trip_experience_service, "post_json", fake_post_json)
-    monkeypatch.setattr(trip_experience_service, "get_json", fake_get_json)
+    monkeypatch.setattr(rental_execution_service, "post_json", fake_post_json)
+    monkeypatch.setattr(rental_execution_service, "get_json", fake_get_json)
 
-    with TestClient(trip_experience_service.app) as client:
+    with TestClient(rental_execution_service.app) as client:
         response = client.post(
-            "/trip-experience/pre-trip/cancel",
+            "/rental-execution/pre-trip/cancel",
             json={"bookingId": 202, "vehicleId": 9, "userId": "user-1002"},
         )
 
