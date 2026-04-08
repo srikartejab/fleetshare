@@ -1,0 +1,56 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36">
+  <diagram name="Page-1" id="T7lNEHRw_cXPoQ2FXQ-0">
+    <mxGraphModel dx="1892" dy="2565" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=26;fontStyle=1" value="1A - Search Available Vehicle" vertex="1">
+          <mxGeometry height="40" width="520" x="550" y="-220" as="geometry" />
+        </mxCell>
+        <mxCell id="ui" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1" value="FleetShare Customer UI&#xa;- Search available vehicles&#xa;- Filter by start/end time&#xa;- Filter by location&#xa;- Filter by vehicle type&#xa;- Subscription plan context" vertex="1">
+          <mxGeometry height="120" width="320" x="610" y="-50" as="geometry" />
+        </mxCell>
+        <mxCell id="kong" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a73e8;strokeColor=#0b5394;fontColor=#ffffff;fontStyle=1" value="Kong API Gateway" vertex="1">
+          <mxGeometry height="60" width="210" x="665" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="search" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f4cccc;strokeColor=#cc0000;fontStyle=1" value="Search Available Vehicles Service&#xa;(Composite Microservice)" vertex="1">
+          <mxGeometry height="80" width="460" x="540" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="vehicle" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1" value="Vehicle Service&#xa;(Atomic)" vertex="1">
+          <mxGeometry height="70" width="230" x="60" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="booking" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1" value="Booking Service&#xa;(Atomic)" vertex="1">
+          <mxGeometry height="70" width="230" x="655" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="pricing" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1" value="Pricing Service&#xa;(Atomic)" vertex="1">
+          <mxGeometry height="70" width="230" x="1250" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="ui" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" target="kong" value="1. HTTP GET /search-vehicles/search&#xa;userId,startTime,endTime,pickupLocation,vehicleType?,subscriptionPlanId">
+          <mxGeometry relative="1" x="-0.3684" y="10" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="kong" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" target="search" value="2. Route /search-vehicles/*">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="search" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" target="vehicle" value="3a. HTTP GET /vehicles/stations&#xa;3b. HTTP GET /vehicles/availability&#xa;3c. gRPC CheckAvailability(vehicleId) per candidate">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="search" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" target="booking" value="4. HTTP GET /bookings/availability&#xa;vehicleIds,startTime,endTime">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="search" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" target="pricing" value="5. HTTP GET /pricing/quote&#xa;userId,vehicleId,startTime,endTime,subscriptionPlanId&#xa;called once per surviving vehicle">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="search" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" target="kong" value="6. HTTP 200 SearchResponse&#xa;vehicleList, estimatedPrice, availabilitySummary,&#xa;selectedStationId, mapCenter, stationList">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="kong" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" target="ui" value="7. Return search results to UI">
+          <mxGeometry relative="1" x="-0.3684" y="-20" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

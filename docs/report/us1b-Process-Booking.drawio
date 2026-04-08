@@ -1,0 +1,130 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Page-1" id="fgRFYOEXfnLiOd-ddVSu">
+    <mxGraphModel dx="1367" dy="2230" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=26;fontStyle=1" value="1B - Book Vehicle&amp;nbsp;" vertex="1">
+          <mxGeometry height="40" width="210" x="725" y="-190" as="geometry" />
+        </mxCell>
+        <mxCell id="ui" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1" value="FleetShare Customer UI" vertex="1">
+          <mxGeometry height="70" width="260" x="700" y="-130" as="geometry" />
+        </mxCell>
+        <mxCell id="kong" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1f4e79;strokeColor=#17365d;fontColor=#ffffff;fontStyle=1" value="Kong API Gateway" vertex="1">
+          <mxGeometry height="60" width="200" x="730" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="pb" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f4cccc;strokeColor=#cc0000;fontStyle=1" value="Process Booking Service&#xa;(Composite Microservice)" vertex="1">
+          <mxGeometry height="80" width="440" x="610" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="vehicle" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1" value="Vehicle Service&#xa;(Atomic)" vertex="1">
+          <mxGeometry height="70" width="220" x="220" y="710" as="geometry" />
+        </mxCell>
+        <mxCell id="booking" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1" value="Booking Service&#xa;(Atomic)" vertex="1">
+          <mxGeometry height="70" width="220" x="540" y="710" as="geometry" />
+        </mxCell>
+        <mxCell id="pricing" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1" value="Pricing Service&#xa;(Atomic)" vertex="1">
+          <mxGeometry height="70" width="220" x="830" y="710" as="geometry" />
+        </mxCell>
+        <mxCell id="payment" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1" value="Payment Service&#xa;(Atomic)" vertex="1">
+          <mxGeometry height="70" width="220" x="1210" y="710" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="ui" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" target="kong" value="1. POST /process-booking/reserve&#xa;userId,vehicleId,pickupLocation,startTime,endTime,displayedPrice,subscriptionPlanId">
+          <mxGeometry relative="1" x="-0.4" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="kong" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" target="pb" value="2. Route reserve request">
+          <mxGeometry relative="1" x="-0.4667" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="830" y="290" />
+              <mxPoint x="830" y="290" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="pb" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" target="vehicle" value="3. gRPC CheckAvailability(vehicleId)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" target="booking" value="4. GET /bookings/availability&#xa;vehicleId,startTime,endTime">
+          <mxGeometry relative="1" x="-0.3103" y="20" as="geometry">
+            <mxPoint as="offset" />
+            <mxPoint x="650" y="420" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="pb" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;exitX=0.75;exitY=1;exitDx=0;exitDy=0;" target="pricing" value="5. GET /pricing/quote&#xa;userId,vehicleId,startTime,endTime,subscriptionPlanId">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" target="booking" value="6. POST /booking&#xa;create booking with PAYMENT_PENDING and pricing snapshot">
+          <mxGeometry relative="1" y="-10" as="geometry">
+            <mxPoint as="offset" />
+            <mxPoint x="650" y="410" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="pb" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" target="kong" value="7. Return bookingId,status,paymentStatus=REQUIRED,pricing">
+          <mxGeometry relative="1" x="0.0667" y="-10" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="kong" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" target="ui" value="8. Return payment-required response">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="ui" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" target="kong" value="9. POST /process-booking/pay&#xa;bookingId,userId,amount?,paymentMethod">
+          <mxGeometry relative="1" x="0.3" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e10" edge="1" parent="1" source="kong" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" target="pb" value="10. Route payment request">
+          <mxGeometry relative="1" x="0.3333" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e11" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" target="booking" value="11. GET /booking/{bookingId}&#xa;resolve payable amount if needed">
+          <mxGeometry relative="1" x="0.2414" y="-10" as="geometry">
+            <mxPoint as="offset" />
+            <mxPoint x="650" y="420" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12" edge="1" parent="1" source="pb" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" target="payment" value="12. POST /payments&#xa;bookingId,userId,amount,reason=BOOKING_PROVISIONAL_CHARGE">
+          <mxGeometry relative="1" x="0.377" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e13" edge="1" parent="1" source="payment" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="pb" value="13. Payment success&#xa;paymentId,status=SUCCESS">
+          <mxGeometry relative="1" x="-0.6066" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="1320" y="370" />
+            </Array>
+            <mxPoint x="1060" y="370" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e14" edge="1" parent="1" source="pb" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;exitX=0.091;exitY=1.005;exitDx=0;exitDy=0;exitPerimeter=0;" target="booking" value="14. PATCH /booking/{id}/status&#xa;status=CONFIRMED">
+          <mxGeometry relative="1" x="0.466" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e15" edge="1" parent="1" source="booking" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;exitX=0.5;exitY=0;exitDx=0;exitDy=0;" value="15. Return bookingId,status=CONFIRMED">
+          <mxGeometry relative="1" x="-0.6689" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="650" y="440" />
+              <mxPoint x="649" y="440" />
+            </Array>
+            <mxPoint x="800" y="680" as="sourcePoint" />
+            <mxPoint x="650" y="410" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e16" edge="1" parent="1" source="pb" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" target="kong" value="16. Return bookingId,paymentId,paymentMethod,status=CONFIRMED,paymentStatus=SUCCESS">
+          <mxGeometry relative="1" x="-0.7333" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e17" edge="1" parent="1" source="kong" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" target="ui" value="17. Return booking confirmation to UI">
+          <mxGeometry relative="1" x="-0.7" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
