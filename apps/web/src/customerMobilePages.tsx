@@ -2294,7 +2294,7 @@ export function WalletPage({
       id: `booking-hours-held-${booking.bookingId}`,
       postedAt: provisionalCharge?.createdAt ?? booking.startTime,
       category: 'HOURS',
-      title: 'Included hours reserved',
+      title: 'Allowance used',
       tone: 'hours',
       amountLabel: `-${formatHours(includedHoursApplied)}`,
       subtitle: `Booking #${booking.bookingId} - ${booking.pickupLocation}`,
