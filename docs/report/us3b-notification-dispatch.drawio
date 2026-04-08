@@ -1,6 +1,6 @@
 <mxfile host="65bd71144e" compressed="false">
     <diagram id="us3b" name="us3b-notification-dispatch">
-        <mxGraphModel dx="2815" dy="1198" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1000" math="0" shadow="0">
+        <mxGraphModel dx="1432" dy="719" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1000" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -10,26 +10,20 @@
                 <mxCell id="notification" value="Notification Service&#xa;(Atomic Service)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" parent="1" vertex="1">
                     <mxGeometry x="420" y="320" width="280" height="90" as="geometry"/>
                 </mxCell>
-                <mxCell id="customer" value="Customer UI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
-                    <mxGeometry x="970" y="240" width="220" height="80" as="geometry"/>
+                <mxCell id="customer" value="Customer UI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="1" vertex="1">
+                    <mxGeometry x="670" y="540" width="220" height="80" as="geometry"/>
                 </mxCell>
                 <mxCell id="ops" value="Ops UI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="1" vertex="1">
-                    <mxGeometry x="970" y="400" width="220" height="80" as="geometry"/>
-                </mxCell>
-                <mxCell id="e1" value="1. Publish notification event&#xa;AMQP" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="publisher" target="rabbit" edge="1">
-                    <mxGeometry relative="1" as="geometry"/>
+                    <mxGeometry x="230" y="540" width="220" height="80" as="geometry"/>
                 </mxCell>
                 <mxCell id="e2" value="2. Consume notification event&#xa;AMQP" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="rabbit" target="notification" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="e4" value="4. Later consumed via Notification Service APIs" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;dashed=1;" parent="1" source="notification" target="customer" edge="1">
+                <mxCell id="e4" value="4. Later consumed via Notification Service APIs" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;dashed=1;exitX=0.75;exitY=1;exitDx=0;exitDy=0;" parent="1" source="notification" target="customer" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="e5" value="5. Later consumed via Notification Service APIs" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;dashed=1;" edge="1" parent="1" source="notification" target="ops">
+                <mxCell id="e5" value="5. Later consumed via Notification Service APIs" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;dashed=1;exitX=0.25;exitY=1;exitDx=0;exitDy=0;" parent="1" source="notification" target="ops" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
-                </mxCell>
-                <mxCell id="publisher" value="Domain Services&#xa;publish notification-related events" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1">
-                    <mxGeometry x="-80" y="60" width="310" height="90" as="geometry"/>
                 </mxCell>
             </root>
         </mxGraphModel>

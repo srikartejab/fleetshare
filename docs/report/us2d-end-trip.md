@@ -40,14 +40,3 @@ It does not expand:
 12. If either refund or discount is present, `End Trip Service` also publishes `booking.disruption_notification` to RabbitMQ.
 13. `End Trip Service` returns the final end-trip result to `Rental Execution Service`, which returns it to the UI.
 
-## Key Code References
-
-- [rental_execution_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/rental_execution_service.py#L369)
-- [end_trip_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/end_trip_service.py#L24)
-- [end_trip_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/end_trip_service.py#L123)
-- [vehicle_grpc.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/vehicle_grpc.py#L28)
-- [trip_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/trip_service.py#L114)
-- [pricing_service.py](c:/Users/srika/Documents/esd/fleetshare/packages/common/src/fleetshare_common/apps/pricing_service.py#L363)
-- [test_end_trip_service.py](c:/Users/srika/Documents/esd/fleetshare/tests/test_end_trip_service.py#L6)
-- [test_end_trip_service.py](c:/Users/srika/Documents/esd/fleetshare/tests/test_end_trip_service.py#L62)
-- [test_scenarios_e2e.py](c:/Users/srika/Documents/esd/fleetshare/tests/test_scenarios_e2e.py#L172)
