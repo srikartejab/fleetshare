@@ -115,6 +115,23 @@ def seed_data():
             if vehicle.id in existing_vehicle_ids:
                 continue
             db.add(vehicle)
+        db.commit()
+
+        for vehicle in vehicles:
+            latest_snapshot = (
+                db.query(TelemetrySnapshot)
+                .filter(TelemetrySnapshot.vehicle_id == vehicle.id)
+                .order_by(TelemetrySnapshot.created_at.desc(), TelemetrySnapshot.id.desc())
+                .first()
+            )
+            if (
+                latest_snapshot
+                and latest_snapshot.battery_level >= 88
+                and latest_snapshot.tire_pressure_ok == "true"
+                and latest_snapshot.severity == "INFO"
+                and not latest_snapshot.fault_code
+            ):
+                continue
             db.add(
                 TelemetrySnapshot(
                     vehicle_id=vehicle.id,

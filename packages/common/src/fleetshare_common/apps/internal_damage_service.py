@@ -58,7 +58,7 @@ def assess_fault(snapshot: dict, payload: InternalDamagePayload) -> tuple[str, s
         return "SEVERE", "Severe issue detected. Stop at the nearest safe carpark and proceed to end the trip."
     if snapshot.get("severity") == "WARNING":
         return "MODERATE", "Warning captured; continue only if safe and monitor the vehicle closely."
-    return "MINOR", "No critical issue detected."
+    return "NO_DAMAGE", "No internal issue detected."
 
 
 def get_latest_snapshot(settings, vehicle_id: int) -> dict:
@@ -188,7 +188,7 @@ def process_internal_damage(payload: InternalDamagePayload, *, snapshot: dict | 
             "notes": payload.notes or payload.faultCode or snapshot.get("faultCode"),
             "severity": severity,
             "reviewState": ReviewState.INTERNAL_ASSESSED.value,
-            "confidence": 0.9 if severity == "SEVERE" else 0.72,
+            "confidence": 0.96 if severity == "NO_DAMAGE" else 0.9 if severity == "SEVERE" else 0.72,
             "detectedDamage": [fault_fingerprint],
         },
     )

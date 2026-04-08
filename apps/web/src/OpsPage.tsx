@@ -162,6 +162,16 @@ function evidenceSummary(record: Pick<RecordItem, 'evidenceCount' | 'evidenceUrl
   return count > 0 ? `${count} image${count === 1 ? '' : 's'}` : 'No images'
 }
 
+function normalTelemetryDraft(vehicleId: string) {
+  return {
+    vehicleId,
+    batteryLevel: '88',
+    tirePressureOk: true,
+    severity: 'INFO',
+    faultCode: '',
+  }
+}
+
 function disruptionNotificationMeta(notification: Notification) {
   const payload = notification.payload
   if (!payload) return null
@@ -341,6 +351,20 @@ export function OpsPage({
       setTelemetryForm((current) => ({ ...current, vehicleId: vehicleIds[0] }))
     }
   }, [telemetryForm.vehicleId, vehicles])
+
+  async function injectTelemetry(payload: {
+    vehicleId: number
+    batteryLevel: number
+    tirePressureOk: boolean
+    severity: string
+    faultCode: string
+  }) {
+    await opsFetchJson('/ops-console/fleet/telemetry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  }
 
   const sectionCopy: Record<OpsSection, { eyebrow: string; title: string; subtitle: string }> = {
     fleet: {
@@ -878,22 +902,39 @@ export function OpsPage({
                     className="customer-button customer-button--primary"
                     onClick={() =>
                       void runAction(async () => {
-                        await opsFetchJson('/ops-console/fleet/telemetry', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            vehicleId: Number(telemetryForm.vehicleId),
-                            batteryLevel: Number(telemetryForm.batteryLevel),
-                            tirePressureOk: telemetryForm.tirePressureOk,
-                            severity: telemetryForm.severity,
-                            faultCode: telemetryForm.faultCode,
-                          }),
+                        await injectTelemetry({
+                          vehicleId: Number(telemetryForm.vehicleId),
+                          batteryLevel: Number(telemetryForm.batteryLevel),
+                          tirePressureOk: telemetryForm.tirePressureOk,
+                          severity: telemetryForm.severity,
+                          faultCode: telemetryForm.faultCode,
                         })
                       }, `Telemetry injected for vehicle ${telemetryForm.vehicleId}.`)
                     }
                     type="button"
                   >
                     Inject telemetry
+                  </button>
+                  <button
+                    className="customer-button customer-button--secondary"
+                    onClick={() =>
+                      void runAction(async () => {
+                        const healthyDraft = normalTelemetryDraft(telemetryForm.vehicleId)
+                        await injectTelemetry({
+                          vehicleId: Number(healthyDraft.vehicleId),
+                          batteryLevel: Number(healthyDraft.batteryLevel),
+                          tirePressureOk: healthyDraft.tirePressureOk,
+                          severity: healthyDraft.severity,
+                          faultCode: healthyDraft.faultCode,
+                        })
+                        startTransition(() => {
+                          setTelemetryForm(healthyDraft)
+                        })
+                      }, `Normal telemetry injected for vehicle ${telemetryForm.vehicleId}.`)
+                    }
+                    type="button"
+                  >
+                    Inject normal telemetry
                   </button>
                 </div>
               </article>
