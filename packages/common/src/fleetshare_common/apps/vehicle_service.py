@@ -239,6 +239,7 @@ def create_telemetry(payload: TelemetryPayload, db: Session = Depends(get_db)):
     )
     db.add(snapshot)
     db.commit()
+    db.refresh(snapshot)
     if telemetry_requires_attention(
         battery_level=payload.batteryLevel,
         tire_pressure_ok=payload.tirePressureOk,
@@ -248,11 +249,13 @@ def create_telemetry(payload: TelemetryPayload, db: Session = Depends(get_db)):
         publish_event(
             "vehicle.telemetry_alert",
             {
+                "telemetrySnapshotId": snapshot.id,
                 "vehicleId": payload.vehicleId,
                 "batteryLevel": payload.batteryLevel,
                 "tirePressureOk": payload.tirePressureOk,
                 "severity": payload.severity,
                 "faultCode": payload.faultCode,
+                "createdAt": iso(snapshot.created_at),
             },
         )
     return {"message": "Telemetry captured", "severity": snapshot.severity}

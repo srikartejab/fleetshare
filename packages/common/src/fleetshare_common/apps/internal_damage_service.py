@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 
 from fleetshare_common.app import create_app
+from fleetshare_common.contracts import ReviewState
 from fleetshare_common.http import get_json, post_json
 from fleetshare_common.messaging import publish_event, stable_event_id, start_consumer
 from fleetshare_common.settings import get_settings
@@ -88,12 +89,13 @@ def _ticket_created_recently(ticket: dict) -> bool:
 
 
 def has_open_ticket(settings, vehicle_id: int, fault_fingerprint: str) -> bool:
-    tickets = get_json(f"{settings.maintenance_service_url}/maintenance/tickets")
+    tickets = get_json(
+        f"{settings.maintenance_service_url}/maintenance/tickets",
+        {"vehicleId": vehicle_id, "damageType": fault_fingerprint},
+    )
     if not isinstance(tickets, list):
         return False
     for ticket in tickets:
-        if ticket["vehicleId"] != vehicle_id:
-            continue
         if ticket["status"] in {"RESOLVED", "CLOSED"}:
             continue
         normalized_type = re.sub(r"[^a-z0-9]+", "_", str(ticket.get("damageType", "")).lower()).strip("_")
@@ -185,7 +187,7 @@ def process_internal_damage(payload: InternalDamagePayload, *, snapshot: dict | 
             "recordType": "INTERNAL_FAULT",
             "notes": payload.notes or payload.faultCode or snapshot.get("faultCode"),
             "severity": severity,
-            "reviewState": "EXTERNAL_ASSESSED",
+            "reviewState": ReviewState.INTERNAL_ASSESSED.value,
             "confidence": 0.9 if severity == "SEVERE" else 0.72,
             "detectedDamage": [fault_fingerprint],
         },
@@ -248,14 +250,12 @@ def process_internal_damage(payload: InternalDamagePayload, *, snapshot: dict | 
 def handle_telemetry_event(event: dict):
     payload = event["payload"]
     active_booking = resolve_active_trip_context(get_settings(), payload["vehicleId"])
-    if not active_booking:
-        return
     process_internal_damage(
         InternalDamagePayload(
-            bookingId=active_booking["bookingId"],
-            tripId=active_booking.get("tripId"),
+            bookingId=active_booking["bookingId"] if active_booking else None,
+            tripId=active_booking.get("tripId") if active_booking else None,
             vehicleId=payload["vehicleId"],
-            userId=active_booking["userId"],
+            userId=active_booking["userId"] if active_booking else None,
             faultCode=payload.get("faultCode", ""),
             sensorType="TELEMETRY",
             notes=payload.get("faultCode", ""),

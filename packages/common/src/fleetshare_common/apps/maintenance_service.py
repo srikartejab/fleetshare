@@ -227,10 +227,39 @@ def _ticket_to_dict(ticket: MaintenanceTicket) -> dict[str, Any]:
     }
 
 
-def _list_local_tickets() -> list[dict[str, Any]]:
+def _filter_tickets(
+    tickets: list[dict[str, Any]],
+    *,
+    vehicle_id: int | None = None,
+    damage_type: str | None = None,
+    status: str | None = None,
+) -> list[dict[str, Any]]:
+    filtered = tickets
+    if vehicle_id is not None:
+        filtered = [ticket for ticket in filtered if ticket.get("vehicleId") == vehicle_id]
+    if damage_type:
+        normalized_filter = str(damage_type).strip().lower()
+        filtered = [ticket for ticket in filtered if str(ticket.get("damageType", "")).strip().lower() == normalized_filter]
+    if status:
+        normalized_status = str(status).strip().upper()
+        filtered = [ticket for ticket in filtered if str(ticket.get("status", "")).strip().upper() == normalized_status]
+    return filtered
+
+
+def _list_local_tickets(
+    *,
+    vehicle_id: int | None = None,
+    damage_type: str | None = None,
+    status: str | None = None,
+) -> list[dict[str, Any]]:
     with _local_session_scope() as db:
         tickets = db.query(MaintenanceTicket).order_by(MaintenanceTicket.id.desc()).all()
-        return [_ticket_to_dict(ticket) for ticket in tickets]
+        return _filter_tickets(
+            [_ticket_to_dict(ticket) for ticket in tickets],
+            vehicle_id=vehicle_id,
+            damage_type=damage_type,
+            status=status,
+        )
 
 
 def _create_local_ticket(payload: TicketPayload) -> dict[str, Any]:
@@ -287,12 +316,22 @@ def maintenance_backend_info(response: Response):
 
 
 @app.get("/maintenance/tickets")
-def list_tickets(response: Response):
+def list_tickets(
+    response: Response,
+    vehicleId: int | None = None,
+    damageType: str | None = None,
+    status: str | None = None,
+):
     _set_backend_header(response)
     if _using_outsystems():
         tickets = _outsystems_request("GET", "/tickets")
-        return [_normalize_outsystems_ticket(ticket) for ticket in tickets]
-    return _list_local_tickets()
+        return _filter_tickets(
+            [_normalize_outsystems_ticket(ticket) for ticket in tickets],
+            vehicle_id=vehicleId,
+            damage_type=damageType,
+            status=status,
+        )
+    return _list_local_tickets(vehicle_id=vehicleId, damage_type=damageType, status=status)
 
 
 @app.post("/maintenance/tickets")

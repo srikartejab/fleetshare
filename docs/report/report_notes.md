@@ -26,8 +26,9 @@ FleetShare addresses three car-sharing pain points in Singapore:
 
 ## User Scenario 3
 
-- During an active trip, telemetry alerts or manual fault reports are processed by `Internal Damage Service`.
-- Severe internal faults publish `incident.internal_fault_detected` and `booking.disruption_notification`.
+- During an active trip or while a vehicle is idle, telemetry alerts or manual fault reports are processed by `Internal Damage Service`.
+- Severe internal faults always publish `incident.internal_fault_detected`.
+- Trip-specific `booking.disruption_notification` messages are only published when an active trip exists.
 - The downstream recovery flow opens maintenance work, cancels affected future bookings, and triggers compensation and notification events.
 - The trip is then completed through the end-trip flow, which locks the vehicle, finalizes pricing, and publishes any required refund or adjustment events.
 

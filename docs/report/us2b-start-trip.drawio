@@ -14,7 +14,7 @@
                     <mxGeometry x="560" y="110" width="400" height="80" as="geometry"/>
                 </mxCell>
                 <mxCell id="start" value="Start Trip Service&#xa;(Composite Service)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" parent="1" vertex="1">
-                    <mxGeometry x="560" y="370" width="400" height="80" as="geometry"/>
+                    <mxGeometry x="560" y="320" width="400" height="80" as="geometry"/>
                 </mxCell>
                 <mxCell id="record" value="Record Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" vertex="1">
                     <mxGeometry x="320" y="570" width="220" height="70" as="geometry"/>

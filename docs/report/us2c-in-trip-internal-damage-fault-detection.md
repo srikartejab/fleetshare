@@ -1,19 +1,19 @@
-# US2C In-Trip Internal Damage / Fault Detection
+# US2C Telemetry-Driven Internal Fault Detection
 
 ## Scope / Boundary
 
-This diagram covers severe in-trip internal fault detection only.
+This diagram covers telemetry-driven internal fault detection for both active trips and idle / parked vehicles.
 
 It includes:
 
 - telemetry-triggered entry path
-- active trip context resolution
+- optional active trip context resolution
 - internal fault assessment
 - record creation
 - vehicle severe-status update
 - duplicate suppression against maintenance tickets and recent fault cache
 - incident publication
-- trip disruption notification publication
+- active-trip disruption notification publication
 
 It does not include:
 
@@ -31,13 +31,13 @@ Diagram source: [us2c-in-trip-internal-damage-fault-detection.drawio]
 
 1. `Vehicle Service` accepts `POST /vehicles/telemetry`, persists the telemetry snapshot, and only publishes `vehicle.telemetry_alert` when `telemetry_requires_attention(...)` returns true.
 2. `Internal Damage Service` consumes `vehicle.telemetry_alert` asynchronously from RabbitMQ.
-3. `Internal Damage Service` resolves active trip context through `Booking Service` at `GET /bookings/vehicle/{vehicleId}/active`.
-4. If no active in-progress booking exists for that vehicle, the telemetry handler exits immediately. No record is created and no downstream incident flow starts.
-5. If active trip context exists, `Internal Damage Service` uses the consumed event payload directly as the snapshot for assessment; it does not re-fetch telemetry on this path.
+3. `Internal Damage Service` attempts to resolve active trip context through `Booking Service` at `GET /bookings/vehicle/{vehicleId}/active`.
+4. If no active in-progress booking exists for that vehicle, processing continues with vehicle-only context. The alert still counts and is not dropped.
+5. `Internal Damage Service` uses the consumed event payload directly as the snapshot for assessment, including the persisted telemetry timestamp carried in the event. It does not re-fetch telemetry on this path.
 6. `Internal Damage Service` assesses severity and normalizes the fault family.
-7. `Internal Damage Service` creates an `INTERNAL_FAULT` record through `Record Service` at `POST /records`.
+7. `Internal Damage Service` creates an `INTERNAL_FAULT` record through `Record Service` at `POST /records`, even when there is no active booking or trip.
 8. Only when the assessment is `SEVERE`, `Internal Damage Service` updates the vehicle status to `MAINTENANCE_REQUIRED` through the vehicle gRPC adapter.
-9. Still on the severe path, `Internal Damage Service` checks duplicate suppression against both the recent in-memory fault cache and open maintenance tickets from `Maintenance Service` at `GET /maintenance/tickets`.
-10. If the severe incident is not suppressed as a duplicate, `Internal Damage Service` publishes `incident.internal_fault_detected` to RabbitMQ.
-11. If the severe incident is not suppressed, `Internal Damage Service` also publishes `booking.disruption_notification` so the active customer and ops receive the in-trip stop / end-trip advisory.
-12. The telemetry-triggered detection path then completes asynchronously. Downstream maintenance-ticket creation and future-booking cancellation happen later in `Handle Damage Service` after it consumes `incident.internal_fault_detected`.
+9. Still on the severe path, `Internal Damage Service` checks duplicate suppression against both the recent in-memory fault cache and filtered open maintenance tickets from `Maintenance Service`.
+10. If the severe incident is not suppressed as a duplicate, `Internal Damage Service` publishes `incident.internal_fault_detected` to RabbitMQ, including the original telemetry incident timestamp.
+11. If active trip context exists and the severe incident is not suppressed, `Internal Damage Service` also publishes `booking.disruption_notification` so the active customer and ops receive the in-trip stop / end-trip advisory.
+12. The telemetry-triggered detection path then completes asynchronously. Downstream maintenance-ticket creation and future-booking cancellation happen later in `Handle Damage Service` after it consumes `incident.internal_fault_detected`, even for severe alerts that started while the vehicle was idle.
