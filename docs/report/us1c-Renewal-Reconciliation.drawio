@@ -1,63 +1,61 @@
-<mxfile host="app.diagrams.net">
-  <diagram name="Page-1" id="zwMyVSuCNhPHAfQGOmJ0">
-    <mxGraphModel dx="4036" dy="1849" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1100" math="0" shadow="0">
-      <root>
-        <mxCell id="0" />
-        <mxCell id="1" parent="0" />
-        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=24;fontStyle=1" value="Sub-Scenario 1C - Renewal Reconciliation and Refund Adjustment" vertex="1">
-          <mxGeometry height="40" width="830" x="290" y="20" as="geometry" />
-        </mxCell>
-        <mxCell id="bus" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d9d2e9;strokeColor=#8e7cc3;fontStyle=1" value="RabbitMQ&#xa;Events: subscription.renewed, trip.ended,&#xa;payment.refund_required, payment.refund_completed,&#xa;billing.refund_adjustment_completed" vertex="1">
-          <mxGeometry height="100" width="360" x="90" y="110" as="geometry" />
-        </mxCell>
-        <mxCell id="rr" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f4cccc;strokeColor=#cc0000;fontStyle=1" value="Renewal Reconciliation Service&#xa;(Composite Microservice)" vertex="1">
-          <mxGeometry height="100" width="370" x="660" y="210" as="geometry" />
-        </mxCell>
-        <mxCell id="booking" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1" value="Booking Service&#xa;(Atomic)" vertex="1">
-          <mxGeometry height="70" width="220" x="735" y="590" as="geometry" />
-        </mxCell>
-        <mxCell id="trip" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1" value="Trip Service&#xa;(Atomic)" vertex="1">
-          <mxGeometry height="70" width="220" x="350" y="590" as="geometry" />
-        </mxCell>
-        <mxCell id="pricing" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1" value="Pricing Service&#xa;(Atomic)" vertex="1">
-          <mxGeometry height="70" width="220" x="1110" y="590" as="geometry" />
-        </mxCell>
-        <mxCell id="payment" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1" value="Payment Service&#xa;(Atomic)" vertex="1">
-          <mxGeometry height="70" width="220" x="80" y="590" as="geometry" />
-        </mxCell>
-        <mxCell id="notification" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1" value="Notification Service&#xa;(Atomic)" vertex="1">
-          <mxGeometry height="70" width="220" x="-160" y="590" as="geometry" />
-        </mxCell>
-        <mxCell id="customer" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1" value="Customer UI&#xa;(sees refund + notification later via wallet/account fetches)" vertex="1">
-          <mxGeometry height="70" width="270" x="-185" y="770" as="geometry" />
-        </mxCell>
-        <mxCell id="note" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1" value="Trigger paths in current code:&#xa;1. subscription.renewed event&#xa;2. trip.ended catch-up event&#xa;Demo trigger: /ops-console/renewal/simulate -&gt; /renewal-reconciliation/simulate -&gt; publish subscription.renewed" vertex="1">
-          <mxGeometry height="120" width="560" x="960" y="70" as="geometry" />
-        </mxCell>
-        <mxCell id="e1" edge="1" parent="1" source="bus" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=block;endArrow=block;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="rr" value="1. Consume: subscription.renewed, trip.ended, payment.refund_completed&#xa;6. Publish: payment.refund_required&#xa;10. Publish: billing.refund_adjustment_completed">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e2" edge="1" parent="1" source="rr" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=block;endArrow=block" target="booking" value="2. GET /bookings/reconciliation-pending?userId&amp;billingCycleId[&amp;bookingId]&#xa;7. PATCH /booking/{bookingId}/reconciliation-state&#xa;First writes REFUND_PENDING with refundPendingOnRenewal=true&#xa;After payment.refund_completed writes COMPLETED, clears refundPendingOnRenewal, status=RECONCILED&#xa;Trip-ended catch-up also does: GET /booking/{bookingId}">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e3" edge="1" parent="1" source="rr" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=block;endArrow=block" target="trip" value="3. GET /trips/{tripId}&lt;div&gt;&lt;br/&gt;&lt;/div&gt;">
-          <mxGeometry relative="1" x="0.3478" as="geometry">
-            <mxPoint as="offset" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="e5" edge="1" parent="1" source="rr" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=block;endArrow=block" target="pricing" value="2a. POST /pricing/customers/{userId}/renewal&#xa;Idempotent; returns billingCycleId&#xa;4. POST /pricing/re-rate-renewed-booking&#xa;Trip-ended catch-up also does: GET /pricing/customers/{userId}/summary">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e6" edge="1" parent="1" source="bus" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;exitX=0.25;exitY=1;exitDx=0;exitDy=0;" target="payment" value="8. Consume payment.refund_required&#xa;Persist REFUNDED payment record&#xa;9. Publish payment.refund_completed">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e7" edge="1" parent="1" source="bus" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" target="notification" value="11. Consume billing.refund_adjustment_completed&#xa;Persist in-app notification">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e8" edge="1" parent="1" source="notification" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1" target="customer" value="Customer reads the refund and notification later via wallet/account flows">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-      </root>
-    </mxGraphModel>
-  </diagram>
+<mxfile host="65bd71144e">
+    <diagram name="Page-1" id="zwMyVSuCNhPHAfQGOmJ0">
+        <mxGraphModel dx="4176" dy="847" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1100" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="Sub-Scenario 1C - Renewal Reconciliation and Refund Adjustment" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=24;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="290" y="20" width="830" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="bus" value="RabbitMQ&#xa;Events: subscription.renewed, payment.refund_required,&#xa;payment.refund_completed, billing.refund_adjustment_completed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d9d2e9;strokeColor=#8e7cc3;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="90" y="110" width="400" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="rr" value="Renewal Reconciliation Service&#xa;(Composite Microservice)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f4cccc;strokeColor=#cc0000;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="660" y="210" width="370" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="booking" value="Booking Service&#xa;(Atomic)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="735" y="590" width="220" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="trip" value="Trip Service&#xa;(Atomic)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="350" y="590" width="220" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="pricing" value="Pricing Service&#xa;(Atomic)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="1110" y="590" width="220" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="payment" value="Payment Service&#xa;(Atomic)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="80" y="590" width="220" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="notification" value="Notification Service&#xa;(Atomic)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="-160" y="590" width="220" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="customer" value="Customer UI&#xa;(sees refund + notification later via wallet/account fetches)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="-185" y="770" width="270" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="note" value="1. Demo trigger: /ops-console/renewal/simulate -&gt; /renewal-reconciliation/simulate&#xa;Publishes subscription.renewed with a concrete newBillingCycleId&#xa;This diagram excludes the trip.ended catch-up path" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1" parent="1" vertex="1">
+                    <mxGeometry x="980" y="70" width="570" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="e1" value="2. Consume subscription.renewed&#xa;9. Consume payment.refund_completed&#xa;10. Publish billing.refund_adjustment_completed" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=block;endArrow=block;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="bus" target="rr" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e2" value="4. GET /bookings/reconciliation-pending?userId&amp;billingCycleId&#xa;7. PATCH /booking/{bookingId}/reconciliation-state&#xa;Set REFUND_PENDING, refundPendingOnRenewal=true&#xa;9. PATCH /booking/{bookingId}/reconciliation-state&#xa;Set COMPLETED, refundPendingOnRenewal=false, status=RECONCILED" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=block;endArrow=block" parent="1" source="rr" target="booking" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e3" value="5. GET /trips/{tripId}" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=block;endArrow=block" parent="1" source="rr" target="trip" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e4" value="3. POST /pricing/customers/{userId}/renewal&#xa;Returns billingCycleId&#xa;6. POST /pricing/re-rate-renewed-booking&#xa;9. PATCH /pricing/bookings/{bookingId}/reconciliation-state&#xa;Set COMPLETED" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=block;endArrow=block" edge="1" parent="1" source="rr" target="pricing">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e5" value="8. Consume payment.refund_required&#xa;Persist REFUNDED payment record&#xa;8. Publish payment.refund_completed" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" parent="1" source="bus" target="payment" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e6" value="10. Consume billing.refund_adjustment_completed&#xa;Persist in-app notification" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" parent="1" source="bus" target="notification" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e7" value="10. Customer later sees refund + notification via wallet/account flow" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1" parent="1" source="notification" target="customer" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
 </mxfile>
