@@ -1,6 +1,6 @@
 <mxfile host="65bd71144e">
     <diagram name="Page-1" id="zwMyVSuCNhPHAfQGOmJ0">
-        <mxGraphModel dx="4176" dy="847" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1100" math="0" shadow="0">
+        <mxGraphModel dx="3107" dy="466" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1100" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -43,16 +43,16 @@
                 <mxCell id="e3" value="5. GET /trips/{tripId}" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=block;endArrow=block" parent="1" source="rr" target="trip" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="e4" value="3. POST /pricing/customers/{userId}/renewal&#xa;Returns billingCycleId&#xa;6. POST /pricing/re-rate-renewed-booking&#xa;9. PATCH /pricing/bookings/{bookingId}/reconciliation-state&#xa;Set COMPLETED" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=block;endArrow=block" edge="1" parent="1" source="rr" target="pricing">
+                <mxCell id="e4" value="3. POST /pricing/customers/{userId}/renewal&#xa;Returns billingCycleId&#xa;6. POST /pricing/re-rate-renewed-booking&#xa;9. PATCH /pricing/bookings/{bookingId}/reconciliation-state&#xa;Set COMPLETED" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=block;endArrow=block" parent="1" source="rr" target="pricing" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
                 <mxCell id="e5" value="8. Consume payment.refund_required&#xa;Persist REFUNDED payment record&#xa;8. Publish payment.refund_completed" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" parent="1" source="bus" target="payment" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="e6" value="10. Consume billing.refund_adjustment_completed&#xa;Persist in-app notification" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" parent="1" source="bus" target="notification" edge="1">
+                <mxCell id="e6" value="11. Consume billing.refund_adjustment_completed&lt;br&gt;Persist in-app notification" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block" parent="1" source="bus" target="notification" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="e7" value="10. Customer later sees refund + notification via wallet/account flow" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1" parent="1" source="notification" target="customer" edge="1">
+                <mxCell id="e7" value="12. Customer later sees refund + notification via wallet/account flow" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1" parent="1" source="notification" target="customer" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
             </root>
