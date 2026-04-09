@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useEffectEvent, useState } from 'react'
+import { startTransition, useEffect, useEffectEvent, useState, type SetStateAction } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import './App.css'
 
@@ -76,6 +76,43 @@ type PendingUnlockRequest = {
   bookingId: number
   vehicleId: number
   notes: string
+}
+
+type SearchFormState = {
+  pickupLocation: string
+  vehicleType: string
+  startTime: string
+  endTime: string
+}
+
+function getBookingWindowError(startTime: string, endTime: string) {
+  const startTimestamp = new Date(startTime).getTime()
+  const endTimestamp = new Date(endTime).getTime()
+  if (Number.isNaN(startTimestamp) || Number.isNaN(endTimestamp)) {
+    return 'Choose valid booking start and end times.'
+  }
+  if (endTimestamp <= startTimestamp) {
+    return 'Booking start time must be earlier than end time.'
+  }
+  return null
+}
+
+function applySearchFormUpdate(current: SearchFormState, update: SetStateAction<SearchFormState>) {
+  const next = typeof update === 'function' ? update(current) : update
+  const startChanged = next.startTime !== current.startTime
+  const endChanged = next.endTime !== current.endTime
+  const bookingWindowError = getBookingWindowError(next.startTime, next.endTime)
+
+  if (!bookingWindowError) {
+    return next
+  }
+  if (startChanged && !endChanged) {
+    return { ...next, startTime: current.startTime }
+  }
+  if (!startChanged && endChanged) {
+    return { ...next, endTime: current.endTime }
+  }
+  return current
 }
 
 type PendingProblemRequest = {
@@ -207,12 +244,17 @@ function App() {
   const [reportedProblem, setReportedProblem] = useState<InternalDamageResult | null>(null)
   const [postTripInspectionResult, setPostTripInspectionResult] = useState<PostTripInspectionResult | null>(null)
   const [endTripResult, setEndTripResult] = useState<EndTripResult | null>(null)
-  const [searchForm, setSearchForm] = useState({
+  const [searchForm, setSearchForm] = useState<SearchFormState>({
     pickupLocation: '',
     vehicleType: '',
     startTime: localDateTime(1),
     endTime: localDateTime(4),
   })
+  const bookingWindowError = getBookingWindowError(searchForm.startTime, searchForm.endTime)
+
+  function updateSearchForm(update: SetStateAction<SearchFormState>) {
+    setSearchForm((current) => applySearchFormUpdate(current, update))
+  }
 
   async function fetchOrDefault<T>(path: string, fallback: T) {
     try {
@@ -254,7 +296,7 @@ function App() {
     startTransition(() => {
       setVehicles(allVehicles)
       setVehicleFilters(resolvedFilters)
-      setSearchForm((current) => ({
+      updateSearchForm((current) => ({
         ...current,
         pickupLocation: current.pickupLocation || resolvedFilters.locationOptions?.[0]?.id || resolvedFilters.locations[0] || '',
         vehicleType: current.vehicleType,
@@ -405,6 +447,16 @@ function App() {
     }
   }, [activeUserId])
 
+  useEffect(() => {
+    if (!bookingWindowError) {
+      return
+    }
+    startTransition(() => {
+      setSearchResponse(null)
+      setReservationDraft(null)
+    })
+  }, [bookingWindowError])
+
   function activateCustomer(userId: string) {
     localStorage.setItem(customerStorageKey, userId)
     setActiveUserId(userId)
@@ -463,6 +515,11 @@ function App() {
   }
 
   function beginReservationReview(vehicle: Vehicle) {
+    const bookingWindowError = getBookingWindowError(searchForm.startTime, searchForm.endTime)
+    if (bookingWindowError) {
+      setStatus(bookingWindowError)
+      return
+    }
     setPendingBooking(null)
     const bookingHours = Math.max(
       (new Date(searchForm.endTime).getTime() - new Date(searchForm.startTime).getTime()) / (1000 * 60 * 60),
@@ -500,6 +557,11 @@ function App() {
   function confirmReservation() {
     if (!reservationDraft) {
       setStatus('Choose a vehicle from Discover before confirming a booking.')
+      return
+    }
+    const bookingWindowError = getBookingWindowError(reservationDraft.startTime, reservationDraft.endTime)
+    if (bookingWindowError) {
+      setStatus(bookingWindowError)
       return
     }
 
@@ -789,6 +851,11 @@ function App() {
                 customerSummary={customerSummary ?? selectedProfile}
                 onReserve={beginReservationReview}
                 onSearch={async () => {
+                  const bookingWindowError = getBookingWindowError(searchForm.startTime, searchForm.endTime)
+                  if (bookingWindowError) {
+                    setStatus(bookingWindowError)
+                    return
+                  }
                   const params = new URLSearchParams({
                     userId: activeUserId,
                     pickupLocation: searchForm.pickupLocation,
@@ -807,7 +874,8 @@ function App() {
                 onSwitchUser={clearActiveCustomer}
                 searchForm={searchForm}
                 searchResponse={searchResponse}
-                setSearchForm={setSearchForm}
+                setSearchForm={updateSearchForm}
+                bookingWindowError={bookingWindowError}
                 status={status}
                 vehicleFilters={vehicleFilters}
               />

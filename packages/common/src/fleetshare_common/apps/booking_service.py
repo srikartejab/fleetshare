@@ -15,6 +15,11 @@ from fleetshare_common.timeutils import as_utc_naive, iso, utcnow_naive
 app = create_app("Booking Service", "Atomic booking reservation service.")
 
 
+def validate_booking_window(start_time: datetime, end_time: datetime) -> None:
+    if end_time <= start_time:
+        raise HTTPException(status_code=400, detail="endTime must be later than startTime")
+
+
 class Booking(Base):
     __tablename__ = "bookings"
 
@@ -161,6 +166,7 @@ def booking_availability(
 ):
     normalized_start = as_utc_naive(startTime)
     normalized_end = as_utc_naive(endTime)
+    validate_booking_window(normalized_start, normalized_end)
     requested_ids = []
     if vehicleId:
         requested_ids = [vehicleId]
@@ -215,6 +221,7 @@ def reconciliation_pending(
 def create_booking(payload: BookingCreatePayload, db: Session = Depends(get_db)):
     normalized_start = as_utc_naive(payload.startTime)
     normalized_end = as_utc_naive(payload.endTime)
+    validate_booking_window(normalized_start, normalized_end)
     lock = db.get(VehicleReservationLock, payload.vehicleId)
     if not lock:
         db.add(VehicleReservationLock(vehicle_id=payload.vehicleId))

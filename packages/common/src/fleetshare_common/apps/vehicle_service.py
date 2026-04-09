@@ -21,6 +21,19 @@ from fleetshare_common.timeutils import iso, utcnow_naive
 app = create_app("Vehicle Service", "Atomic vehicle state and telemetry service.")
 
 
+OPERATIONALLY_ELIGIBLE_STATUSES = {
+    VehicleStatus.AVAILABLE.value,
+    VehicleStatus.BOOKED.value,
+    VehicleStatus.IN_USE.value,
+}
+
+
+LOCK_PRESERVED_STATUSES = {
+    VehicleStatus.MAINTENANCE_REQUIRED.value,
+    VehicleStatus.UNDER_INSPECTION.value,
+}
+
+
 class Vehicle(Base):
     __tablename__ = "vehicles"
 
@@ -78,6 +91,17 @@ def serialize_vehicle(vehicle: Vehicle) -> dict:
         "latitude": station["latitude"],
         "longitude": station["longitude"],
     }
+
+
+def is_operationally_eligible(vehicle: Vehicle) -> bool:
+    """Return whether the vehicle may be considered for future bookings.
+
+    Operational eligibility is intentionally separate from requested time-slot
+    availability. Vehicles that are currently BOOKED or IN_USE may still be
+    bookable for a later slot; blocked administrative states remain ineligible.
+    """
+
+    return vehicle.status in OPERATIONALLY_ELIGIBLE_STATUSES
 
 
 def seed_data():
@@ -301,15 +325,21 @@ def latest_telemetry(vehicle_id: int, db: Session = Depends(get_db)):
 
 class VehicleGrpcService(vehicle_pb2_grpc.VehicleServiceServicer):
     def CheckAvailability(self, request, context):
+        """Operational eligibility check used before booking conflict checks.
+
+        Despite the legacy RPC name, this does not answer whether the vehicle is
+        free right now. Booking Service remains the source of truth for overlap
+        checks on a requested booking window.
+        """
         with SessionLocal() as db:
             vehicle = db.get(Vehicle, request.vehicle_id)
             if not vehicle:
                 return vehicle_pb2.VehicleAvailabilityResponse(available=False, status="NOT_FOUND", message="Vehicle not found")
-            available = vehicle.status == VehicleStatus.AVAILABLE.value
+            available = is_operationally_eligible(vehicle)
             return vehicle_pb2.VehicleAvailabilityResponse(
                 available=available,
                 status=vehicle.status,
-                message="Vehicle can be reserved" if available else "Vehicle is unavailable",
+                message="Vehicle is operationally eligible" if available else "Vehicle is operationally blocked",
             )
 
     def UnlockVehicle(self, request, context):
@@ -329,7 +359,7 @@ class VehicleGrpcService(vehicle_pb2_grpc.VehicleServiceServicer):
             vehicle = db.get(Vehicle, request.vehicle_id)
             if not vehicle:
                 return vehicle_pb2.VehicleCommandResponse(success=False, status="NOT_FOUND", message="Unknown vehicle")
-            if vehicle.status != VehicleStatus.MAINTENANCE_REQUIRED.value:
+            if vehicle.status not in LOCK_PRESERVED_STATUSES:
                 vehicle.status = VehicleStatus.AVAILABLE.value
             db.commit()
             return vehicle_pb2.VehicleCommandResponse(success=True, status=vehicle.status, message="Vehicle locked")

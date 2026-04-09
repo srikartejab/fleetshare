@@ -172,6 +172,14 @@
   background: linear-gradient(180deg, var(--search-orange), var(--search-orange-deep));
 }
 
+.find-button:disabled,
+.filter-sheet__apply:disabled,
+.reserve-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  box-shadow: none;
+}
+
 .search-slot {
   display: grid;
   grid-template-columns: 1.3rem 1fr;
@@ -757,6 +765,16 @@
   border-radius: 1rem;
   background: linear-gradient(180deg, rgba(26, 118, 186, 0.1), rgba(247, 166, 47, 0.11));
   color: #2f5178;
+}
+
+.filter-sheet__error {
+  margin: -0.15rem 0 0;
+  padding: 0.8rem 0.95rem;
+  border-radius: 0.95rem;
+  background: rgba(202, 63, 63, 0.1);
+  color: #a93434;
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
 .filter-sheet__apply {

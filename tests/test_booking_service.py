@@ -4,6 +4,8 @@ from types import SimpleNamespace
 
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
 
+import pytest
+
 from fleetshare_common.apps import booking_service
 
 
@@ -126,3 +128,14 @@ def test_patch_reconciliation_complete_is_idempotent():
     assert db.committed is False
     assert result["idempotent"] is True
     assert result["status"] == "RECONCILED"
+
+
+def test_validate_booking_window_rejects_start_time_after_end_time():
+    with pytest.raises(booking_service.HTTPException) as exc_info:
+        booking_service.validate_booking_window(
+            datetime(2026, 4, 9, 12, 0),
+            datetime(2026, 4, 9, 11, 0),
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "endTime must be later than startTime"

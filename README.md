@@ -105,4 +105,5 @@ python scripts/run_scenario_tests.py --keep-up
 ## Important Notes
 
 - Payment and notifications are simulated but persisted.
+- Vehicle Service operational checks are distinct from Booking Service time-slot overlap checks. A vehicle can be `IN_USE` or `BOOKED` now and still be searchable/reservable for a later free slot if it is operationally eligible.
 

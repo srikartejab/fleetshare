@@ -9,7 +9,7 @@ from fleetshare_common.app import create_app
 from fleetshare_common.http import get_json
 from fleetshare_common.settings import get_settings
 from fleetshare_common.station_catalog import get_station, haversine_km, resolve_location
-from fleetshare_common.vehicle_grpc import check_availability
+from fleetshare_common.vehicle_grpc import check_operational_eligibility
 
 app = create_app("Search Available Vehicles Service", "Composite vehicle search workflow.")
 
@@ -31,7 +31,7 @@ def search_available_vehicles(
     validate_booking_window(startTime, endTime)
     settings = get_settings()
     stations = get_json(f"{settings.vehicle_service_url}/vehicles/stations")
-    vehicles = get_json(f"{settings.vehicle_service_url}/vehicles/availability")
+    vehicles = get_json(f"{settings.vehicle_service_url}/vehicles")
     requested_station = resolve_location(pickupLocation)
     selected_station_id = requested_station["id"] if requested_station else (stations[0]["stationId"] if stations else pickupLocation)
     selected_station = next((station for station in stations if station["stationId"] == selected_station_id), None) or get_station(selected_station_id)
@@ -40,7 +40,7 @@ def search_available_vehicles(
     for vehicle in vehicles:
         if vehicleType and vehicle["vehicleType"] != vehicleType:
             continue
-        grpc_status = check_availability(vehicle["vehicleId"])
+        grpc_status = check_operational_eligibility(vehicle["vehicleId"])
         if not grpc_status["available"]:
             continue
         operational_candidates.append(vehicle)

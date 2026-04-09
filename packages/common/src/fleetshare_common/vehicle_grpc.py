@@ -12,9 +12,15 @@ def stub():
     return vehicle_pb2_grpc.VehicleServiceStub(channel)
 
 
-def check_availability(vehicle_id: int):
+def check_operational_eligibility(vehicle_id: int):
     response = stub().CheckAvailability(vehicle_pb2.VehicleAvailabilityRequest(vehicle_id=vehicle_id))
     return {"available": response.available, "status": response.status, "message": response.message}
+
+
+def check_availability(vehicle_id: int):
+    """Backward-compatible alias for the operational-eligibility RPC."""
+
+    return check_operational_eligibility(vehicle_id)
 
 
 def unlock_vehicle(vehicle_id: int, booking_id: str, user_id: str):

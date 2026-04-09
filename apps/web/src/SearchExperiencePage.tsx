@@ -259,6 +259,7 @@ function BottomNavIcon({
 
 export function SearchExperiencePage({
   activeUser,
+  bookingWindowError,
   busy,
   customerSummary,
   onReserve,
@@ -271,6 +272,7 @@ export function SearchExperiencePage({
   vehicleFilters,
 }: {
   activeUser: CustomerSummary | null
+  bookingWindowError: string | null
   busy: boolean
   customerSummary: CustomerSummary | null
   onReserve: (vehicle: Vehicle) => void
@@ -287,8 +289,9 @@ export function SearchExperiencePage({
   const [selectedVehicleIndex, setSelectedVehicleIndex] = useState(0)
   const [filterOpen, setFilterOpen] = useState(false)
   const [clock, setClock] = useState(() => deviceTime())
+  const isBookingWindowInvalid = Boolean(bookingWindowError)
   const initialSearch = useEffectEvent(() => {
-    if (!searchResponse && searchForm.pickupLocation) {
+    if (!searchResponse && searchForm.pickupLocation && !isBookingWindowInvalid) {
       void onSearch()
     }
   })
@@ -327,7 +330,7 @@ export function SearchExperiencePage({
   const selectedLocationId = selectedStation?.stationId ?? searchForm.pickupLocation
   const selectedLocation =
     vehicleFilters.locationOptions?.find((location) => location.id === selectedLocationId) ?? vehicleFilters.locationOptions?.[0] ?? null
-  const availabilitySummary = searchResponse?.availabilitySummary ?? (busy ? 'Finding nearby vehicles...' : 'Tap Find to load nearby vehicles')
+  const availabilitySummary = bookingWindowError ?? searchResponse?.availabilitySummary ?? (busy ? 'Finding nearby vehicles...' : 'Tap Find to load nearby vehicles')
 
   function selectStation(stationId: string) {
     if (stationId === selectedStationId) {
@@ -377,7 +380,7 @@ export function SearchExperiencePage({
               <small>{formatShortDate(searchForm.endTime)}</small>
             </div>
           </button>
-          <button className="find-button" disabled={busy} onClick={() => void onSearch()} type="button">
+          <button className="find-button" disabled={busy || isBookingWindowInvalid} onClick={() => void onSearch()} type="button">
             <SearchIcon />
             <span>{busy ? '...' : 'Find'}</span>
           </button>
@@ -439,7 +442,7 @@ export function SearchExperiencePage({
           </button>
         </div>
 
-        {selectedStation ? (
+        {selectedStation && !isBookingWindowInvalid ? (
           <section className="station-card">
             {activeVehicle ? (
               <>
@@ -566,7 +569,7 @@ export function SearchExperiencePage({
               <p className="mini-label">Search filters</p>
               <h2>Tune the vehicle search</h2>
             </div>
-            <span>{status}</span>
+            <span>{bookingWindowError ?? status}</span>
           </div>
           <label>
             Pick-up location
@@ -600,6 +603,7 @@ export function SearchExperiencePage({
               Pick up
               <input
                 type="datetime-local"
+                max={searchForm.endTime}
                 value={searchForm.startTime}
                 onChange={(event) => setSearchForm((current) => ({ ...current, startTime: event.target.value }))}
               />
@@ -608,11 +612,13 @@ export function SearchExperiencePage({
               Return
               <input
                 type="datetime-local"
+                min={searchForm.startTime}
                 value={searchForm.endTime}
                 onChange={(event) => setSearchForm((current) => ({ ...current, endTime: event.target.value }))}
               />
             </label>
           </div>
+          {bookingWindowError ? <p className="filter-sheet__error">{bookingWindowError}</p> : null}
           <div className="filter-sheet__summary">
             {customerSummary ? (
               <p>
@@ -624,6 +630,7 @@ export function SearchExperiencePage({
           </div>
           <button
             className="filter-sheet__apply"
+            disabled={isBookingWindowInvalid}
             onClick={() => {
               setFilterOpen(false)
               void onSearch()

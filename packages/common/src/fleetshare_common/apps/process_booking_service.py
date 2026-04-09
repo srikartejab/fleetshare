@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from fleetshare_common.app import create_app
 from fleetshare_common.http import get_json, patch_json, post_json
 from fleetshare_common.settings import get_settings
-from fleetshare_common.vehicle_grpc import check_availability
+from fleetshare_common.vehicle_grpc import check_operational_eligibility
 
 app = create_app("Process Booking Service", "Public booking and billing composite service.")
 
@@ -16,6 +16,17 @@ app = create_app("Process Booking Service", "Public booking and billing composit
 def validate_booking_window(start_time: datetime, end_time: datetime) -> None:
     if end_time <= start_time:
         raise HTTPException(status_code=400, detail="endTime must be later than startTime")
+
+
+def assert_vehicle_operationally_eligible(vehicle_id: int) -> dict:
+    """Validate operational status separately from booking slot overlap checks."""
+
+    grpc_status = check_operational_eligibility(vehicle_id)
+    if grpc_status["status"] == "NOT_FOUND":
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    if not grpc_status["available"]:
+        raise HTTPException(status_code=409, detail=f"Vehicle is operationally blocked: {grpc_status['status']}")
+    return grpc_status
 
 
 class ReservePayload(BaseModel):
@@ -154,9 +165,8 @@ def search_booking_options(
 def process_booking(payload: ReservePayload):
     validate_booking_window(payload.startTime, payload.endTime)
     settings = get_settings()
-    grpc_status = check_availability(payload.vehicleId)
-    if not grpc_status["available"]:
-        raise HTTPException(status_code=409, detail="Vehicle is not operationally available")
+    get_json(f"{settings.vehicle_service_url}/vehicles/{payload.vehicleId}")
+    assert_vehicle_operationally_eligible(payload.vehicleId)
 
     availability = get_json(
         f"{settings.booking_service_url}/bookings/availability",

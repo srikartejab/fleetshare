@@ -304,11 +304,21 @@ export function DiscoverPage({
           </label>
           <label>
             Start time
-            <input type="datetime-local" value={searchForm.startTime} onChange={(event) => setSearchForm((current) => ({ ...current, startTime: event.target.value }))} />
+            <input
+              type="datetime-local"
+              max={searchForm.endTime}
+              value={searchForm.startTime}
+              onChange={(event) => setSearchForm((current) => ({ ...current, startTime: event.target.value }))}
+            />
           </label>
           <label>
             End time
-            <input type="datetime-local" value={searchForm.endTime} onChange={(event) => setSearchForm((current) => ({ ...current, endTime: event.target.value }))} />
+            <input
+              type="datetime-local"
+              min={searchForm.startTime}
+              value={searchForm.endTime}
+              onChange={(event) => setSearchForm((current) => ({ ...current, endTime: event.target.value }))}
+            />
           </label>
         </div>
         <button className="primary" onClick={() => void onSearch()} type="button">

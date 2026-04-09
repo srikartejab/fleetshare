@@ -3,6 +3,9 @@ syntax = "proto3";
 package fleetshare.vehicle;
 
 service VehicleService {
+  // Legacy method name. Semantics are operational eligibility only:
+  // whether the vehicle is healthy/administratively allowed to be booked.
+  // Booking overlap checks stay in Booking Service.
   rpc CheckAvailability (VehicleAvailabilityRequest) returns (VehicleAvailabilityResponse);
   rpc UnlockVehicle (VehicleCommandRequest) returns (VehicleCommandResponse);
   rpc LockVehicle (VehicleCommandRequest) returns (VehicleCommandResponse);
