@@ -53,6 +53,36 @@ def test_ops_console_dashboard_enriches_operational_views(monkeypatch):
     assert payload["notifications"][0]["severity"] == "CRITICAL"
 
 
+def test_ops_console_dashboard_allows_empty_ticket_list(monkeypatch):
+    responses = {
+        "/vehicles": [{"id": 1, "vehicleId": 1, "model": "Hyundai Kona Electric"}],
+        "/pricing/customers": [{"userId": "user-1001", "displayName": "Alicia Tan"}],
+        "/bookings": [{"bookingId": 10, "userId": "user-1001", "vehicleId": 1}],
+        "/trips": [{"tripId": 20, "bookingId": 10, "vehicleId": 1}],
+        "/maintenance/tickets": [],
+        "/records": [],
+        "/records/manual-review-queue": [],
+        "/payments": [],
+        "/notifications": [],
+    }
+
+    def fake_get_json(url, params=None):
+        for suffix, payload in responses.items():
+            if url.endswith(suffix):
+                return payload
+        raise AssertionError(f"Unexpected URL {url}")
+
+    monkeypatch.setattr(ops_console_service, "get_json", fake_get_json)
+
+    with TestClient(ops_console_service.app) as client:
+        response = client.get("/ops-console/dashboard")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["tickets"] == []
+    assert payload["bookings"][0]["bookingCode"] == "B-000010"
+
+
 def test_ops_console_ticket_detail_returns_linked_entities(monkeypatch):
     responses = {
         "/vehicles": [{"id": 1, "vehicleId": 1, "model": "Hyundai Kona Electric", "stationName": "Pasir Ris Hub", "zone": "EAST"}],

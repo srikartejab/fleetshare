@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -148,6 +149,46 @@ def test_outsystems_list_normalizes_fields_and_sets_backend_header(monkeypatch):
             "createdAt": "2026-04-06T19:19:46Z",
         }
     ]
+
+
+def test_outsystems_list_returns_empty_for_known_empty_400(monkeypatch):
+    monkeypatch.setattr(maintenance_service, "_backend_mode", lambda: "outsystems")
+
+    def fake_request(method, url, json=None, timeout=None):
+        return httpx.Response(
+            400,
+            text='{"detail":"{\\"detail\\": \\"No maintenance tickets\\"}"}',
+            headers={"content-type": "application/json"},
+            request=httpx.Request(method, url),
+        )
+
+    monkeypatch.setattr(maintenance_service.httpx, "request", fake_request)
+
+    with TestClient(maintenance_service.app) as client:
+        response = client.get("/maintenance/tickets")
+
+    assert response.status_code == 200
+    assert response.headers["X-Maintenance-Backend"] == "outsystems"
+    assert response.json() == []
+
+
+def test_outsystems_list_keeps_non_empty_400_errors(monkeypatch):
+    monkeypatch.setattr(maintenance_service, "_backend_mode", lambda: "outsystems")
+
+    def fake_request(method, url, json=None, timeout=None):
+        return httpx.Response(
+            400,
+            json={"detail": "Validation failed"},
+            request=httpx.Request(method, url),
+        )
+
+    monkeypatch.setattr(maintenance_service.httpx, "request", fake_request)
+
+    with TestClient(maintenance_service.app) as client:
+        response = client.get("/maintenance/tickets")
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Validation failed"}
 
 
 def test_outsystems_create_maps_request_and_ignores_source_event_id(monkeypatch):

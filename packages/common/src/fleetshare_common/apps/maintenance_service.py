@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import time
 from contextlib import contextmanager
@@ -19,6 +20,15 @@ from fleetshare_common.timeutils import iso, utcnow_naive
 
 app = create_app("Maintenance Service", "Maintenance ticket wrapper service.")
 logger = logging.getLogger("fleetshare.maintenance")
+_EMPTY_TICKET_LIST_DETAILS = {
+    "",
+    "no tickets",
+    "no maintenance tickets",
+    "no records",
+    "there are no records",
+    "empty list",
+    "empty result",
+}
 
 
 class LocalBase(DeclarativeBase):
@@ -88,11 +98,48 @@ def _outsystems_timeout() -> float:
     return float(get_settings().outsystems_maintenance_timeout_seconds)
 
 
+def _extract_error_detail(response: httpx.Response) -> str:
+    raw_text = response.text.strip()
+    if not raw_text:
+        return ""
+
+    current: Any = raw_text
+    for _ in range(4):
+        if isinstance(current, str):
+            try:
+                current = json.loads(current)
+            except json.JSONDecodeError:
+                return current
+        if isinstance(current, dict):
+            detail = current.get("detail")
+            if detail is None:
+                return raw_text
+            current = detail
+            continue
+        if isinstance(current, list):
+            first = current[0] if current else None
+            if isinstance(first, dict):
+                msg = first.get("msg")
+                if isinstance(msg, str) and msg.strip():
+                    return msg
+            return raw_text
+        return str(current)
+
+    return raw_text
+
+
+def _is_empty_ticket_list_error(response: httpx.Response) -> bool:
+    if response.status_code != 400:
+        return False
+    detail = " ".join(_extract_error_detail(response).split()).lower()
+    return detail in _EMPTY_TICKET_LIST_DETAILS
+
+
 def _raise_for_status(response: httpx.Response):
     try:
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
-        detail = exc.response.text.strip() or exc.response.reason_phrase
+        detail = _extract_error_detail(exc.response) or exc.response.reason_phrase
         raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
 
 
@@ -100,6 +147,15 @@ def _outsystems_request(method: str, path: str, *, payload: dict[str, Any] | Non
     url = _outsystems_url(path)
     logger.info("maintenance upstream request", extra={"backend": "outsystems", "method": method, "url": url})
     response = httpx.request(method, url, json=payload, timeout=_outsystems_timeout())
+    if method.upper() == "GET" and path == "/tickets":
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if _is_empty_ticket_list_error(exc.response):
+                return []
+            detail = _extract_error_detail(exc.response) or exc.response.reason_phrase
+            raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
+        return response.json()
     _raise_for_status(response)
     return response.json()
 
