@@ -240,3 +240,96 @@ def test_handle_refund_completed_event_marks_reconciliation_complete_and_publish
             ),
         )
     ]
+
+
+def test_handle_refund_completed_event_ignores_non_renewal_refunds(monkeypatch):
+    patch_calls = []
+    published = []
+
+    monkeypatch.setattr(renewal_reconciliation_service, "get_settings", _settings)
+    monkeypatch.setattr(renewal_reconciliation_service, "patch_json", lambda url, payload: patch_calls.append((url, payload)))
+    monkeypatch.setattr(
+        renewal_reconciliation_service,
+        "publish_event",
+        lambda event_type, payload, *, event_id=None: published.append((event_type, payload, event_id)),
+    )
+
+    renewal_reconciliation_service.handle_refund_completed_event(
+        {
+            "event_id": "evt-refund-completed",
+            "event_type": "payment.refund_completed",
+            "payload": {
+                "bookingId": 3,
+                "tripId": None,
+                "userId": "user-1001",
+                "refundAmount": 24.0,
+                "reason": "incident.internal_fault_detected",
+                "sourceEventId": "evt-fault-refund",
+            },
+        }
+    )
+
+    assert patch_calls == []
+    assert published == []
+
+
+def test_handle_refund_completed_event_tolerates_missing_pricing_ledger(monkeypatch):
+    patch_calls = []
+    published = []
+
+    def fake_patch_json(url, payload):
+        patch_calls.append((url, payload))
+        if url.endswith("/pricing/bookings/11/reconciliation-state"):
+            raise renewal_reconciliation_service.HTTPException(status_code=404, detail="Pricing ledger not found for booking")
+
+    monkeypatch.setattr(renewal_reconciliation_service, "get_settings", _settings)
+    monkeypatch.setattr(renewal_reconciliation_service, "patch_json", fake_patch_json)
+    monkeypatch.setattr(
+        renewal_reconciliation_service,
+        "publish_event",
+        lambda event_type, payload, *, event_id=None: published.append((event_type, payload, event_id)),
+    )
+
+    renewal_reconciliation_service.handle_refund_completed_event(
+        {
+            "event_id": "evt-refund-completed",
+            "event_type": "payment.refund_completed",
+            "payload": {
+                "bookingId": 11,
+                "tripId": 21,
+                "userId": "user-1001",
+                "refundAmount": 24.0,
+                "reason": "RENEWAL_RECONCILIATION",
+                "sourceEventId": "evt-refund",
+                "billingCycleId": "2026-05",
+                "eligibleIncludedHours": 1.0,
+                "finalPrice": 0.0,
+            },
+        }
+    )
+
+    assert patch_calls == [
+        (
+            "http://booking-service:8000/booking/11/reconciliation-state",
+            {"finalPrice": 0.0, "refund_pending_on_renewal": False, "reconciliationStatus": "COMPLETED"},
+        ),
+        (
+            "http://pricing-service:8000/pricing/bookings/11/reconciliation-state",
+            {"reconciliationStatus": "COMPLETED"},
+        ),
+    ]
+    assert published == [
+        (
+            "billing.refund_adjustment_completed",
+            {
+                "bookingId": 11,
+                "tripId": 21,
+                "userId": "user-1001",
+                "subject": "Billing adjustment completed",
+                "message": "Booking 11 was re-rated after renewal. 1.0h moved into the new cycle allowance; SGD 24.00 refunded.",
+            },
+            renewal_reconciliation_service._reconciliation_event_id(
+                "notification", booking_id=11, trip_id=21, billing_cycle_id="2026-05"
+            ),
+        )
+    ]

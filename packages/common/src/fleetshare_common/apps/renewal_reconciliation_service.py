@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime
 
 from dateutil.relativedelta import relativedelta
@@ -12,6 +13,7 @@ from fleetshare_common.messaging import publish_event, stable_event_id, start_co
 from fleetshare_common.settings import get_settings
 
 app = create_app("Renewal Reconciliation Service", "Event-driven renewal refund reconciliation.")
+logger = logging.getLogger("fleetshare.renewal_reconciliation")
 
 
 class RenewalPayload(BaseModel):
@@ -119,6 +121,15 @@ def patch_pricing_reconciliation_state(settings, *, booking_id: int, reconciliat
     patch_json(
         f"{settings.pricing_service_url}/pricing/bookings/{booking_id}/reconciliation-state",
         {"reconciliationStatus": reconciliation_status},
+    )
+
+
+def is_renewal_refund_event(payload: dict) -> bool:
+    return (
+        payload.get("reason") == "RENEWAL_RECONCILIATION"
+        and bool(payload.get("billingCycleId"))
+        and payload.get("bookingId") is not None
+        and payload.get("tripId") is not None
     )
 
 
@@ -260,6 +271,9 @@ def handle_trip_ended_event(event: dict):
 def handle_refund_completed_event(event: dict):
     settings = get_settings()
     payload = event["payload"]
+    if not is_renewal_refund_event(payload):
+        return
+
     booking_id = payload["bookingId"]
     trip_id = payload["tripId"]
     billing_cycle_id = payload["billingCycleId"]
@@ -275,11 +289,19 @@ def handle_refund_completed_event(event: dict):
         refund_pending_on_renewal=False,
         reconciliation_status="COMPLETED",
     )
-    patch_pricing_reconciliation_state(
-        settings,
-        booking_id=booking_id,
-        reconciliation_status="COMPLETED",
-    )
+    try:
+        patch_pricing_reconciliation_state(
+            settings,
+            booking_id=booking_id,
+            reconciliation_status="COMPLETED",
+        )
+    except HTTPException as exc:
+        if exc.status_code != 404:
+            raise
+        logger.warning(
+            "pricing reconciliation ledger missing during renewal refund completion; continuing",
+            extra={"booking_id": booking_id, "trip_id": trip_id, "billing_cycle_id": billing_cycle_id},
+        )
     publish_completion_notification(
         booking_id=booking_id,
         trip_id=trip_id,
