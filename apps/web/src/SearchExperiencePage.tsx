@@ -540,10 +540,10 @@ export function SearchExperiencePage({
           <BottomNavIcon kind="account" />
           <span>Account</span>
         </Link>
-        <button type="button">
+        <Link to="/app/wallet">
           <BottomNavIcon kind="wallet" />
           <span>e-Wallet</span>
-        </button>
+        </Link>
         <Link className="bottomnav-center" to="/app/discover">
           <BottomNavIcon kind="finder" />
         </Link>
