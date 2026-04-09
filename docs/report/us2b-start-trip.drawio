@@ -1,6 +1,6 @@
 <mxfile host="65bd71144e" compressed="false">
     <diagram id="us2b" name="us2b-start-trip">
-        <mxGraphModel dx="1643" dy="2015" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+        <mxGraphModel dx="1307" dy="1566" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -10,17 +10,17 @@
                 <mxCell id="kong" value="Kong API Gateway" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1f4e79;strokeColor=#12344d;fontColor=#ffffff;fontStyle=1;" parent="1" vertex="1">
                     <mxGeometry x="680" y="-50" width="160" height="60" as="geometry"/>
                 </mxCell>
-                <mxCell id="trip" value="Rental Execution Service&#xa;(Composite Service)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" parent="1" vertex="1">
+                <mxCell id="rental" value="Rental Execution Service&#xa;(Composite Service)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1">
                     <mxGeometry x="560" y="110" width="400" height="80" as="geometry"/>
                 </mxCell>
                 <mxCell id="start" value="Start Trip Service&#xa;(Composite Service)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" parent="1" vertex="1">
                     <mxGeometry x="560" y="320" width="400" height="80" as="geometry"/>
                 </mxCell>
-                <mxCell id="record" value="Record Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" vertex="1">
-                    <mxGeometry x="320" y="570" width="220" height="70" as="geometry"/>
-                </mxCell>
                 <mxCell id="internal" value="Internal Damage Service&#xa;(validation)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" parent="1" vertex="1">
-                    <mxGeometry x="100" y="370" width="220" height="80" as="geometry"/>
+                    <mxGeometry x="110" y="320" width="220" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="record" value="Record Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" vertex="1">
+                    <mxGeometry x="340" y="570" width="220" height="70" as="geometry"/>
                 </mxCell>
                 <mxCell id="vehicle" value="Vehicle Service&#xa;(gRPC unlock)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" vertex="1">
                     <mxGeometry x="650" y="570" width="220" height="70" as="geometry"/>
@@ -32,71 +32,65 @@
                     <mxGeometry x="1220" y="570" width="220" height="70" as="geometry"/>
                 </mxCell>
                 <mxCell id="e1" value="1. Request unlock / start&#xa;HTTP POST /rental-execution/start" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="ui" target="kong" edge="1">
-                    <mxGeometry x="-0.0909" y="90" relative="1" as="geometry">
+                    <mxGeometry x="-0.4545" relative="1" as="geometry">
                         <mxPoint as="offset"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e2" value="2. Route request" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="kong" target="trip" edge="1">
+                <mxCell id="e2" value="2. Route request" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="kong" target="rental" edge="1">
                     <mxGeometry x="-0.4" relative="1" as="geometry">
                         <mxPoint as="offset"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e3" value="3. Forward start request&#xa;HTTP POST /trips/start" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="trip" target="start" edge="1">
-                    <mxGeometry x="-0.4444" y="60" relative="1" as="geometry">
+                <mxCell id="e3" value="3. Forward start request&#xa;HTTP POST /trips/start" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="rental" target="start" edge="1">
+                    <mxGeometry x="-0.5385" relative="1" as="geometry">
                         <mxPoint as="offset"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e4" value="4. Load booking and verify owner/status&#xa;HTTP GET /booking/{bookingId}" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" parent="1" source="start" target="booking" edge="1">
-                    <mxGeometry x="-0.283" y="-30" relative="1" as="geometry">
-                        <mxPoint as="offset"/>
-                        <mxPoint x="920" y="450" as="sourcePoint"/>
-                    </mxGeometry>
-                </mxCell>
-                <mxCell id="e5" value="5. Re-check latest EXTERNAL_DAMAGE record&#xa;HTTP GET /records" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;exitX=0.25;exitY=1;exitDx=0;exitDy=0;" parent="1" source="start" target="record" edge="1">
-                    <mxGeometry x="0.0857" y="-20" relative="1" as="geometry">
+                <mxCell id="e4" value="4-5. Load booking and verify&#xa;owner + vehicleId + status=CONFIRMED&#xa;HTTP GET /booking/{bookingId}" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" parent="1" source="start" target="booking" edge="1">
+                    <mxGeometry x="-0.3448" y="-30" relative="1" as="geometry">
                         <mxPoint as="offset"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e6" value="6. Validate internal condition&#xa;HTTP POST /internal-damage/validate" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="start" target="internal" edge="1">
+                <mxCell id="e5" value="6-7. Re-check latest EXTERNAL_DAMAGE record&#xa;and require cleared reviewState + non-SEVERE&#xa;HTTP GET /records" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;exitX=0.25;exitY=1;exitDx=0;exitDy=0;" parent="1" source="start" target="record" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="e7" value="7. INTERNAL_FAULT validation record write&#xa;HTTP POST /records" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;dashed=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" parent="1" source="internal" target="record" edge="1">
-                    <mxGeometry x="-0.3208" relative="1" as="geometry">
-                        <mxPoint as="offset"/>
-                    </mxGeometry>
+                <mxCell id="e6" value="8. Validate internal condition&#xa;HTTP POST /internal-damage/validate" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="start" target="internal" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="e8" value="8. Successful path: unlock vehicle&#xa;gRPC UnlockVehicle" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" parent="1" source="start" target="vehicle" edge="1">
+                <mxCell id="e7" value="9. Write INTERNAL_FAULT record&#xa;reviewState=INTERNAL_ASSESSED&#xa;HTTP POST /records" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;dashed=1;entryX=0;entryY=0.75;entryDx=0;entryDy=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" parent="1" source="internal" target="record" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e8" value="10. Return blocked=false&#xa;(successful path)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;dashed=1;entryX=0.25;entryY=0;entryDx=0;entryDy=0;exitX=0.5;exitY=0;exitDx=0;exitDy=0;" parent="1" source="internal" target="start" edge="1">
                     <mxGeometry relative="1" as="geometry">
-                        <mxPoint x="760" y="460" as="sourcePoint"/>
+                        <Array as="points">
+                            <mxPoint x="220" y="290"/>
+                            <mxPoint x="660" y="290"/>
+                        </Array>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e9" value="9. Create trip&#xa;HTTP POST /trips/start" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;exitX=0.75;exitY=1;exitDx=0;exitDy=0;" parent="1" source="start" target="tripsvc" edge="1">
+                <mxCell id="e9" value="11. Unlock vehicle&#xa;gRPC UnlockVehicle" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="start" target="vehicle" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="e10" value="10. Patch booking to IN_PROGRESS&#xa;HTTP PATCH /booking/{bookingId}/status" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="start" target="booking" edge="1">
-                    <mxGeometry x="-0.283" y="30" relative="1" as="geometry">
+                <mxCell id="e10" value="12. Create trip&#xa;HTTP POST /trips/start&#xa;startedAt=booking.startTime" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;exitX=0.75;exitY=1;exitDx=0;exitDy=0;" parent="1" source="start" target="tripsvc" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e11" value="13. Patch booking to IN_PROGRESS + tripId&#xa;HTTP PATCH /booking/{bookingId}/status" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="start" target="booking" edge="1">
+                    <mxGeometry x="-0.3103" y="20" relative="1" as="geometry">
                         <mxPoint as="offset"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e11" value="11. Return STARTED" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="start" target="trip" edge="1">
-                    <mxGeometry x="-0.2222" y="60" relative="1" as="geometry">
+                <mxCell id="e12" value="14. Return {tripId, status=STARTED,&#xa;unlockCommandSent=true}" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="start" target="rental" edge="1">
+                    <mxGeometry x="-0.2308" relative="1" as="geometry">
                         <mxPoint as="offset"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e12" value="12. Return start response" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="trip" target="kong" edge="1">
+                <mxCell id="e13" value="15. Return same start response" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" parent="1" source="rental" target="kong" edge="1">
                     <mxGeometry x="-0.2" relative="1" as="geometry">
-                        <Array as="points">
-                            <mxPoint x="760" y="90"/>
-                        </Array>
                         <mxPoint as="offset"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e13" value="13. Final start response" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" parent="1" source="kong" target="ui" edge="1">
-                    <mxGeometry x="0.0909" y="70" relative="1" as="geometry">
-                        <Array as="points">
-                            <mxPoint x="760" y="-130"/>
-                            <mxPoint x="760" y="-130"/>
-                        </Array>
+                <mxCell id="e14" value="16. Final start response" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="kong" target="ui">
+                    <mxGeometry x="-0.4545" relative="1" as="geometry">
                         <mxPoint as="offset"/>
                     </mxGeometry>
                 </mxCell>
