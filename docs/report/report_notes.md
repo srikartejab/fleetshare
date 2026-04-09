@@ -14,7 +14,9 @@ FleetShare addresses three car-sharing pain points in Singapore:
 - Pricing computes provisional charges for post-midnight usage.
 - Booking is confirmed after simulated payment.
 - Trip completion publishes `trip.ended`.
-- Renewal reconciliation consumes `subscription.renewed`, re-rates the post-midnight portion, and publishes refund adjustments.
+- Renewal reconciliation consumes `subscription.renewed`, re-rates the post-midnight portion, and moves the booking into `REFUND_PENDING` when a cash refund is required.
+- Payment persists the refund asynchronously and publishes `payment.refund_completed`.
+- Renewal reconciliation only marks the booking `RECONCILED` after the payment completion event is consumed.
 
 ## User Scenario 2
 

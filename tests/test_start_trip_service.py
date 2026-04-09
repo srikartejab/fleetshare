@@ -5,7 +5,7 @@ TestClient = pytest.importorskip("fastapi.testclient").TestClient
 from fleetshare_common.apps import start_trip_service
 
 
-def test_start_trip_rejects_when_booking_has_not_started(monkeypatch):
+def test_start_trip_starts_even_when_booking_window_has_not_opened(monkeypatch):
     def fake_get_json(url, params=None):
         if "/booking/" in url:
             return {
@@ -23,6 +23,9 @@ def test_start_trip_rejects_when_booking_has_not_started(monkeypatch):
         raise AssertionError(f"Unexpected GET {url}")
 
     monkeypatch.setattr(start_trip_service, "get_json", fake_get_json)
+    monkeypatch.setattr(start_trip_service, "post_json", lambda url, payload: {"blocked": False} if "internal-damage/validate" in url else {"tripId": 333})
+    monkeypatch.setattr(start_trip_service, "patch_json", lambda url, payload: {"status": "IN_PROGRESS"})
+    monkeypatch.setattr(start_trip_service, "unlock_vehicle", lambda vehicle_id, booking_ref, user_id: {"success": True, "status": "IN_USE", "message": "Vehicle unlocked"})
 
     with TestClient(start_trip_service.app) as client:
         response = client.post(
@@ -30,8 +33,8 @@ def test_start_trip_rejects_when_booking_has_not_started(monkeypatch):
             json={"bookingId": 101, "vehicleId": 7, "userId": "user-1001", "notes": ""},
         )
 
-    assert response.status_code == 409
-    assert response.json()["detail"] == "Trip cannot start before the booked start time."
+    assert response.status_code == 200
+    assert response.json()["tripId"] == 333
 
 
 def test_start_trip_starts_when_booking_window_is_open(monkeypatch):

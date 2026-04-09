@@ -23,7 +23,11 @@ class RenewalPayload(BaseModel):
 
 @app.on_event("startup")
 def startup_event():
-    start_consumer("renewal-reconciliation-service", ["subscription.renewed", "trip.ended"], handle_event)
+    start_consumer(
+        "renewal-reconciliation-service",
+        ["subscription.renewed", "trip.ended", "payment.refund_completed"],
+        handle_event,
+    )
 
 
 @app.post("/renewal-reconciliation/simulate")
@@ -76,7 +80,7 @@ def pending_reconciliation_candidates(settings, user_id: str, active_billing_cyc
     return sorted_candidates(pending.get("reconciliationCandidates", []))
 
 
-def build_completion_message(candidate: dict, rerate: dict) -> str:
+def build_completion_message(booking_id: int, rerate: dict) -> str:
     message_parts = []
     if float(rerate.get("eligibleIncludedHours", 0)) > 0:
         message_parts.append(
@@ -86,11 +90,64 @@ def build_completion_message(candidate: dict, rerate: dict) -> str:
         message_parts.append(f"SGD {float(rerate['refundAmount']):.2f} refunded")
     if not message_parts:
         message_parts.append("No additional refund was required after re-rating")
-    return f"Booking {candidate['bookingId']} was re-rated after renewal. {'; '.join(message_parts)}."
+    return f"Booking {booking_id} was re-rated after renewal. {'; '.join(message_parts)}."
 
 
 def _reconciliation_event_id(kind: str, *, booking_id: int, trip_id: int, billing_cycle_id: str) -> str:
     return stable_event_id("renewal-reconciliation", kind, booking_id, trip_id, billing_cycle_id)
+
+
+def patch_booking_reconciliation_state(
+    settings,
+    *,
+    booking_id: int,
+    final_price: float,
+    refund_pending_on_renewal: bool,
+    reconciliation_status: str,
+):
+    patch_json(
+        f"{settings.booking_service_url}/booking/{booking_id}/reconciliation-state",
+        {
+            "finalPrice": final_price,
+            "refund_pending_on_renewal": refund_pending_on_renewal,
+            "reconciliationStatus": reconciliation_status,
+        },
+    )
+
+
+def patch_pricing_reconciliation_state(settings, *, booking_id: int, reconciliation_status: str):
+    patch_json(
+        f"{settings.pricing_service_url}/pricing/bookings/{booking_id}/reconciliation-state",
+        {"reconciliationStatus": reconciliation_status},
+    )
+
+
+def publish_completion_notification(
+    *,
+    booking_id: int,
+    trip_id: int,
+    user_id: str,
+    billing_cycle_id: str,
+    rerate: dict,
+):
+    if float(rerate.get("refundAmount", 0)) <= 0 and float(rerate.get("eligibleIncludedHours", 0)) <= 0:
+        return
+    publish_event(
+        "billing.refund_adjustment_completed",
+        {
+            "bookingId": booking_id,
+            "tripId": trip_id,
+            "userId": user_id,
+            "subject": "Billing adjustment completed",
+            "message": build_completion_message(booking_id, rerate),
+        },
+        event_id=_reconciliation_event_id(
+            "notification",
+            booking_id=booking_id,
+            trip_id=trip_id,
+            billing_cycle_id=billing_cycle_id,
+        ),
+    )
 
 
 def process_pending_reconciliations(
@@ -124,6 +181,12 @@ def process_pending_reconciliations(
         )
 
         if float(rerate.get("refundAmount", 0)) > 0:
+            refund_event_id = _reconciliation_event_id(
+                "refund",
+                booking_id=candidate["bookingId"],
+                trip_id=trip_id,
+                billing_cycle_id=active_billing_cycle_id,
+            )
             publish_event(
                 "payment.refund_required",
                 {
@@ -132,40 +195,34 @@ def process_pending_reconciliations(
                     "userId": user_id,
                     "refundAmount": rerate["refundAmount"],
                     "reason": "RENEWAL_RECONCILIATION",
+                    "billingCycleId": active_billing_cycle_id,
+                    "eligibleIncludedHours": rerate.get("eligibleIncludedHours", 0),
+                    "finalPrice": rerate["finalPrice"],
+                    "sourceEventId": refund_event_id,
                 },
-                event_id=_reconciliation_event_id(
-                    "refund",
-                    booking_id=candidate["bookingId"],
-                    trip_id=trip_id,
-                    billing_cycle_id=active_billing_cycle_id,
-                ),
+                event_id=refund_event_id,
             )
-
-        patch_json(
-            f"{settings.booking_service_url}/booking/{candidate['bookingId']}/reconciliation-complete",
-            {
-                "finalPrice": rerate["finalPrice"],
-                "refund_pending_on_renewal": False,
-                "reconciliationStatus": "COMPLETED",
-            },
-        )
-
-        if float(rerate.get("refundAmount", 0)) > 0 or float(rerate.get("eligibleIncludedHours", 0)) > 0:
-            publish_event(
-                "billing.refund_adjustment_completed",
-                {
-                    "bookingId": candidate["bookingId"],
-                    "tripId": trip_id,
-                    "userId": user_id,
-                    "subject": "Billing adjustment completed",
-                    "message": build_completion_message(candidate, rerate),
-                },
-                event_id=_reconciliation_event_id(
-                    "notification",
-                    booking_id=candidate["bookingId"],
-                    trip_id=trip_id,
-                    billing_cycle_id=active_billing_cycle_id,
-                ),
+            patch_booking_reconciliation_state(
+                settings,
+                booking_id=candidate["bookingId"],
+                final_price=rerate["finalPrice"],
+                refund_pending_on_renewal=True,
+                reconciliation_status="REFUND_PENDING",
+            )
+        else:
+            patch_booking_reconciliation_state(
+                settings,
+                booking_id=candidate["bookingId"],
+                final_price=rerate["finalPrice"],
+                refund_pending_on_renewal=False,
+                reconciliation_status="COMPLETED",
+            )
+            publish_completion_notification(
+                booking_id=candidate["bookingId"],
+                trip_id=trip_id,
+                user_id=user_id,
+                billing_cycle_id=active_billing_cycle_id,
+                rerate=rerate,
             )
         processed += 1
     return processed
@@ -200,9 +257,44 @@ def handle_trip_ended_event(event: dict):
     process_pending_reconciliations(settings, payload["userId"], active_billing_cycle_id, booking_id=payload["bookingId"])
 
 
+def handle_refund_completed_event(event: dict):
+    settings = get_settings()
+    payload = event["payload"]
+    booking_id = payload["bookingId"]
+    trip_id = payload["tripId"]
+    billing_cycle_id = payload["billingCycleId"]
+    rerate = {
+        "refundAmount": payload.get("refundAmount", 0),
+        "eligibleIncludedHours": payload.get("eligibleIncludedHours", 0),
+    }
+
+    patch_booking_reconciliation_state(
+        settings,
+        booking_id=booking_id,
+        final_price=float(payload.get("finalPrice", 0)),
+        refund_pending_on_renewal=False,
+        reconciliation_status="COMPLETED",
+    )
+    patch_pricing_reconciliation_state(
+        settings,
+        booking_id=booking_id,
+        reconciliation_status="COMPLETED",
+    )
+    publish_completion_notification(
+        booking_id=booking_id,
+        trip_id=trip_id,
+        user_id=payload["userId"],
+        billing_cycle_id=billing_cycle_id,
+        rerate=rerate,
+    )
+
+
 def handle_event(event: dict):
     if event.get("event_type") == "subscription.renewed":
         handle_renewal_event(event)
         return
     if event.get("event_type") == "trip.ended":
         handle_trip_ended_event(event)
+        return
+    if event.get("event_type") == "payment.refund_completed":
+        handle_refund_completed_event(event)

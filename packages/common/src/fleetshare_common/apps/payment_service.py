@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from fleetshare_common.app import create_app
 from fleetshare_common.database import Base, get_db, initialize_schema_with_retry, session_scope
-from fleetshare_common.messaging import start_consumer
+from fleetshare_common.messaging import publish_event, stable_event_id, start_consumer
 from fleetshare_common.timeutils import iso, utcnow_naive
 
 app = create_app("Payment Service", "Atomic simulated payment execution service.")
@@ -92,23 +92,43 @@ def make_payment(payload: PaymentPayload, db: Session = Depends(get_db)):
     return {"paymentId": payment.id, "status": "SUCCESS"}
 
 
+def _publish_refund_completed(source_event: dict, payload: dict):
+    publish_event(
+        "payment.refund_completed",
+        {
+            "bookingId": payload.get("bookingId"),
+            "tripId": payload.get("tripId"),
+            "userId": payload.get("userId", "ops"),
+            "refundAmount": float(payload.get("refundAmount", 0)),
+            "reason": payload.get("reason", source_event["event_type"]),
+            "sourceEventId": source_event["event_id"],
+            "billingCycleId": payload.get("billingCycleId"),
+            "eligibleIncludedHours": float(payload.get("eligibleIncludedHours", 0)),
+            "finalPrice": float(payload.get("finalPrice", 0)),
+        },
+        event_id=stable_event_id("payment", "refund-completed", source_event["event_id"]),
+    )
+
+
 def handle_payment_event(event: dict):
     payload = event["payload"]
+    should_publish_completion = event["event_type"] == "payment.refund_required"
     with session_scope() as db:
         existing = db.query(PaymentRecord).filter(PaymentRecord.event_id == event["event_id"]).first()
-        if existing:
-            return
-        booking_ids = payload.get("affectedBookingIds")
-        amount = float(payload.get("refundAmount", 0)) if event["event_type"] == "payment.refund_required" else float(payload.get("discountAmount", 0))
-        db.add(
-            PaymentRecord(
-                booking_id=payload.get("bookingId") or (booking_ids[0] if booking_ids else None),
-                trip_id=payload.get("tripId"),
-                user_id=payload.get("userId", "ops"),
-                amount=amount,
-                reason=payload.get("reason", event["event_type"]),
-                status="ADJUSTED" if event["event_type"] == "payment.adjustment_required" else "REFUNDED",
-                event_id=event["event_id"],
-                payload_json=payload,
+        if not existing:
+            booking_ids = payload.get("affectedBookingIds")
+            amount = float(payload.get("refundAmount", 0)) if event["event_type"] == "payment.refund_required" else float(payload.get("discountAmount", 0))
+            db.add(
+                PaymentRecord(
+                    booking_id=payload.get("bookingId") or (booking_ids[0] if booking_ids else None),
+                    trip_id=payload.get("tripId"),
+                    user_id=payload.get("userId", "ops"),
+                    amount=amount,
+                    reason=payload.get("reason", event["event_type"]),
+                    status="ADJUSTED" if event["event_type"] == "payment.adjustment_required" else "REFUNDED",
+                    event_id=event["event_id"],
+                    payload_json=payload,
+                )
             )
-        )
+    if should_publish_completion:
+        _publish_refund_completed(event, payload)

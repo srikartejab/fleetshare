@@ -76,6 +76,10 @@ class RenewalPayload(BaseModel):
     newBillingCycleId: str = "next"
 
 
+class ReconciliationStatePayload(BaseModel):
+    reconciliationStatus: str
+
+
 class FinalizeTripPayload(BaseModel):
     bookingId: int
     tripId: int
@@ -276,6 +280,21 @@ def ledger_entry_to_dict(ledger: UsageLedger) -> dict:
         "reconciliationStatus": ledger.reconciliation_status,
         "createdAt": iso(ledger.created_at),
         "updatedAt": iso(ledger.updated_at),
+    }
+
+
+def rerate_response_from_ledger(ledger: UsageLedger, profile: CustomerProfile, *, idempotent: bool) -> dict:
+    return {
+        "bookingId": ledger.booking_id,
+        "tripId": ledger.trip_id,
+        "revisedCharge": round(ledger.final_charge, 2),
+        "eligibleIncludedHours": round(ledger.included_hours_after_renewal, 2),
+        "refundAmount": round(ledger.refund_amount, 2),
+        "updatedEntitlementUsage": round(profile.hours_used_this_cycle, 2),
+        "finalPrice": round(ledger.final_charge, 2),
+        "reconciliationStatus": ledger.reconciliation_status,
+        "customerSummary": summary_from_profile(profile),
+        "idempotent": idempotent,
     }
 
 
@@ -529,22 +548,37 @@ def pre_trip_cancellation_compensation(payload: PreTripCancellationCompensationP
     }
 
 
+@app.patch("/pricing/bookings/{booking_id}/reconciliation-state")
+def patch_reconciliation_state(
+    booking_id: int,
+    payload: ReconciliationStatePayload,
+    db: Session = Depends(get_db),
+):
+    ledger = db.query(UsageLedger).filter(UsageLedger.booking_id == booking_id).first()
+    if not ledger:
+        raise HTTPException(status_code=404, detail="Pricing ledger not found for booking")
+
+    already_matches = ledger.reconciliation_status == payload.reconciliationStatus
+    if not already_matches:
+        ledger.reconciliation_status = payload.reconciliationStatus
+        if payload.reconciliationStatus in {"REFUND_PENDING", "COMPLETED"}:
+            ledger.renewal_pending = False
+        db.commit()
+
+    return {
+        "bookingId": ledger.booking_id,
+        "tripId": ledger.trip_id,
+        "reconciliationStatus": ledger.reconciliation_status,
+        "idempotent": already_matches,
+    }
+
+
 @app.post("/pricing/re-rate-renewed-booking")
 def rerate(payload: ReRatePayload, db: Session = Depends(get_db)):
     profile = get_profile_or_404(db, payload.userId)
     ledger = db.query(UsageLedger).filter(UsageLedger.booking_id == payload.bookingId).first()
-    if ledger and ledger.reconciliation_status == "COMPLETED":
-        return {
-            "bookingId": payload.bookingId,
-            "tripId": ledger.trip_id or payload.tripId,
-            "revisedCharge": round(ledger.final_charge, 2),
-            "eligibleIncludedHours": round(ledger.included_hours_after_renewal, 2),
-            "refundAmount": round(ledger.refund_amount, 2),
-            "updatedEntitlementUsage": round(profile.hours_used_this_cycle, 2),
-            "finalPrice": round(ledger.final_charge, 2),
-            "customerSummary": summary_from_profile(profile),
-            "idempotent": True,
-        }
+    if ledger and ledger.reconciliation_status in {"REFUND_PENDING", "COMPLETED"}:
+        return rerate_response_from_ledger(ledger, profile, idempotent=True)
 
     rerate_result = rerate_after_renewal(
         payload.actualPostMidnightHours,
@@ -570,15 +604,8 @@ def rerate(payload: ReRatePayload, db: Session = Depends(get_db)):
     ledger.included_hours_after_renewal = rerate_result["eligibleIncludedHours"]
     ledger.refund_amount = rerate_result["refundAmount"]
     ledger.renewal_pending = False
-    ledger.reconciliation_status = "COMPLETED"
+    ledger.reconciliation_status = "REFUND_PENDING" if rerate_result["refundAmount"] > 0 else "COMPLETED"
     ledger.final_charge = max(ledger.final_charge - rerate_result["refundAmount"], 0.0)
     db.commit()
 
-    return {
-        "bookingId": payload.bookingId,
-        "tripId": payload.tripId,
-        **rerate_result,
-        "finalPrice": round(ledger.final_charge, 2),
-        "customerSummary": summary_from_profile(profile),
-        "idempotent": False,
-    }
+    return rerate_response_from_ledger(ledger, profile, idempotent=False)

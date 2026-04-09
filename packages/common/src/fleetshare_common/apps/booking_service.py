@@ -79,10 +79,13 @@ class BookingFinancialsPayload(BaseModel):
     finalPrice: float
 
 
-class ReconciliationCompletePayload(BaseModel):
+class ReconciliationStatePayload(BaseModel):
     finalPrice: float
     refund_pending_on_renewal: bool = False
     reconciliationStatus: str = "COMPLETED"
+
+
+ReconciliationCompletePayload = ReconciliationStatePayload
 
 
 class CancelAffectedPayload(BaseModel):
@@ -295,21 +298,26 @@ def patch_reconciliation_status(booking_id: int, payload: ReconciliationPayload,
     booking.reconciliation_status = payload.reconciliationStatus
     if payload.reconciliationStatus == "COMPLETED":
         booking.status = BookingStatus.RECONCILED.value
+    elif booking.status == BookingStatus.RECONCILED.value:
+        booking.status = BookingStatus.COMPLETED.value
     db.commit()
     return {"reconciliationStatus": booking.reconciliation_status}
 
 
-@app.patch("/booking/{booking_id}/reconciliation-complete")
-def patch_reconciliation_complete(booking_id: int, payload: ReconciliationCompletePayload, db: Session = Depends(get_db)):
+@app.patch("/booking/{booking_id}/reconciliation-state")
+def patch_reconciliation_state(booking_id: int, payload: ReconciliationStatePayload, db: Session = Depends(get_db)):
     booking = db.get(Booking, booking_id)
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
 
     already_reconciled = (
         booking.reconciliation_status == payload.reconciliationStatus
-        and booking.status == BookingStatus.RECONCILED.value
         and round(booking.final_price, 2) == round(payload.finalPrice, 2)
         and booking.refund_pending_on_renewal == payload.refund_pending_on_renewal
+        and (
+            payload.reconciliationStatus != "COMPLETED"
+            or booking.status == BookingStatus.RECONCILED.value
+        )
     )
     if not already_reconciled:
         booking.final_price = payload.finalPrice
@@ -317,6 +325,8 @@ def patch_reconciliation_complete(booking_id: int, payload: ReconciliationComple
         booking.reconciliation_status = payload.reconciliationStatus
         if payload.reconciliationStatus == "COMPLETED":
             booking.status = BookingStatus.RECONCILED.value
+        elif booking.status == BookingStatus.RECONCILED.value:
+            booking.status = BookingStatus.COMPLETED.value
         db.commit()
 
     return {
@@ -327,6 +337,11 @@ def patch_reconciliation_complete(booking_id: int, payload: ReconciliationComple
         "status": booking.status,
         "idempotent": already_reconciled,
     }
+
+
+@app.patch("/booking/{booking_id}/reconciliation-complete")
+def patch_reconciliation_complete(booking_id: int, payload: ReconciliationCompletePayload, db: Session = Depends(get_db)):
+    return patch_reconciliation_state(booking_id, payload, db)
 
 
 @app.put("/bookings/cancel-affected")

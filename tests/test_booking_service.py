@@ -109,6 +109,35 @@ def test_patch_reconciliation_complete_updates_booking_atomically():
     assert result["idempotent"] is False
 
 
+def test_patch_reconciliation_state_keeps_booking_completed_while_refund_is_queued():
+    booking = SimpleNamespace(
+        id=11,
+        final_price=32.0,
+        refund_pending_on_renewal=True,
+        reconciliation_status="PENDING",
+        status="COMPLETED",
+    )
+    db = _FakeDb([booking])
+
+    result = booking_service.patch_reconciliation_state(
+        11,
+        booking_service.ReconciliationStatePayload(
+            finalPrice=12.5,
+            refund_pending_on_renewal=True,
+            reconciliationStatus="REFUND_PENDING",
+        ),
+        db,
+    )
+
+    assert db.committed is True
+    assert booking.final_price == 12.5
+    assert booking.refund_pending_on_renewal is True
+    assert booking.reconciliation_status == "REFUND_PENDING"
+    assert booking.status == "COMPLETED"
+    assert result["status"] == "COMPLETED"
+    assert result["idempotent"] is False
+
+
 def test_patch_reconciliation_complete_is_idempotent():
     booking = SimpleNamespace(
         id=11,

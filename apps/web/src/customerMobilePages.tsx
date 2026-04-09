@@ -95,8 +95,11 @@ function bookingChargeNotice(
 ) {
   const subscriptionEndDateLabel = formatSubscriptionEndDisplayDate(pricing.subscriptionEndDate ?? customerSummary?.subscriptionEndDate)
   if (pricing.provisionalPostMidnightHours > 0) {
+    if (reconciliationStatus === 'REFUND_PENDING') {
+      return `This trip crossed the subscription boundary after ${subscriptionEndDateLabel}. The overnight portion has already been re-rated, and the cash refund is now queued for payment confirmation.`
+    }
     if (reconciliationStatus === 'COMPLETED') {
-      return `This trip crossed the subscription boundary after ${subscriptionEndDateLabel}. Eligible after-midnight hours have already been moved into the new cycle allowance, and any refund has been applied automatically.`
+      return `This trip crossed the subscription boundary after ${subscriptionEndDateLabel}. Eligible after-midnight hours have already been moved into the new cycle allowance, and any refund has now been recorded.`
     }
     return `This trip crosses into the next billing cycle after ${subscriptionEndDateLabel}. ${formatHours(pricing.provisionalPostMidnightHours)} after midnight is charged now provisionally. If the renewal succeeds, FleetShare automatically re-rates that portion, refunds any overcharge, and deducts the covered hours from the new cycle allowance.`
   }
@@ -934,8 +937,10 @@ export function BookingDetailsPage({
     : null
   const disruptedBooking = booking?.status === 'DISRUPTED' || Boolean(disruptionReason)
   const bookingFeeLabel =
-    booking?.refundPendingOnRenewal
-      ? 'Renewal re-rate pending'
+    booking?.reconciliationStatus === 'REFUND_PENDING'
+      ? 'Refund queued'
+      : booking?.refundPendingOnRenewal
+        ? 'Renewal re-rate pending'
       : booking?.reconciliationStatus === 'COMPLETED'
         ? 'Reconciled'
         : disruptedBooking

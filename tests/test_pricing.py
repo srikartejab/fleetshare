@@ -440,6 +440,49 @@ def test_rerate_returns_existing_completed_result_idempotently(monkeypatch):
     assert result["eligibleIncludedHours"] == 1.0
 
 
+def test_rerate_returns_existing_refund_pending_result_idempotently(monkeypatch):
+    profile = SimpleNamespace(
+        user_id="user-1001",
+        display_name="Alicia Tan",
+        role="CUSTOMER",
+        demo_badge="Subscription ends today",
+        plan_name="STANDARD_MONTHLY",
+        monthly_included_hours=6.0,
+        hours_used_this_cycle=1.95,
+        subscription_end_date=date(2026, 5, 1),
+    )
+    ledger = SimpleNamespace(
+        booking_id=15,
+        trip_id=25,
+        user_id="user-1001",
+        included_hours_after_renewal=1.95,
+        refund_amount=39.0,
+        reconciliation_status="REFUND_PENDING",
+        final_charge=1.0,
+    )
+    db = _FakeDb([ledger])
+
+    monkeypatch.setattr(pricing_service, "get_profile_or_404", lambda _db, _user_id: profile)
+
+    result = pricing_service.rerate(
+        pricing_service.ReRatePayload(
+            bookingId=15,
+            tripId=25,
+            userId="user-1001",
+            newBillingCycleId="2026-05",
+            actualPostMidnightHours=1.95,
+        ),
+        db,
+    )
+
+    assert db.committed is False
+    assert result["idempotent"] is True
+    assert result["reconciliationStatus"] == "REFUND_PENDING"
+    assert result["finalPrice"] == 1.0
+    assert result["refundAmount"] == 39.0
+    assert result["eligibleIncludedHours"] == 1.95
+
+
 def test_rerate_consumes_new_cycle_allowance_after_reconciliation(monkeypatch):
     profile = SimpleNamespace(
         user_id="user-1001",
@@ -483,6 +526,7 @@ def test_rerate_consumes_new_cycle_allowance_after_reconciliation(monkeypatch):
     assert result["eligibleIncludedHours"] == 1.95
     assert result["refundAmount"] == 39.0
     assert result["finalPrice"] == 1.0
+    assert result["reconciliationStatus"] == "REFUND_PENDING"
     assert result["customerSummary"]["remainingHoursThisCycle"] == 4.05
     assert result["customerSummary"]["remainingHoursThisCycle"] == round(
         profile.monthly_included_hours - result["eligibleIncludedHours"],
@@ -534,7 +578,65 @@ def test_rerate_keeps_refund_aligned_with_stored_provisional_charge(monkeypatch)
     assert db.committed is True
     assert result["refundAmount"] == 55.33
     assert result["finalPrice"] == 0.0
+    assert result["reconciliationStatus"] == "REFUND_PENDING"
     assert profile.hours_used_this_cycle == 2.77
+
+
+def test_patch_reconciliation_state_marks_refund_pending_ledger_completed():
+    ledger = SimpleNamespace(
+        booking_id=11,
+        trip_id=21,
+        reconciliation_status="REFUND_PENDING",
+        renewal_pending=False,
+    )
+    db = _FakeDb([ledger])
+
+    result = pricing_service.patch_reconciliation_state(
+        11,
+        pricing_service.ReconciliationStatePayload(reconciliationStatus="COMPLETED"),
+        db,
+    )
+
+    assert db.committed is True
+    assert ledger.reconciliation_status == "COMPLETED"
+    assert ledger.renewal_pending is False
+    assert result["reconciliationStatus"] == "COMPLETED"
+    assert result["idempotent"] is False
+
+
+def test_get_customer_ledger_keeps_refund_pending_renewal_out_of_finalized_settlements(monkeypatch):
+    ledger_entry = SimpleNamespace(
+        id=8,
+        booking_id=12,
+        trip_id=22,
+        user_id="user-1001",
+        start_time=datetime(2026, 3, 19, 23, 0),
+        end_time=datetime(2026, 3, 20, 1, 0),
+        total_hours=2.0,
+        current_cycle_hours=1.0,
+        included_hours_applied=1.0,
+        included_hours_after_renewal=1.0,
+        billable_hours=0.0,
+        provisional_post_renewal_hours=1.0,
+        provisional_charge=20.0,
+        base_charge=20.0,
+        final_charge=0.0,
+        refund_amount=20.0,
+        discount_amount=0.0,
+        renewal_pending=False,
+        reconciliation_status="REFUND_PENDING",
+        created_at=datetime(2026, 3, 20, 1, 5),
+        updated_at=datetime(2026, 3, 20, 1, 10),
+    )
+    db = _FakeDb([ledger_entry])
+
+    monkeypatch.setattr(pricing_service, "get_profile_or_404", lambda _db, _user_id: object())
+
+    result = pricing_service.get_customer_ledger("user-1001", db)
+
+    assert result[0]["entryType"] == "USAGE"
+    assert result[0]["includedHoursAfterRenewal"] == 0.0
+    assert result[0]["reconciliationStatus"] == "REFUND_PENDING"
 
 
 def test_mock_ai_detects_severe_damage_keywords():

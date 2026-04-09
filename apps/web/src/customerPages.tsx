@@ -669,7 +669,11 @@ export function BookingDetailsPage({
             <div className="notice-card">
               <strong>Provisional overnight charge</strong>
               <p>
-                {formatHours(pricing.provisionalPostMidnightHours)} after midnight is provisionally charged now at {formatMoney(pricing.hourlyRate)}/hour. Renewal reconciliation may refund part of it later.
+                {booking.reconciliationStatus === 'REFUND_PENDING'
+                  ? `The overnight portion has already been re-rated and the cash refund is queued for payment confirmation.`
+                  : booking.reconciliationStatus === 'COMPLETED'
+                    ? `Eligible after-midnight hours have been moved into the new cycle allowance and any refund has been recorded.`
+                    : `${formatHours(pricing.provisionalPostMidnightHours)} after midnight is provisionally charged now at ${formatMoney(pricing.hourlyRate)}/hour. Renewal reconciliation may refund part of it later.`}
               </p>
             </div>
           ) : null}

@@ -223,19 +223,19 @@ def test_scenario_1_booking_trip_and_renewal_reconciliation(client: httpx.Client
     )
     log(f"renewal event published for {user_id}; target cycle {next_billing_cycle_id}")
 
-    reconciled_booking = poll_until(
-        "booking reconciliation completed",
+    refund_pending_booking = poll_until(
+        "booking moved to refund pending after rerate",
         lambda: next(
             (
                 item
                 for item in customer_bookings(client, user_id)
-                if item["bookingId"] == reserve["bookingId"] and item["status"] == "RECONCILED"
+                if item["bookingId"] == reserve["bookingId"] and item["reconciliationStatus"] == "REFUND_PENDING"
             ),
             None,
         ),
     )
-    assert reconciled_booking["reconciliationStatus"] == "COMPLETED"
-    log(f"booking reconciled; booking id {reconciled_booking['bookingId']}")
+    assert refund_pending_booking["status"] == "COMPLETED"
+    log(f"booking rerated and refund queued; booking id {refund_pending_booking['bookingId']}")
 
     refund = poll_until(
         "renewal refund recorded",
@@ -249,6 +249,20 @@ def test_scenario_1_booking_trip_and_renewal_reconciliation(client: httpx.Client
         ),
     )
     log(f"refund created; payment id {refund['paymentId']} amount {refund['amount']}")
+
+    reconciled_booking = poll_until(
+        "booking reconciliation completed",
+        lambda: next(
+            (
+                item
+                for item in customer_bookings(client, user_id)
+                if item["bookingId"] == reserve["bookingId"] and item["status"] == "RECONCILED"
+            ),
+            None,
+        ),
+    )
+    assert reconciled_booking["reconciliationStatus"] == "COMPLETED"
+    log(f"booking reconciled; booking id {reconciled_booking['bookingId']}")
 
     customer_notification = poll_until(
         "customer adjustment notification delivered",
