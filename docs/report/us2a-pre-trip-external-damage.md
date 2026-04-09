@@ -32,11 +32,10 @@ Those belong to `us3a-handle-damage-recovery`.
 4. `External Damage Service` creates an `EXTERNAL_DAMAGE` record through `Record Service` at `POST /records/ingest`.
 5. `Record Service` stores the uploaded evidence in object storage and persists the pending record metadata.
 6. `External Damage Service` runs `assess_damage(...)` and determines the inspection result.
-7. `External Damage Service` patches the record through `PATCH /records/{recordId}` with the final `severity`, `reviewState`, `confidence`, and `detectedDamage`.
-8. On the severe path, `External Damage Service` updates the vehicle status to `UNDER_INSPECTION` through the vehicle gRPC adapter.
+7. On the severe path, `External Damage Service` updates the vehicle status to `UNDER_INSPECTION` through the vehicle gRPC adapter.
+8. `External Damage Service` patches the record through `PATCH /records/{recordId}` with the final `severity`, `reviewState`, `confidence`, and `detectedDamage`.
 9. `External Damage Service` returns the blocked severe assessment result to `Rental Execution Service`.
 10. `Rental Execution Service` synchronously calls `Handle Damage Service` at `POST /handle-damage/external/pre-trip-resolution`.
-11. `Handle Damage Service` returns a recovery summary to `Rental Execution Service`.
+11. `Handle Damage Service` returns the recovery result, including the maintenance ticket, booking outcome, and wallet-settlement summary.
 12. `Rental Execution Service` returns the final severe inspection response through Kong.
 13. Kong returns the final severe inspection response to the UI.
-
